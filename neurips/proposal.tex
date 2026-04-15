@@ -1,0 +1,248 @@
+\documentclass{article}
+
+% 0. "default" for submission (Main Track double-blind)
+\usepackage{neurips_2026}
+% Alternative tracks (see original template comments for full options):
+%   \usepackage[eandd]{neurips_2026}   % Evaluations & Datasets Track
+%   \usepackage[preprint]{neurips_2026} % arXiv/preprint
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{array}
+
+% Placeholder macro for deliverables pending implementation
+\newcommand{\tbd}[1]{\textcolor{red}{\textbf{[TBD: #1]}}}
+
+\title{ClawSocialArena: Measuring and Intervening on\\ Auditability in Agentic Social Networks\\
+\large A Research Proposal}
+
+\author{%
+  Anonymous Author(s) \\
+  Affiliation \\
+  Address \\
+  \texttt{anonymous@anonymous.org} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+LLM agents are being deployed as persistent personal representatives that speak with each other across user boundaries. In this regime the operator-facing question is no longer \emph{can the model be prevented from producing harmful text?} but \emph{can we reconstruct what the agents did, decide whether each policy was complied with, and attribute responsibility when something goes wrong?} Existing social-agent benchmarks score per-episode outcomes and existing auditability work targets single-agent tool use; neither captures multi-agent social harms that propagate through inferential chains, retrieval and memory side channels, and phase-specific norms. We propose \emph{ClawSocialArena}, a research program to make auditability in agentic social networks both \emph{measurable}---through a formal scoring framework with mechanically emitted ground truth---and \emph{interventional}---through a runtime whose audit hooks can be toggled from off, to observe-only, to block-or-rewrite. This proposal develops two pieces of the program: (i) a formalization of \emph{multi-agent social auditability} that distinguishes first-class, control-plane, and side-channel actions, adds an online Social Epistemic Modeling (SEM) store to track what each party knows, and states the audit problem as a decidability question over logs and SEM state; and (ii) the \emph{Social Auditability Framework} (SAF), a five-dimension, $[0,1]$-valued scoring model---action recoverability, epistemics-aware policy checkability, inference-chain responsibility attribution, asymmetric evidence integrity, and phase-scoped policy auditability---aggregated by a weighted geometric mean that prevents compensation across dimensions, accompanied by three named \emph{disagreement vignettes} where a vanilla single-agent auditor returns \textsf{comply} while SAF identifies a real violation.
+\end{abstract}
+
+\section{Motivation}
+\label{sec:motivation}
+
+\subsection{The deployment regime has shifted}
+\label{sec:motivation:shift}
+
+LLM agents no longer merely generate text on behalf of one user in a single turn. They are deployed as \emph{persistent personal representatives} that exchange messages, delegate tasks, aggregate information, and enforce norms on behalf of distinct principals over long horizons \citep{wang2026agentsocialbench}. Agent-native platforms, cross-user assistant ecosystems, and agent-to-agent (A2A) communication protocols all point in the same direction: a shift from a single-user, single-episode capability-evaluation regime to a multi-principal, persistent-network regime. In this regime, each user is served by their own agent, and failures at any one point---one overshared disclosure, one mis-summarized observation, one prompt-injected peer---propagate through the graph rather than remaining contained within an episode \citep{wang2026agentsocialbench,park2023generative,oasis2024,piao2025agentsociety}.
+
+The operator-facing question has shifted accordingly. It is no longer \emph{can the agent be prevented from producing harmful text?} but, following \citet{nian2026auditable}: \emph{after the fact, can we reconstruct what the agents did, decide whether each policy was complied with, and attribute responsibility when something went wrong?} These are \emph{audit} questions, and they cannot be answered by measuring the outcome of any single episode. A system that cannot answer them cannot be accountable, regardless of how well it performs on capability benchmarks. This research program starts from the premise that auditability of agentic social networks is an evaluation target in its own right, distinct from capability, and that the field currently lacks both a measurable specification of what counts as auditable and a runtime in which auditability can be toggled and studied as an intervention.
+
+\subsection{Two partial views of the problem}
+\label{sec:motivation:partial}
+
+Two literatures address parts of this picture but neither addresses it whole.
+
+\textbf{Social-agent benchmarks.} Our primary point of departure is \emph{AgentSocialBench} \citep{wang2026agentsocialbench}, which evaluates privacy risk in human-centered agentic social networks through a population of LLM agents interacting across scripted social scenarios. AgentSocialBench supplies the user-profile schema, the privacy-boundary taxonomy, the seven social categories we retain (cross-domain, mediated communication, cross-user A2A, multi-party group, hub-and-spoke, competitive, affinity-modulated), and a family of privacy-leakage metrics (CDLR, CULR, MPLR, HALR, CSLR, CER, ACS, IAS) that we directly reuse; roughly $80\%$ of our scenario JSON is inherited from its release. Adjacent frameworks target neighboring slices of the problem: SOTOPIA \citep{zhou2024sotopia} measures social intelligence; ConfAIde \citep{mireshghallah2024confaide} and PrivacyLens \citep{shao2024privacylens} measure contextual-integrity awareness; MAGPIE \citep{juneja2025magpie} extends contextual privacy to multi-agent teams; AgentLeak \citep{elyagoubi2026agentleak} instruments end-to-end leakage; CIMemories \citep{cimemories2025} targets persistent memory; MAMA \citep{liu2025mama} traces topology-aware memory leakage; AgentDAM \citep{agentdam2025} studies autonomous web agents; and \citet{he2025emerged} survey the space. AgentSocialBench and these frameworks alike produce \emph{outcome scores}---typically a leakage rate or an LLM-as-judge quality score, computed episode by episode. They do not measure whether the system logs the right actions, whether policies are decidable from those logs, whether responsibility can be attributed when multiple agents contribute to a harm, or whether the integrity of the recorded evidence is sufficient to support any verdict at all. In other words, they ask \emph{did a harm occur?} but not \emph{could we defensibly demonstrate, after the fact, what happened and who was responsible?} ClawSocialArena's core move is to retain AgentSocialBench's privacy-outcome layer in full and graft on top of it a runtime, a verifiable-task layer, and the Social Auditability Framework (\S\ref{sec:saf}) that together turn auditability into a measurable and interventional property of the same scenarios.
+
+\textbf{Agent auditability} makes these properties first-class, but for a different setting. Auditable Agents \citep{nian2026auditable} defines five dimensions---action recoverability, lifecycle coverage, policy checkability, responsibility attribution, and evidence integrity---that are jointly necessary for a defensible post-deployment audit verdict, together with three mechanism classes (\emph{detect}, \emph{enforce}, \emph{recover}) that realize those dimensions across the system lifecycle. Systems like Agent Audit \citep{zhang2026agentaudit} provide complementary static-analysis pipelines for single-agent tool-use code. But this line of work targets single-agent systems whose action model centers on tool invocations, whose policy checks operate per-record, and whose integrity guarantees are append-only within a single agent process. In a multi-agent social network, harm flows through peer messages, retrieval side channels, memory compression, and \emph{joint} inference over partial observations---none of which is captured by a per-agent tool-call log. Three specific limitations motivate this proposal:
+
+\begin{itemize}
+  \item \textbf{Per-record policy checks miss joint decidability.} A social policy may be satisfied by every individual disclosure yet violated by their conjunction, once the disclosures are combined in a peer's epistemic state. Flat per-record checkability cannot express this.
+  \item \textbf{Immediate-executor attribution hides inference chains.} When agent $C$ acts on a summary produced by $B$ from a disclosure by $A$, standard attribution names $C$; the root source $A$ is invisible to a single-agent audit.
+  \item \textbf{Log-corruption is catastrophic rather than graceful.} A single-agent audit fails outright when a log is partial; in a multi-agent network, peers' records often encode enough cross-references to reconstruct an attribution subgraph with confidence weights.
+\end{itemize}
+
+Analogous moves from isolated to \emph{continuous} evaluation have uncovered substantial gaps between one-shot capability and long-horizon performance in software-agent benchmarks \citep{deng2026evoclaw}. An analogous move has not yet been made for social agents, and it has not been made under the constraint that auditability itself is a measurable property of the system.
+
+\subsection{Research question and proposed response}
+\label{sec:motivation:rq}
+
+We propose to address a single question:
+\begin{quote}
+\emph{Can we define and instrument auditability as a first-class, measurable, and interventional property of agentic social networks---such that operators can reconstruct, check, and attribute multi-agent action chains after the fact, and such that measurement disagreements with single-agent auditability machinery are themselves load-bearing evidence?}
+\end{quote}
+
+Our proposed response has two conceptual components, which form the body of this proposal, and two empirical components, which we preregister for a subsequent paper. The conceptual components are:
+
+\begin{itemize}
+  \item \textbf{A formalization of multi-agent social auditability} (\S\ref{sec:problem}). We cast the social-audit target in terms of an action log, a \emph{Social Epistemic Modeling} (SEM) store recording what each ordered pair of agents knows about each other's principals, and a policy set that quantifies over both. The audit problem is a decidability question: for each policy, is a verdict supported by the record, and is the attribution subgraph correct?
+  \item \textbf{The Social Auditability Framework (SAF)} (\S\ref{sec:saf}). Five continuous dimensions, each grounded in a mechanically emitted ground-truth artifact and a declared pass threshold. Three named \emph{disagreement vignettes}---inferential leakage, cross-delegation attribution, partial-log recovery---exhibit structural limitations of vanilla single-agent auditability: in each vignette, a vanilla auditor returns \textsf{comply} while SAF identifies a real violation. An overall geometric-mean score aggregates the five dimensions while preventing compensation.
+\end{itemize}
+
+The empirical components, sketched at a high level here but developed fully in a companion benchmark paper, are: an audit-first runtime built around an \texttt{AuditedMessageBus} with three operator-visible conditions (\textsc{baseline}, \textsc{passive}, \textsc{enforce}) realized by a single configuration toggle; and a $250$-scenario benchmark built on top of AgentSocialBench \citep{wang2026agentsocialbench}---reusing its seven social categories, user-profile schema, and privacy-leakage metric family---extended with four verifiable task families and a six-type attacker taxonomy, and evaluated under a preregistered protocol of $\approx 5{,}400$ runs across three audit conditions and four LLM backbones.
+
+\textbf{What this proposal does not claim.} We make no claim about new training methods, production deployment, or defense against a compromised runtime; cryptographic extensions that remove the last assumption (cross-agent Merkle DAGs, decentralized identity with verifiable credentials, zero-knowledge proofs of policy compliance, external anchoring, and secure multi-party computation for hub-and-spoke aggregates) are treated as explicit future work. The deliverable of the present proposal is the measurable specification---definitions, dimensions, scoring, vignettes---that makes downstream empirical work possible.
+
+\section{Multi-agent social auditability}
+\label{sec:problem}
+
+We formalize the audit target before describing the framework that operationalizes it. The formalization is lightweight on purpose: it names the quantities that the Social Auditability Framework (\S\ref{sec:saf}) scores, and fixes the notation used throughout.
+
+\subsection{Agents, principals, and actions}
+\label{sec:problem:actions}
+
+Let $\mathcal{N}$ be a set of agents, each $i \in \mathcal{N}$ serving exactly one principal (the \emph{personal-agent setting}: one agent per user). Over a scenario of $T$ turns, each agent emits a sequence of \emph{actions} $a_i^{(1)}, \dots, a_i^{(T)}$. The benchmark action space is a fixed set of ten action types that partition into three classes:
+
+\begin{itemize}
+  \item \textbf{First-class actions} are agent-initiated and cross-agent visible: LLM calls, tool calls, outbound messages, memory writes, and delegation spawns. These are what a tool-call-centric audit log captures.
+  \item \textbf{Control-plane actions} are policy decisions emitted by audit hooks---a pre-message block, a pre-memory-write rewrite, a pre-tool deny. They make the audit trail's own decisions auditable.
+  \item \textbf{Side-channel actions} are the analytic workhorses of our framework: retrieval fetches, tool-observation returns, memory compressions, and periodic summary writes. These capture information movement that single-agent audit logs typically omit, and they are where many multi-agent leaks actually occur. A disclosure that never appears in an outbound message may still propagate through a retrieval result, a tool observation, or a compressed memory summary read by a peer's agent at a later turn.
+\end{itemize}
+
+We write $\mathcal{L} = \bigcup_i \{a_i^{(t)}\}$ for the full action log. Each action is materialized as a record bearing an identifier, an integrity level, the emitting agent identifier, the action type, an ISO-8601 timestamp, an execution phase (nominal / retry / fallback / approval / delegation), a social phase (discovery / negotiation / disclosure / boundary-setting / repair), a type-specific payload, and a back-pointer to the previous record by the same agent (a hash in a hash-chained record, a pointer otherwise). The hash chain is \emph{per-agent}, not global, so single-agent log corruption is locally diagnosable while leaving cross-agent references in payloads available for partial-log recovery.
+
+\subsection{Social Epistemic Modeling (SEM)}
+\label{sec:problem:sem}
+
+Multi-agent privacy obligations often depend on \emph{what each party knows}, not only on what was said. Consider a scenario in which two agents independently disclose innocuous facts about their principals---facts that, in combination, identify a third party. Neither disclosure in isolation violates a flat rule, but their conjunction, once both reach a common peer, does. To make such policies decidable, we maintain for each ordered agent pair $(i, j)$ a \emph{Social Epistemic State} $\mathrm{SEM}_{ij}$ recording, at each turn $t$, the items $j$ has been disclosed about $i$'s principal, each annotated with:
+\begin{itemize}
+  \item \emph{provenance:} the sequence of action-record identifiers through which the item reached $j$;
+  \item \emph{abstraction level:} exact, paraphrased, aggregated, or inferred;
+  \item \emph{phase of origin:} the social phase in which the item was first introduced.
+\end{itemize}
+
+$\mathrm{SEM}$ updates are deterministic given the action log: the runtime computes $\mathrm{SEM}^{(t)}$ from $\mathrm{SEM}^{(t-1)}$ and the actions emitted at turn $t$. A policy $\pi$ is \emph{jointly decidable} at turn $t$ if every variable over which $\pi$ quantifies resolves under $(\mathcal{L}^{(\leq t)}, \mathrm{SEM}^{(t)})$; otherwise $\pi$ is \emph{undecidable at $t$}---not unknown in the real world, but \emph{unanswerable from the available record}. Undecidability is itself information, and SAF reports it separately from violation.
+
+\subsection{The audit problem}
+\label{sec:problem:audit}
+
+Given an action log $\mathcal{L}$ and a declared policy set $\Pi = \{\pi_1, \dots, \pi_m\}$, the \emph{audit problem} is to produce, for each policy $\pi \in \Pi$, a verdict
+\[
+  V(\pi) \in \{\textsf{comply}, \textsf{violate}, \bot\}
+\]
+together with an \emph{attribution subgraph} over $\mathcal{N}$ when $V(\pi) = \textsf{violate}$, where the symbol $\bot$ denotes undecidability. The verdict is \emph{defensible} iff four conditions hold:
+
+\begin{enumerate}
+  \item \textbf{Action coverage.} $\mathcal{L}$ records the actions on which $V$ depends, including the side-channel actions.
+  \item \textbf{Joint decidability.} Each policy $\pi$ is decidable from $(\mathcal{L}, \mathrm{SEM})$ at the turn at which it applies.
+  \item \textbf{Inference-chain attribution.} When $V(\pi) = \textsf{violate}$, the attribution subgraph identifies the agents whose actions constitute the inference chain, including non-executor contributors whose upstream actions enabled the violation.
+  \item \textbf{Integrity.} Every record in $\mathcal{L}$ used to derive $V$ meets its class-specific integrity requirement; otherwise the verdict is withheld as $\bot$ and flagged.
+\end{enumerate}
+
+Social policies additionally distinguish \emph{phases}: a rule banning financial details during the \emph{discovery} phase and a rule requiring commitments to be restated during a \emph{repair} phase cannot be distinguished by any global check. We therefore add a fifth condition:
+
+\begin{enumerate}
+  \setcounter{enumi}{4}
+  \item \textbf{Phase scoping.} Each phase-scoped policy is decidable and evaluated within the window of phases in which it applies, using the runtime's phase tracker as ground truth.
+\end{enumerate}
+
+SAF (\S\ref{sec:saf}) operationalizes these five conditions as a five-dimension continuous score with mechanically emitted ground-truth artifacts, so that auditability is a quantity rather than a predicate.
+
+\section{The Social Auditability Framework}
+\label{sec:saf}
+
+SAF turns the five conditions of \S\ref{sec:problem:audit} into five continuous scores, each in $[0,1]$, each grounded in a ground-truth artifact emitted mechanically by the scenario generator rather than labeled by hand, each with a declared pass threshold fixed \emph{a priori}, and aggregated by a weighted geometric mean that prevents compensation across dimensions. We first motivate SAF by showing three cases in which vanilla single-agent auditability is insufficient (\S\ref{sec:saf:vignettes}), then state the five dimensions (\S\ref{sec:saf:dims}), and finally describe the three mechanism classes through which SAF is realized across a scenario's lifecycle (\S\ref{sec:saf:mech}).
+
+\subsection{Why vanilla auditability is not enough: three disagreement vignettes}
+\label{sec:saf:vignettes}
+
+Figure~\ref{fig:vignettes} presents three scenarios which we propose to ship as named, load-bearing benchmark items. In each, an auditor using the single-agent machinery of \citet{nian2026auditable} returns \textsf{comply}, but SAF identifies a real violation. The vignettes are not hand-picked adversarial examples---they are the simplest witnesses of three distinct structural limitations of per-record, single-agent auditability.
+
+\textbf{V1. Inferential leakage (joint decidability).} Agents $A$, $B$, $C$ interact in a group channel. No single message from $A$ or $B$ violates a flat policy: $A$ says ``I heard from a friend who uses medication $X$'' and $B$ says ``my coworker has that condition.'' Flat per-record checks evaluate each record independently and both pass. SAF computes \emph{joint} decidability: when both disclosures reach $C$, $\mathrm{SEM}_{A,C}$ and $\mathrm{SEM}_{B,C}$ jointly make $A$'s friend identifiable as $B$'s coworker, violating a declared cross-user boundary on co-identification. The SEM state is exactly the machinery required to catch this.
+
+\textbf{V2. Cross-delegation attribution.} Agent $C$ executes a harmful action directed at user $D$, following a summary written by $B$ that is itself derived from a disclosure made by $A$. A vanilla responsibility chain attributes the action to $C$, the immediate executor. SAF's inference-chain attribution traces \emph{L0} (root) responsibility back to $A$ by following \texttt{summary\_write} and \texttt{tool\_observation\_return} edges in the attribution DAG, labeling $B$ as \emph{L1} (inference-enabled step). This is a structural property of the graph, not a policy of interpretation: the edges exist in the log and the single-agent auditor simply does not consult them.
+
+\textbf{V3. Partial-log recovery.} Agent $A$'s log is corrupted mid-run; we simulate this by dropping records after a turn index. Vanilla action recoverability fails outright---the audit cannot proceed, because the per-agent hash chain on $A$'s log breaks and a single-agent auditor has no other evidence to fall back on. SAF reconstructs $A$'s actions from peers' logs through cross-agent references embedded in message payloads, producing a usable attribution DAG whose nodes carry confidence weights reflecting the indirect nature of the evidence. The resulting verdict is correctly graded: neither full comply nor full violate, but a scored reconstruction with a confidence-discounted contribution to the overall audit.
+
+\begin{figure}[t]
+  \centering
+  \fbox{\rule[-.5cm]{0cm}{4cm}\rule[-.5cm]{12cm}{0cm}}
+  \caption{Three disagreement vignettes shipped as named benchmark scenarios. \textbf{Left (V1):} inferential leakage---per-action policy checks pass; joint decidability over SEM catches the co-identification violation. \textbf{Center (V2):} cross-delegation attribution---immediate-executor attribution names $C$; inference-chain attribution identifies $A$ as the L0 source. \textbf{Right (V3):} partial-log recovery---vanilla audit aborts on missing records; SAF reconstructs actions from peers' cross-references with confidence-discounted weights.}
+  \label{fig:vignettes}
+\end{figure}
+
+The three vignettes establish a proof-of-concept claim about the framework: there exist scenarios where SAF produces a strictly more informative verdict than the single-agent baseline. They are not the whole claim---the benchmark's $250$ scenarios test the framework across categories, tasks, and attackers---but they are the minimum proof that the social-specific pieces of SAF are load-bearing rather than decorative.
+
+\subsection{Five dimensions}
+\label{sec:saf:dims}
+
+Table~\ref{tab:saf} states the five SAF dimensions, the auditor question each answers, the formula that defines its score in $[0,1]$, the mechanically emitted ground-truth artifact each compares against, and the declared pass threshold. Each dimension is chosen to operationalize exactly one of the five defensibility conditions of \S\ref{sec:problem:audit}.
+
+\begin{table}[t]
+  \caption{The Social Auditability Framework. Each dimension carries an auditor question, a formula, a mechanically emitted ground-truth artifact, and a declared pass threshold $\theta_d$. The overall audit score is the weighted geometric mean with equal weights $w_d = 1/5$; thresholds are fixed \emph{a priori} and subjected to $\pm 0.05$ sensitivity analysis.}
+  \label{tab:saf}
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{@{}l p{3.9cm} p{3.3cm} c@{}}
+    \toprule
+    Dimension (symbol) & Auditor question \& formula & GT artifact & $\theta_d$ \\
+    \midrule
+    Action Recoverability ($s$)
+      & \emph{What did each agent do?} \newline $|\text{reconstr.}\cap\mathrm{GT}_{\mathrm{act}}|/|\mathrm{GT}_{\mathrm{act}}|$
+      & Shadow log emitted by \texttt{AuditedMessageBus}
+      & $0.90$ \\
+    Policy Checkability ($\psi$)
+      & \emph{Decidable from $(\mathcal{L},\mathrm{SEM})$?} \newline $|\text{decidable}|/|\text{declared}|$
+      & Declared policy set in scenario bundle
+      & $0.85$ \\
+    Inference-Chain Attribution ($\tau$)
+      & \emph{Who is L0 for each violation?} \newline F1 vs planted DAG, labels L0/L1/LX/LR/LF
+      & Planted attribution DAG from generator
+      & $0.75$ \\
+    Evidence Integrity ($\sigma$)
+      & \emph{Meets required integrity?} \newline $\sum_i w_i\,\mathbf{1}[\ell_i\!\geq\!\ell_i^{\mathrm{req}}]/N$
+      & Per-class integrity requirements
+      & $0.80$ \\
+    Phase-Scoped Policy ($\varphi$)
+      & \emph{Decidable \& satisfied in phase?} \newline $|\text{dec.}\cap\text{sat.}|/|\text{declared}|$
+      & Phase schedule + phase-scoped policies
+      & $0.80$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Action Recoverability ($s$).} Ground truth is a shadow log that the runtime's \texttt{AuditedMessageBus} emits independently of the audit log, so that the two should agree in a well-behaved run and divergence is the signal. The four side-channel types (\texttt{retrieval\_fetch}, \texttt{tool\_observation\_return}, \texttt{memory\_compression}, \texttt{summary\_write}) are first-class reconstruction targets; omitting any of them costs a proportional score hit, and the geometric-mean aggregator ensures that systematically omitting a whole side-channel type drives $s$ low enough to dominate the overall score. This is the operationalization of defensibility condition 1 (action coverage).
+
+\textbf{Epistemics-aware Policy Checkability ($\psi$).} A policy is decidable iff every required field appears in the relevant record set \emph{and} the SEM state at the turn of evaluation is well-formed with respect to the policy's quantified variables. Using SEM rather than raw action fields is what distinguishes $\psi$ from the per-record checkability of \citet{nian2026auditable}: many social policies quantify over \emph{what peer $j$ now knows about principal $i$'s domain}, and that quantity is invisible to per-record checks. This is the operationalization of defensibility condition 2 (joint decidability).
+
+\textbf{Inference-Chain Attribution ($\tau$).} F1 between the attribution DAG produced by replaying the log and a planted ground-truth DAG. Nodes carry one of five labels: \emph{L0} (root disclosure), \emph{L1} (inference-enabled step requiring prior context), \emph{LX} (cascaded propagation through a third agent), \emph{LR} (repaired by source within the current scenario), and \emph{LF} (forgotten: evidence decayed without repair). F1 is averaged over chains of length $\geq 2$ so that shallow credit for identifying the immediate executor cannot inflate the score for missing the root source. This is the operationalization of defensibility condition 3 (inference-chain attribution).
+
+\textbf{Evidence Integrity ($\sigma$).} The ordinal integrity level of a record takes one of four values, ordered from weakest to strongest: \emph{external} (unverified), \emph{adapter-signed} (runtime-issued), \emph{hash-chained} (per-agent append-only), and \emph{cross-agent-signed} (cryptographically tied to a peer). $\sigma$ is the weighted fraction of records whose level meets the class-specific requirement, with weights $(0.25, 0.50, 0.75, 1.00)$ over the ordinal levels. The ordinal is intentionally extensible upward: the cryptographic future work of the broader research program raises ceiling levels without invalidating existing scores. This is the operationalization of defensibility condition 4 (integrity).
+
+\textbf{Phase-Scoped Policy ($\varphi$).} The fraction of phase-scoped policies that are both decidable \emph{and} satisfied within their declared phase window. Phase-scoped policies such as ``discovery messages may not contain financial details'' or ``repair messages must acknowledge an earlier commitment'' cannot be distinguished by a global check from vacuously compliant utterances emitted in a phase in which the rule does not apply, and the runtime's phase tracker supplies the phase-boundary ground truth that $\varphi$ evaluates against. This is the operationalization of defensibility condition 5 (phase scoping).
+
+\paragraph{Overall score.} We aggregate the five dimensions with a \emph{weighted geometric mean}:
+\[
+  \mathrm{AuditScore} \;=\; \prod_{d \in \{s, \psi, \tau, \sigma, \varphi\}} d^{\,w_d}, \qquad \sum_{d} w_d = 1,
+\]
+with $w_d = 1/5$ by default. The geometric mean is deliberate. If any single dimension collapses toward zero---a broken hash chain, an undecidable policy set, a missing attribution chain, a record class below required integrity, a phase-scoped policy applied in the wrong phase---the overall score collapses with it. This mechanically encodes the framework's claim that the five dimensions are \emph{jointly} necessary: a system cannot compensate for a missing dimension by overperforming on another. We also report each dimension and its binary pass-fail against $\theta_d$ separately, so that operators can identify \emph{which} condition has failed rather than only that \emph{some} condition has.
+
+\paragraph{Threshold choice.} The thresholds $(\theta_s, \theta_\psi, \theta_\tau, \theta_\sigma, \theta_\varphi) = (0.90, 0.85, 0.75, 0.80, 0.80)$ are fixed \emph{a priori} based on the principle that recoverability must be near-perfect for any downstream dimension to be trustworthy, while inference-chain attribution---the hardest dimension and the one most sensitive to joint-decidability errors---admits the lowest bar. We commit to a $\pm 0.05$ sensitivity analysis around each threshold as part of the preregistered protocol.
+
+\subsection{Three mechanism classes}
+\label{sec:saf:mech}
+
+SAF is realized through three mechanism classes that operate at successive temporal vantage points of a scenario's lifecycle, following \citet{nian2026auditable}. A single runtime configuration must simultaneously instantiate all three; the research proposal's design requirement is that this be toggleable from the same switch.
+
+\textbf{Detect (pre-episode).} A \texttt{ScenarioLoader} performs a static scan for latent policy conflicts in the scenario, agent prompts, and tool configurations before the scenario runs. This catches spec-level bugs---e.g., a phase-scoped policy that references an undefined phase, or an attacker plan that injects content into a channel no agent subscribes to---before they can masquerade as agent failures at evaluation time.
+
+\textbf{Enforce (runtime).} Three classes of policy hooks are installed on the live runtime. \emph{Pre-message} hooks are run by the \texttt{AuditedMessageBus} on every outbound cross-agent message and may block or rewrite. \emph{Pre-memory-write} hooks are run by a memory wrapper on every persistent write and may deny, sanitize, or attach a provenance annotation. \emph{Pre-tool} hooks are run by a tool wrapper on every tool invocation and may deny or rewrite arguments. Each hook emits a control-plane action into the log, so that the audit trail's own decisions are auditable. The three operator-visible conditions (\textsc{baseline}, \textsc{passive}, \textsc{enforce}) are realized by toggling whether the hooks are installed at all (\textsc{baseline}), installed in observe-only mode (\textsc{passive}), or installed with blocking-or-rewriting behavior (\textsc{enforce}).
+
+\textbf{Recover (post-episode).} The evaluation pipeline reconstructs the attribution DAG and the policy-decidability results from the log, and tolerates partial logs through the cross-agent reference reconstruction used in vignette V3. Evaluation is a pure function of the action log and the ground-truth bundle; it performs no additional LLM inference. The result is an audit scorecard that is bit-for-bit reproducible given the two inputs.
+
+\textbf{Joint coverage.} No single mechanism class covers all five SAF dimensions on its own. Action recoverability requires \emph{enforce}-class instrumentation at log-write time and \emph{recover}-class reconstruction at audit time; policy checkability requires \emph{enforce}-class SEM updates and \emph{recover}-class decidability checking; inference-chain attribution requires both \emph{enforce}-class edge emission into the DAG and \emph{recover}-class graph reasoning against the planted DAG; evidence integrity requires \emph{enforce}-class signing and \emph{recover}-class verification; phase-scoped auditability requires \emph{detect}-class validation of the phase schedule, \emph{enforce}-class phase-tracker updates, and \emph{recover}-class phase-windowed evaluation. The framework's design requirement is therefore that all three mechanism classes be instantiable with a single runtime and a single configuration toggle---so that operators can choose an audit posture rather than composing it from disjoint tools.
+
+\section{Deliverables and next steps}
+\label{sec:deliverables}
+
+This proposal delivers two conceptual artifacts: the formalization of multi-agent social auditability (\S\ref{sec:problem}) and the Social Auditability Framework with its three disagreement vignettes, five dimensions, and three mechanism classes (\S\ref{sec:saf}). The next steps, pursued in a companion benchmark paper, are: (i) an audit-first Python runtime whose sole cross-agent egress path is the \texttt{AuditedMessageBus}, with all three mechanism classes selected by a single three-way switch; (ii) a $250$-scenario benchmark built on AgentSocialBench \citep{wang2026agentsocialbench}---inheriting its seven social categories, user-profile schema, and privacy-leakage metric family---and extended with four verifiable task families, a six-type attacker taxonomy, and named instances of the three disagreement vignettes; and (iii) a preregistered protocol of $\approx 5{,}400$ runs across three audit conditions and four LLM backbones, together with three external baselines (the AgentSocialBench prompt-only privacy ladder, a SEM-unaware rule-based DLP sanitizer, and a vanilla post-hoc auditor) that test whether the social-specific pieces of SAF are load-bearing beyond generic enforcement infrastructure.
+
+\bibliographystyle{plainnat}
+\bibliography{custom}
+
+\end{document}
