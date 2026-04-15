@@ -113,3 +113,73 @@ async def test_no_hooks_behaves_as_before(tmp_path: Path):
         rows = alog.read_all()
         assert all(r.action_type == ActionType.OUTBOUND_MESSAGE for r in rows)
         assert (await inner.recv(recipient_id="b")) == ("a", "msg")
+
+
+class ChainedRewriteHook:
+    """Appends a suffix, so if it fires twice you see two suffixes."""
+
+    hook_kind = "message"
+
+    def __init__(self, suffix: str) -> None:
+        self._s = suffix
+
+    def evaluate(self, *, action: ActionRecord, context: dict) -> PolicyDecision:
+        return PolicyDecision(
+            verdict=PolicyVerdict.REWRITE,
+            rewritten_content=action.payload["content"] + self._s,
+            reason=f"add {self._s}",
+            policy_id=f"add-{self._s.strip()}",
+        )
+
+
+async def test_enforce_chains_rewrites_across_hooks(tmp_path: Path):
+    """Under ENFORCE, each hook must evaluate the CURRENT (post-previous-rewrite)
+    content — not the original provisional — so rewrites compose across hooks."""
+    inner, alog, bus = _make_bus(
+        tmp_path,
+        condition=AuditCondition.ENFORCE,
+        hooks=[ChainedRewriteHook(suffix=" X"), ChainedRewriteHook(suffix=" Y")],
+    )
+    await bus.send(sender_id="a", recipient_id="b", content="hi")
+    # Expected: "hi" -> "hi X" (first hook) -> "hi X Y" (second hook sees "hi X")
+    msg = await inner.recv(recipient_id="b")
+    assert msg == ("a", "hi X Y")
+    # And the outbound row in the log carries the final composed content
+    rows = alog.read_all()
+    out_rows = [r for r in rows if r.action_type == ActionType.OUTBOUND_MESSAGE]
+    assert len(out_rows) == 1
+    assert out_rows[0].payload["content"] == "hi X Y"
+
+
+async def test_policy_decision_captures_target_and_content(tmp_path: Path):
+    """policy_decision.payload must include target_action_id pointing at the
+    outbound this decision is about, plus original_content and post_content
+    so the evidence survives even when the outbound is blocked/rewritten."""
+
+    class RewriteOnSecret:
+        hook_kind = "message"
+
+        def evaluate(self, *, action: ActionRecord, context: dict) -> PolicyDecision:
+            content = action.payload.get("content", "")
+            if "secret" in content:
+                return PolicyDecision(
+                    verdict=PolicyVerdict.REWRITE,
+                    rewritten_content=content.replace("secret", "[redacted]"),
+                    reason="hide",
+                    policy_id="p1",
+                )
+            return PolicyDecision(verdict=PolicyVerdict.ALLOW)
+
+    inner, alog, bus = _make_bus(
+        tmp_path, condition=AuditCondition.ENFORCE, hooks=[RewriteOnSecret()]
+    )
+    await bus.send(sender_id="a", recipient_id="b", content="the secret")
+    rows = alog.read_all()
+    pol_rows = [r for r in rows if r.action_type == ActionType.POLICY_DECISION]
+    out_rows = [r for r in rows if r.action_type == ActionType.OUTBOUND_MESSAGE]
+    assert len(pol_rows) == 1
+    assert len(out_rows) == 1
+    # target_action_id on the policy_decision links it to the outbound
+    assert pol_rows[0].payload["target_action_id"] == out_rows[0].action_id
+    assert pol_rows[0].payload["original_content"] == "the secret"
+    assert pol_rows[0].payload["post_content"] == "the [redacted]"
