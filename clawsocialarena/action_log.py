@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS actions (
     social_phase TEXT    NOT NULL,
     payload_json TEXT    NOT NULL,
     integrity_level INTEGER NOT NULL,
-    signature    TEXT
+    signature    TEXT,
+    source_action_ids TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_agent ON actions(agent_id, row_id);
 """
@@ -63,6 +64,7 @@ def _canonical_envelope(rec: ActionRecord) -> dict:
         "payload": rec.payload,
         "integrity_level": int(rec.integrity_level),
         "signature": rec.signature,
+        "source_action_ids": list(rec.source_action_ids),
     }
 
 
@@ -99,13 +101,17 @@ class ActionLog:
                 f"prev_hash {rec.prev_hash[:8]}... does not match head {head[:8]}... for {rec.agent_id}"
             )
         payload_json = json.dumps(rec.payload, sort_keys=True, separators=(",", ":"))
+        source_ids_json = json.dumps(
+            list(rec.source_action_ids), sort_keys=False, separators=(",", ":")
+        )
         record_hash = hash_action(prev_hash=rec.prev_hash, payload=_canonical_envelope(rec))
         with self.connect() as conn:
             conn.execute(
                 """INSERT INTO actions
                 (agent_id, action_id, prev_hash, record_hash, action_type, timestamp,
-                 execution_phase, social_phase, payload_json, integrity_level, signature)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 execution_phase, social_phase, payload_json, integrity_level, signature,
+                 source_action_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     rec.agent_id,
                     rec.action_id,
@@ -118,6 +124,7 @@ class ActionLog:
                     payload_json,
                     int(rec.integrity_level),
                     rec.signature,
+                    source_ids_json,
                 ),
             )
             conn.commit()
@@ -136,6 +143,11 @@ class ActionLog:
             ).fetchall()
         prev = GENESIS_HASH
         for r in rows:
+            source_ids_raw = r["source_action_ids"] if "source_action_ids" in r.keys() else "[]"
+            try:
+                source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
+            except (TypeError, json.JSONDecodeError):
+                source_ids = []
             envelope = {
                 "action_id": r["action_id"],
                 "agent_id": r["agent_id"],
@@ -146,6 +158,7 @@ class ActionLog:
                 "payload": json.loads(r["payload_json"]),
                 "integrity_level": int(r["integrity_level"]),
                 "signature": r["signature"],
+                "source_action_ids": list(source_ids),
             }
             expected = hash_action(prev_hash=prev, payload=envelope)
             if expected != r["record_hash"]:
@@ -156,6 +169,11 @@ class ActionLog:
         return True
 
     def _row_to_record(self, r: sqlite3.Row) -> ActionRecord:
+        source_ids_raw = r["source_action_ids"] if "source_action_ids" in r.keys() else "[]"
+        try:
+            source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
+        except (TypeError, json.JSONDecodeError):
+            source_ids = []
         return ActionRecord.model_validate(
             {
                 "action_id": r["action_id"],
@@ -168,5 +186,6 @@ class ActionLog:
                 "payload": json.loads(r["payload_json"]),
                 "integrity_level": r["integrity_level"],
                 "signature": r["signature"],
+                "source_action_ids": list(source_ids),
             }
         )

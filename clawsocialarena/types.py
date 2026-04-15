@@ -3,7 +3,7 @@
 from enum import IntEnum, StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ActionType(StrEnum):
@@ -66,6 +66,12 @@ class ActionRecord(BaseModel):
     payload: dict[str, Any]
     integrity_level: IntegrityLevel
     signature: str | None = None
+    source_action_ids: list[str] = Field(default_factory=list)
+    """Explicit provenance links to upstream action_ids that causally precede
+    this record. Empty by default; populated by the scenario/agent layer when
+    the source chain is known. Consumers (e.g. AttributionGraphBuilder) walk
+    these links to derive causal attribution without positional heuristics.
+    """
 
     @model_validator(mode="after")
     def _require_signature_above_hash_chained(self) -> "ActionRecord":

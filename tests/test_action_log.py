@@ -143,3 +143,48 @@ def test_tamper_timestamp_detected(tmp_path: Path):
         )
         conn.commit()
     assert log.verify_chain("alice") is False
+
+
+def test_source_action_ids_round_trip(tmp_path: Path):
+    """source_action_ids is persisted and restored on read_all."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    rec = ActionRecord(
+        action_id="alice-a",
+        prev_hash=GENESIS_HASH,
+        agent_id="alice",
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-15T00:00:00Z",
+        execution_phase=ExecutionPhase.NOMINAL,
+        social_phase=SocialPhase.DISCOVERY,
+        payload={"i": 1},
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+        source_action_ids=["parent-1", "parent-2"],
+    )
+    log.append(rec)
+    rows = log.read_all()
+    assert rows[0].source_action_ids == ["parent-1", "parent-2"]
+
+
+def test_tamper_source_action_ids_detected(tmp_path: Path):
+    """Tampering with source_action_ids in SQL breaks verify_chain (σ/φ)."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    rec = ActionRecord(
+        action_id="alice-a",
+        prev_hash=GENESIS_HASH,
+        agent_id="alice",
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-15T00:00:00Z",
+        execution_phase=ExecutionPhase.NOMINAL,
+        social_phase=SocialPhase.DISCOVERY,
+        payload={"i": 1},
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+        source_action_ids=["parent-1"],
+    )
+    log.append(rec)
+    with log.connect() as conn:
+        conn.execute(
+            "UPDATE actions SET source_action_ids = ? WHERE action_id = ?",
+            ('["evil"]', "alice-a"),
+        )
+        conn.commit()
+    assert log.verify_chain("alice") is False
