@@ -25,12 +25,14 @@ async def test_eval_runner_on_mvp(tmp_path: Path):
             )
         return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
 
+    # PASSIVE provides the ActionLog + ShadowLog needed by EvalRunner; under
+    # BASELINE (Task 3.5a) there is no audit infrastructure to evaluate.
     runner = ScenarioRunner(
         scenario=scenario,
         gt=gt,
         llm_factory=factory,
         db_path=tmp_path / "run.db",
-        condition=AuditCondition.BASELINE,
+        condition=AuditCondition.PASSIVE,
     )
     result = await runner.run()
     assert result.terminal_predicate_passed is True
@@ -82,12 +84,13 @@ async def test_eval_runner_invalidates_tampered_log(tmp_path: Path):
             return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
         return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
 
+    # PASSIVE so the ActionLog exists to be tampered with.
     runner = ScenarioRunner(
         scenario=scenario,
         gt=gt,
         llm_factory=factory,
         db_path=tmp_path / "run.db",
-        condition=AuditCondition.BASELINE,
+        condition=AuditCondition.PASSIVE,
     )
     await runner.run()
 
@@ -126,12 +129,13 @@ async def test_eval_loads_gt_flat_policies_into_registry(tmp_path: Path):
     def factory(aid: str):
         return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
 
+    # PASSIVE so the ActionLog records are produced for policy-field checks.
     runner = ScenarioRunner(
         scenario=scenario,
         gt=gt_with_policy,
         llm_factory=factory,
         db_path=tmp_path / "run.db",
-        condition=AuditCondition.BASELINE,
+        condition=AuditCondition.PASSIVE,
     )
     await runner.run()
 

@@ -22,12 +22,15 @@ async def test_run_cu_scheduling_mvp(tmp_path: Path):
             )
         return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
 
+    # Use PASSIVE so the MVP integration test still exercises the ActionLog
+    # hash-chaining path. BASELINE now intentionally has no audit infrastructure
+    # (spec §5.1 — see Task 3.5a).
     runner = ScenarioRunner(
         scenario=scenario,
         gt=gt,
         llm_factory=make_llm,
         db_path=tmp_path / "run.db",
-        condition=AuditCondition.BASELINE,
+        condition=AuditCondition.PASSIVE,
     )
     result: RunResult = await runner.run()
 

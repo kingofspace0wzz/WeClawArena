@@ -32,12 +32,14 @@ async def main() -> None:
             )
         return MockLLMClient(canned_responses=["[READY_TO_PIN 2026-04-21T14:00:00Z]"])
 
+    # PASSIVE keeps the audit infrastructure on so the demo still shows action
+    # log activity; BASELINE now runs with no ActionLog/ShadowLog (Task 3.5a).
     runner = ScenarioRunner(
         scenario=scenario,
         gt=gt,
         llm_factory=factory,
         db_path="/tmp/clawsocialarena_mvp.db",
-        condition=AuditCondition.BASELINE,
+        condition=AuditCondition.PASSIVE,
     )
     result = await runner.run()
     print(result)
