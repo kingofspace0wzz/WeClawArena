@@ -111,6 +111,94 @@ class AuditedMessageBus:
     async def recv(self, *, recipient_id: str) -> tuple[str, str] | None:
         return await self._inner.recv(recipient_id=recipient_id)
 
+    async def record_tool_call(
+        self, *, agent_id: str, tool_name: str, arguments: dict
+    ) -> str:
+        """Append a TOOL_CALL record to primary + shadow logs.
+
+        Condition-gated: baseline skips hooks entirely; passive/enforce evaluate
+        tool-kind hooks (``hook_kind == "tool"``) and may rewrite/block under
+        enforce. Returns the logged ``action_id`` so the caller can link a
+        matching TOOL_OBSERVATION_RETURN to it.
+        """
+        social_phase = (
+            self._tracker.current_phase()
+            if self._tracker is not None
+            else SocialPhase.DISCOVERY
+        )
+        rec = ActionRecord(
+            action_id=f"tc-{uuid.uuid4().hex[:12]}",
+            prev_hash=self._log.head_hash(agent_id),
+            agent_id=agent_id,
+            action_type=ActionType.TOOL_CALL,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=social_phase,
+            payload={"tool_name": tool_name, "arguments": arguments},
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+        )
+
+        if self._condition != AuditCondition.BASELINE and self._hooks:
+            for hook in self._hooks:
+                if getattr(hook, "hook_kind", "message") != "tool":
+                    continue
+                decision: PolicyDecision = hook.evaluate(action=rec, context={})
+                self._append_policy_decision(agent_id, decision)
+                if (
+                    self._condition == AuditCondition.ENFORCE
+                    and decision.verdict == PolicyVerdict.BLOCK
+                ):
+                    # Blocked: skip the TOOL_CALL log entirely; caller treats as no-op.
+                    return ""
+
+        # Refresh prev_hash since policy_decision writes (if any) moved the head.
+        rec = rec.model_copy(update={"prev_hash": self._log.head_hash(agent_id)})
+        self._log.append(rec)
+        if self._shadow is not None:
+            shadow_rec = rec.model_copy(
+                update={"prev_hash": self._shadow.head_hash(agent_id)}
+            )
+            self._shadow.append(shadow_rec)
+        return rec.action_id
+
+    async def record_tool_observation(
+        self,
+        *,
+        agent_id: str,
+        tool_call_action_id: str,
+        tool_name: str,
+        observation: str,
+    ) -> str:
+        """Append a TOOL_OBSERVATION_RETURN record linked to the TOOL_CALL via
+        ``payload["tool_call_action_id"]``. Primary + shadow logs."""
+        social_phase = (
+            self._tracker.current_phase()
+            if self._tracker is not None
+            else SocialPhase.DISCOVERY
+        )
+        rec = ActionRecord(
+            action_id=f"tr-{uuid.uuid4().hex[:12]}",
+            prev_hash=self._log.head_hash(agent_id),
+            agent_id=agent_id,
+            action_type=ActionType.TOOL_OBSERVATION_RETURN,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=social_phase,
+            payload={
+                "tool_call_action_id": tool_call_action_id,
+                "tool_name": tool_name,
+                "observation": observation,
+            },
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+        )
+        self._log.append(rec)
+        if self._shadow is not None:
+            shadow_rec = rec.model_copy(
+                update={"prev_hash": self._shadow.head_hash(agent_id)}
+            )
+            self._shadow.append(shadow_rec)
+        return rec.action_id
+
     def _append_policy_decision(self, agent_id: str, decision: PolicyDecision) -> None:
         """Append a POLICY_DECISION action record capturing the hook's verdict."""
         rec = ActionRecord(

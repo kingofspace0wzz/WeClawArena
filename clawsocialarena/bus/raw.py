@@ -35,3 +35,21 @@ class RawMessageBus:
             return self._queues[recipient_id].get_nowait()
         except asyncio.QueueEmpty:
             return None
+
+    async def record_tool_call(
+        self, *, agent_id: str, tool_name: str, arguments: dict
+    ) -> str:
+        # No-op under baseline: no ActionLog exists, so nothing to record.
+        # Returning "" keeps AuditableAIAgent's control flow uniform across
+        # baseline vs passive/enforce.
+        return ""
+
+    async def record_tool_observation(
+        self,
+        *,
+        agent_id: str,
+        tool_call_action_id: str,
+        tool_name: str,
+        observation: str,
+    ) -> str:
+        return ""
