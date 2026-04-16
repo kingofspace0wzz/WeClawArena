@@ -37,3 +37,4 @@ class RunScorecard(BaseModel):
     security: SecurityScorecard = Field(default_factory=SecurityScorecard)
     diagnostics: dict = Field(default_factory=dict)
     evaluator_version: str = "eval_v1.0.0"
+    meta: dict = Field(default_factory=dict)

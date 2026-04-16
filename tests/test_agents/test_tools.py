@@ -50,7 +50,6 @@ async def test_agent_dispatches_tool_and_logs_actions(tmp_path: Path):
         bus=bus,
         system_prompt="sys",
         tools=reg,
-        action_log=log,
     )
     # Inject a message to alice so she responds (and uses a tool during her turn)
     await inner.send(sender_id="bob", recipient_id="alice", content="please ping")

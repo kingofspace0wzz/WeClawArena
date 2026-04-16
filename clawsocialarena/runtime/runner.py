@@ -1,4 +1,10 @@
-"""ScenarioRunner: orchestrates agents and the AuditedMessageBus for one scenario."""
+"""ScenarioRunner: orchestrates agents and the MessageBus for one scenario.
+
+Under BASELINE the runner uses a RawMessageBus with no hash-chaining, no
+shadow log, and no PhaseTracker — this models a deployment WITHOUT audit
+infrastructure (spec §5.1). Under PASSIVE or ENFORCE the runner wires up
+the full AuditedMessageBus with ActionLog + ShadowLog + PhaseTracker.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +20,7 @@ from clawsocialarena.audit.phase_tracker import PhaseTracker
 from clawsocialarena.audit.shadow_log import ShadowLog
 from clawsocialarena.bus.audited import AuditedMessageBus
 from clawsocialarena.bus.in_process import InProcessMessageBus
+from clawsocialarena.bus.raw import RawMessageBus
 from clawsocialarena.scenario.models import Scenario, GTBundle
 from clawsocialarena.tasks.scheduling import scheduling_pinned_slot
 from clawsocialarena.types import AuditCondition
@@ -43,21 +50,31 @@ class ScenarioRunner:
     ) -> None:
         self.scenario = scenario
         self.gt = gt
-        self.log = ActionLog(db_path=db_path)
-        shadow_db_path = Path(db_path).parent / f"{Path(db_path).stem}.shadow.db"
-        self.shadow = ShadowLog(db_path=shadow_db_path)
-        self.phase_tracker = (
-            PhaseTracker.from_schedule(gt.phase_schedule)
-            if gt.phase_schedule
-            else PhaseTracker()
-        )
-        self.bus = AuditedMessageBus(
-            inner=InProcessMessageBus(),
-            action_log=self.log,
-            condition=condition,
-            phase_tracker=self.phase_tracker,
-            shadow_log=self.shadow,
-        )
+        self.condition = condition
+
+        if condition == AuditCondition.BASELINE:
+            # True no-audit baseline: raw transport only, no logs / no tracker.
+            self.log: ActionLog | None = None
+            self.shadow: ShadowLog | None = None
+            self.phase_tracker: PhaseTracker | None = None
+            self.bus = RawMessageBus()
+        else:
+            # Passive / Enforce: full audit infrastructure.
+            self.log = ActionLog(db_path=db_path)
+            shadow_db_path = Path(db_path).parent / f"{Path(db_path).stem}.shadow.db"
+            self.shadow = ShadowLog(db_path=shadow_db_path)
+            self.phase_tracker = (
+                PhaseTracker.from_schedule(gt.phase_schedule)
+                if gt.phase_schedule
+                else PhaseTracker()
+            )
+            self.bus = AuditedMessageBus(
+                inner=InProcessMessageBus(),
+                action_log=self.log,
+                condition=condition,
+                phase_tracker=self.phase_tracker,
+                shadow_log=self.shadow,
+            )
         self.agents = {
             spec.agent_id: AuditableAIAgent(
                 agent_id=spec.agent_id,
@@ -79,7 +96,8 @@ class ScenarioRunner:
         )
         turns = 0
         for turn_index in range(self.scenario.max_turns):
-            self.phase_tracker.advance_to_turn(turn_index)
+            if self.phase_tracker is not None:
+                self.phase_tracker.advance_to_turn(turn_index)
             progressed = False
             for agent in self.agents.values():
                 if await agent.step():
@@ -89,10 +107,11 @@ class ScenarioRunner:
                 break
             if not progressed:
                 break
+        log_rows = len(self.log.read_all()) if self.log is not None else 0
         return RunResult(
             scenario_id=self.scenario.scenario_id,
             turns_used=turns,
-            log_rows=len(self.log.read_all()),
+            log_rows=log_rows,
             terminal_predicate_passed=self._check_terminal(),
             final_state=dict(self.state),
         )
@@ -105,15 +124,24 @@ class ScenarioRunner:
         return False
 
     def _maybe_pin_slot(self) -> None:
-        """Scan recent log rows for a [READY_TO_PIN <iso>] tag from every agent."""
-        rows = self.log.read_all()
+        """Scan recent outbound messages for a [READY_TO_PIN <iso>] tag from every agent.
+
+        Under PASSIVE/ENFORCE, read from the ActionLog. Under BASELINE, scan the
+        RawMessageBus's `sent_history` (no log exists).
+        """
         seen: dict[str, str] = {}
-        for r in rows:
-            if r.action_type.value != "outbound_message":
-                continue
-            m = _PIN_RE.search(r.payload.get("content", ""))
-            if m:
-                seen[r.agent_id] = m.group(1)
+        if self.log is not None:
+            for r in self.log.read_all():
+                if r.action_type.value != "outbound_message":
+                    continue
+                m = _PIN_RE.search(r.payload.get("content", ""))
+                if m:
+                    seen[r.agent_id] = m.group(1)
+        elif hasattr(self.bus, "sent_history"):
+            for sender, _recipient, content in self.bus.sent_history:
+                m = _PIN_RE.search(content)
+                if m:
+                    seen[sender] = m.group(1)
         agent_ids = [a.agent_id for a in self.scenario.agents]
         if all(a in seen for a in agent_ids):
             if len(set(seen.values())) == 1:

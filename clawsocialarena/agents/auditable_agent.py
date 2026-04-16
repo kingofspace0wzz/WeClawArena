@@ -1,9 +1,10 @@
 """Minimal AuditableAIAgent with tool dispatch support.
 
 Reads inbound from the bus, calls the LLM, dispatches any tool_calls (logging
-TOOL_CALL + TOOL_OBSERVATION_RETURN records), re-invokes the LLM with tool
-outputs injected as tool-role messages, and finally sends the assistant's
-content as an outbound via the bus.
+TOOL_CALL + TOOL_OBSERVATION_RETURN records THROUGH the bus so condition
+gating, shadow double-write, hook evaluation, and phase tagging all apply),
+re-invokes the LLM with tool outputs injected as tool-role messages, and
+finally sends the assistant's content as an outbound via the bus.
 
 Hermes full integration is future work per spec Section 7.4; a Hermes adapter
 can slot in later via the same LLMClient + MessageBus interfaces.
@@ -11,21 +12,11 @@ can slot in later via the same LLMClient + MessageBus interfaces.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
-from clawsocialarena.action_log import ActionLog
 from clawsocialarena.agents.llm_client import LLMClient, LLMMessage
 from clawsocialarena.agents.tools import ToolRegistry
 from clawsocialarena.protocols import MessageBus
-from clawsocialarena.types import (
-    ActionRecord,
-    ActionType,
-    ExecutionPhase,
-    IntegrityLevel,
-    SocialPhase,
-)
 
 
 @dataclass
@@ -35,7 +26,6 @@ class AuditableAIAgent:
     bus: MessageBus
     system_prompt: str
     tools: ToolRegistry | None = None
-    action_log: ActionLog | None = None
     _history: list[LLMMessage] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -66,11 +56,17 @@ class AuditableAIAgent:
                 )
                 return True
 
-            # Dispatch every tool_call
+            # Dispatch every tool_call — logging now flows through the bus so
+            # AuditedMessageBus can apply condition gating + shadow writes +
+            # phase tagging; under baseline (RawMessageBus) these are no-ops.
             for tc in completion.tool_calls:
-                self._log_tool_call(tc)
                 tool_name = tc.get("name", "")
                 args = tc.get("arguments", {})
+                tc_action_id = await self.bus.record_tool_call(
+                    agent_id=self.agent_id,
+                    tool_name=tool_name,
+                    arguments=args,
+                )
                 observation = ""
                 if self.tools is not None:
                     try:
@@ -78,7 +74,12 @@ class AuditableAIAgent:
                         observation = tool.invoke(args)
                     except KeyError:
                         observation = f"[error] unknown tool '{tool_name}'"
-                self._log_tool_observation(tc.get("id", ""), tool_name, observation)
+                await self.bus.record_tool_observation(
+                    agent_id=self.agent_id,
+                    tool_call_action_id=tc_action_id,
+                    tool_name=tool_name,
+                    observation=observation,
+                )
                 # Inject observation back into history so the next LLM call sees it
                 self._history.append(
                     LLMMessage(role="tool", content=f"[tool:{tool_name}] {observation}")
@@ -94,39 +95,3 @@ class AuditableAIAgent:
             {"name": t, "schema": self.tools.get(t).schema}
             for t in self.tools.list_names()
         ]
-
-    def _log_tool_call(self, tc: dict) -> None:
-        if self.action_log is None:
-            return
-        rec = ActionRecord(
-            action_id=f"tc-{uuid.uuid4().hex[:12]}",
-            prev_hash=self.action_log.head_hash(self.agent_id),
-            agent_id=self.agent_id,
-            action_type=ActionType.TOOL_CALL,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            execution_phase=ExecutionPhase.NOMINAL,
-            social_phase=SocialPhase.DISCOVERY,
-            payload={"tool_name": tc.get("name"), "arguments": tc.get("arguments", {})},
-            integrity_level=IntegrityLevel.HASH_CHAINED,
-        )
-        self.action_log.append(rec)
-
-    def _log_tool_observation(self, tool_call_id: str, tool_name: str, observation: str) -> None:
-        if self.action_log is None:
-            return
-        rec = ActionRecord(
-            action_id=f"tr-{uuid.uuid4().hex[:12]}",
-            prev_hash=self.action_log.head_hash(self.agent_id),
-            agent_id=self.agent_id,
-            action_type=ActionType.TOOL_OBSERVATION_RETURN,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            execution_phase=ExecutionPhase.NOMINAL,
-            social_phase=SocialPhase.DISCOVERY,
-            payload={
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "observation": observation,
-            },
-            integrity_level=IntegrityLevel.HASH_CHAINED,
-        )
-        self.action_log.append(rec)

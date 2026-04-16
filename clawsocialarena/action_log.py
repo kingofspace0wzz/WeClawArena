@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS actions (
     social_phase TEXT    NOT NULL,
     payload_json TEXT    NOT NULL,
     integrity_level INTEGER NOT NULL,
-    signature    TEXT
+    signature    TEXT,
+    source_action_ids TEXT NOT NULL DEFAULT '[]',
+    UNIQUE(agent_id, prev_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_agent ON actions(agent_id, row_id);
 """
@@ -63,6 +65,7 @@ def _canonical_envelope(rec: ActionRecord) -> dict:
         "payload": rec.payload,
         "integrity_level": int(rec.integrity_level),
         "signature": rec.signature,
+        "source_action_ids": list(rec.source_action_ids),
     }
 
 
@@ -73,6 +76,10 @@ class ActionLog:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
+            # WAL + NORMAL synchronous: concurrent-reader safe, durable across
+            # crash but not power-loss (acceptable for a bench runtime).
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
             conn.executescript(_SCHEMA)
 
     @contextlib.contextmanager
@@ -93,34 +100,65 @@ class ActionLog:
         return row["record_hash"] if row else GENESIS_HASH
 
     def append(self, rec: ActionRecord) -> str:
-        head = self.head_hash(rec.agent_id)
-        if rec.prev_hash != head:
-            raise HashChainBroken(
-                f"prev_hash {rec.prev_hash[:8]}... does not match head {head[:8]}... for {rec.agent_id}"
-            )
+        """Append a record atomically.
+
+        Reads the chain head and performs the INSERT within a single
+        ``BEGIN IMMEDIATE`` transaction on one connection. This closes the
+        TOCTOU race where two concurrent callers could each observe the same
+        head on separate connections and both insert, forking the chain.
+
+        The schema's ``UNIQUE(agent_id, prev_hash)`` constraint is a
+        belt-and-suspenders guarantee: even if the Python-level head check
+        were somehow bypassed, a forked insert would surface as
+        ``sqlite3.IntegrityError`` rather than silently corrupting the log.
+        """
+
         payload_json = json.dumps(rec.payload, sort_keys=True, separators=(",", ":"))
-        record_hash = hash_action(prev_hash=rec.prev_hash, payload=_canonical_envelope(rec))
+        source_ids_json = json.dumps(
+            list(rec.source_action_ids), sort_keys=False, separators=(",", ":")
+        )
         with self.connect() as conn:
-            conn.execute(
-                """INSERT INTO actions
-                (agent_id, action_id, prev_hash, record_hash, action_type, timestamp,
-                 execution_phase, social_phase, payload_json, integrity_level, signature)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    rec.agent_id,
-                    rec.action_id,
-                    rec.prev_hash,
-                    record_hash,
-                    rec.action_type.value,
-                    rec.timestamp,
-                    rec.execution_phase.value,
-                    rec.social_phase.value,
-                    payload_json,
-                    int(rec.integrity_level),
-                    rec.signature,
-                ),
-            )
-            conn.commit()
+            # BEGIN IMMEDIATE acquires the RESERVED lock upfront so only ONE
+            # writer proceeds; others block here and serialize behind it.
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                head_row = conn.execute(
+                    "SELECT record_hash FROM actions WHERE agent_id = ? ORDER BY row_id DESC LIMIT 1",
+                    (rec.agent_id,),
+                ).fetchone()
+                head = head_row["record_hash"] if head_row else GENESIS_HASH
+                if rec.prev_hash != head:
+                    raise HashChainBroken(
+                        f"prev_hash {rec.prev_hash[:8]}... does not match head {head[:8]}... for {rec.agent_id}"
+                    )
+                record_hash = hash_action(
+                    prev_hash=rec.prev_hash, payload=_canonical_envelope(rec)
+                )
+                conn.execute(
+                    """INSERT INTO actions
+                    (agent_id, action_id, prev_hash, record_hash, action_type, timestamp,
+                     execution_phase, social_phase, payload_json, integrity_level, signature,
+                     source_action_ids)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        rec.agent_id,
+                        rec.action_id,
+                        rec.prev_hash,
+                        record_hash,
+                        rec.action_type.value,
+                        rec.timestamp,
+                        rec.execution_phase.value,
+                        rec.social_phase.value,
+                        payload_json,
+                        int(rec.integrity_level),
+                        rec.signature,
+                        source_ids_json,
+                    ),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
         return record_hash
 
     def read_all(self) -> list[ActionRecord]:
@@ -136,6 +174,11 @@ class ActionLog:
             ).fetchall()
         prev = GENESIS_HASH
         for r in rows:
+            source_ids_raw = r["source_action_ids"] if "source_action_ids" in r.keys() else "[]"
+            try:
+                source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
+            except (TypeError, json.JSONDecodeError):
+                source_ids = []
             envelope = {
                 "action_id": r["action_id"],
                 "agent_id": r["agent_id"],
@@ -146,6 +189,7 @@ class ActionLog:
                 "payload": json.loads(r["payload_json"]),
                 "integrity_level": int(r["integrity_level"]),
                 "signature": r["signature"],
+                "source_action_ids": list(source_ids),
             }
             expected = hash_action(prev_hash=prev, payload=envelope)
             if expected != r["record_hash"]:
@@ -156,6 +200,11 @@ class ActionLog:
         return True
 
     def _row_to_record(self, r: sqlite3.Row) -> ActionRecord:
+        source_ids_raw = r["source_action_ids"] if "source_action_ids" in r.keys() else "[]"
+        try:
+            source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
+        except (TypeError, json.JSONDecodeError):
+            source_ids = []
         return ActionRecord.model_validate(
             {
                 "action_id": r["action_id"],
@@ -168,5 +217,6 @@ class ActionLog:
                 "payload": json.loads(r["payload_json"]),
                 "integrity_level": r["integrity_level"],
                 "signature": r["signature"],
+                "source_action_ids": list(source_ids),
             }
         )

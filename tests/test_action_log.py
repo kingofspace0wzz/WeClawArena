@@ -1,3 +1,6 @@
+import asyncio
+import sqlite3
+
 import pytest
 from pathlib import Path
 
@@ -143,3 +146,127 @@ def test_tamper_timestamp_detected(tmp_path: Path):
         )
         conn.commit()
     assert log.verify_chain("alice") is False
+
+
+def test_source_action_ids_round_trip(tmp_path: Path):
+    """source_action_ids is persisted and restored on read_all."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    rec = ActionRecord(
+        action_id="alice-a",
+        prev_hash=GENESIS_HASH,
+        agent_id="alice",
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-15T00:00:00Z",
+        execution_phase=ExecutionPhase.NOMINAL,
+        social_phase=SocialPhase.DISCOVERY,
+        payload={"i": 1},
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+        source_action_ids=["parent-1", "parent-2"],
+    )
+    log.append(rec)
+    rows = log.read_all()
+    assert rows[0].source_action_ids == ["parent-1", "parent-2"]
+
+
+def test_tamper_source_action_ids_detected(tmp_path: Path):
+    """Tampering with source_action_ids in SQL breaks verify_chain (σ/φ)."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    rec = ActionRecord(
+        action_id="alice-a",
+        prev_hash=GENESIS_HASH,
+        agent_id="alice",
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-15T00:00:00Z",
+        execution_phase=ExecutionPhase.NOMINAL,
+        social_phase=SocialPhase.DISCOVERY,
+        payload={"i": 1},
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+        source_action_ids=["parent-1"],
+    )
+    log.append(rec)
+    with log.connect() as conn:
+        conn.execute(
+            "UPDATE actions SET source_action_ids = ? WHERE action_id = ?",
+            ('["evil"]', "alice-a"),
+        )
+        conn.commit()
+    assert log.verify_chain("alice") is False
+
+
+def test_unique_constraint_rejects_forked_prev_hash(tmp_path: Path):
+    """Schema-level UNIQUE(agent_id, prev_hash) rejects forked inserts at the DB layer."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    # First append from GENESIS succeeds, establishing (alice, GENESIS_HASH) as a used pair.
+    log.append(_record("alice", GENESIS_HASH, {"i": 1}))
+    # A raw second insert citing GENESIS as prev_hash for alice must trip UNIQUE.
+    # (This bypasses the HashChainBroken check to verify the constraint itself.)
+    with log.connect() as conn:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                """INSERT INTO actions
+                (agent_id, action_id, prev_hash, record_hash, action_type, timestamp,
+                 execution_phase, social_phase, payload_json, integrity_level, signature,
+                 source_action_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "alice",
+                    "forked",
+                    GENESIS_HASH,
+                    "fakehash",
+                    "outbound_message",
+                    "2026-04-15T00:00:00Z",
+                    "nominal",
+                    "discovery",
+                    "{}",
+                    3,
+                    None,
+                    "[]",
+                ),
+            )
+            conn.commit()
+
+
+async def test_concurrent_appends_serialize(tmp_path: Path):
+    """Concurrent asyncio appends against the same agent must not fork the chain.
+
+    Under BEGIN IMMEDIATE, the first writer acquires the SQLite write lock and
+    commits; subsequent writers re-read the head (now advanced) within their
+    own transaction and see prev_hash no longer matches -> HashChainBroken.
+    Exactly one succeeds; the rest raise HashChainBroken. The chain stays
+    intact and verify_chain returns True.
+    """
+    log = ActionLog(db_path=tmp_path / "run.db")
+    h1 = log.append(_record("alice", GENESIS_HASH, {"i": 0}))
+
+    N = 5
+
+    def _build_rec(i: int) -> ActionRecord:
+        # Distinct action_id per candidate so failure can't be caused by
+        # action_id UNIQUE instead of the chain-head check.
+        return ActionRecord(
+            action_id=f"alice-concurrent-{i}",
+            prev_hash=h1,
+            agent_id="alice",
+            action_type=ActionType.OUTBOUND_MESSAGE,
+            timestamp="2026-04-15T00:00:00Z",
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=SocialPhase.DISCOVERY,
+            payload={"i": i + 1},
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+        )
+
+    async def try_append(i: int):
+        try:
+            return ("ok", log.append(_build_rec(i)))
+        except HashChainBroken:
+            return ("broken", None)
+        except Exception as e:  # pragma: no cover - defensive
+            return ("err", type(e).__name__)
+
+    outs = await asyncio.gather(*[try_append(i) for i in range(N)])
+    ok_count = sum(1 for r in outs if r[0] == "ok")
+    broken_count = sum(1 for r in outs if r[0] == "broken")
+    assert ok_count == 1, f"expected 1 success, got {outs}"
+    assert broken_count == N - 1, f"expected {N - 1} HashChainBroken, got {outs}"
+    # Chain is intact after concurrent contention.
+    assert log.verify_chain("alice") is True
