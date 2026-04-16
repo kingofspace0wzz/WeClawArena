@@ -1,7 +1,7 @@
 # ClawSocialArena — Design Specification
 
-**Date**: 2026-04-15
-**Status**: Draft — approved through brainstorming, awaiting implementation planning
+**Date**: 2026-04-15 (brainstorming); updated 2026-04-15 post-implementation
+**Status**: Phases 1–6 infrastructure implemented (149/149 tests). Remaining: data generation + experiment runs.
 **Working title**: *ClawSocialArena: An Auditable Runtime System for Benchmarking Agentic Social Networks*
 
 ---
@@ -10,7 +10,7 @@
 
 This project extends AgentSocialBench — a static multi-agent privacy benchmark — into a persistent runtime system for agentic social networks, with auditability as a first-class design property. The paper makes three contributions:
 
-1. **An audit-first Python runtime** for multi-agent social scenarios, built on Hermes, with an action-level hash-chained log, a `MessageBus` abstraction, and three classes of enforce hooks (pre-message, pre-memory-write, pre-tool). Supports three audit conditions (`baseline` / `passive` / `enforce`) via a single toggle. Ships with an OpenClaw adapter as an alternate transport for deployment/demo.
+1. **An audit-first Python runtime** for multi-agent social scenarios, with an action-level hash-chained log, a `MessageBus` abstraction, and three classes of enforce hooks (pre-message, pre-memory-write, pre-tool). Supports three audit conditions (`baseline` / `passive` / `enforce`) via a single toggle. The runtime is **self-contained** — it does not depend on Hermes or OpenClaw at install or runtime. Architectural patterns from both were adopted during design (Hermes-style session persistence, OpenClaw-style channel protocols), and `MessageBus` is a transport-agnostic Protocol that could accept an OpenClaw gateway adapter in the future, but the benchmark ships with an in-process asyncio-based bus only.
 2. **The Social Auditability Framework (SAF)** — a formal 5-dimension scoring model that adapts the Auditable Agents framework to multi-agent social settings. Each dimension has a mechanical-GT-derived continuous score and a declared pass threshold. SAF earns its keep via three "disagreement vignettes" where vanilla Auditable Agents audits a system as compliant but SAF catches a real violation.
 3. **A benchmark of 250 scenarios** across 7 social categories with verifiable task families, a security attacker taxonomy, and three audit conditions × four models, producing ~5,400 evaluation runs.
 
@@ -30,7 +30,7 @@ ClawSocialArena addresses this gap by delivering a runtime-backed benchmark in w
 
 ### 1.2 Three contributions
 
-**C1 — The runtime.** An audit-first Python runtime for multi-agent social scenarios, built by extending Hermes's agent/session abstraction with an `AuditedMessageBus`, hash-chained action log, SEM (Social Epistemic Modeling) state, online attribution DAG, phase tracker, and policy registry. Three audit conditions (`baseline` / `passive` / `enforce`) are a single configuration toggle. Transport abstraction (`MessageBus` Protocol) supports an in-process default (the benchmark) and an OpenClaw adapter (deployment/demo). Code reuse from `clawsocialos` covers roughly 40% of the runtime (SEM pipeline, error-chain classifier, graph topology, GESA traces).
+**C1 — The runtime.** A self-contained, audit-first Python runtime for multi-agent social scenarios with an `AuditedMessageBus`, hash-chained action log, SEM (Social Epistemic Modeling) state, online attribution DAG, phase tracker, and policy registry. Three audit conditions (`baseline` / `passive` / `enforce`) are a single configuration toggle: `baseline` uses a `RawMessageBus` with zero audit overhead; `passive` and `enforce` use `AuditedMessageBus` with full hash-chaining, shadow-log double-write, phase tracking, and hook evaluation. All agents for a scenario run inside a **single Python process** sharing one `MessageBus` instance (asyncio round-robin scheduling, deterministic via seed). No external agent framework (Hermes, OpenClaw) is required — architectural patterns were adopted but the implementation is independent. Some modules were vendored from `clawsocialos` (SEM stub, error-chain classifier, graph topology).
 
 **C2 — The Social Auditability Framework (SAF).** Five dimensions, each a continuous [0,1] score with a declared pass threshold:
 
@@ -47,7 +47,7 @@ Realized through three mechanism classes (`Detect` pre-episode, `Enforce` at run
 ### 1.3 What the paper does not claim
 
 - No new LLM training method.
-- No production deployment results (the OpenClaw adapter is engineering, not empirical).
+- No production deployment results (an OpenClaw gateway adapter is future work; benchmark runs use the in-process bus).
 - No defense against compromised runtime / gateway (explicit out-of-scope limitation, addressed in future work via cryptographic extensions).
 
 ### 1.4 Venue fit
@@ -60,52 +60,68 @@ Primary target: NeurIPS Datasets & Benchmarks track. The three-contribution stru
 
 ### 2.1 Top-level layout
 
-All agents for a given scenario run in a **single Python process**. Cross-agent traffic is routed through an in-process `MessageBus`. Core responsibilities:
+All agents for a given scenario run in a **single Python process**. Cross-agent traffic is routed through an in-process `MessageBus`. **No external agent framework (Hermes, OpenClaw) needs to be installed** — the runtime is self-contained. Architectural patterns from Hermes (SQLite-backed session persistence, tool/skill registries) and OpenClaw (typed channel protocols, plugin hooks) informed the design, but the implementation has no import-time or runtime dependency on either.
+
+**How multi-party simulation works:** N `AuditableAIAgent` instances share one `MessageBus`. Each agent has its own `LLMClient` (Bedrock, OpenAI, or Mock). The `ScenarioRunner` advances agents round-robin per turn; each agent's `step()` calls `bus.recv(recipient_id=self.agent_id)` to dequeue inbound messages and `bus.send(...)` to emit replies. Under `baseline`, the bus is a `RawMessageBus` (pure asyncio queues, no logging). Under `passive` or `enforce`, it is an `AuditedMessageBus` wrapping `InProcessMessageBus`, which applies hash-chaining, shadow-log double-write, phase tagging, and condition-gated policy hooks before delegating to the inner bus. This single-process, shared-bus design matches benchmark best practice (tau-bench, MARBLE) — deterministic scheduling, bit-for-bit reproducible scoring, no network non-determinism.
 
 ```
-┌─────────────────────────── ScenarioRunner ─────────────────────────────┐
-│                                                                        │
-│  Agent layer                                                           │
-│    AuditableAIAgent (wraps Hermes AIAgent)                             │
-│      - LLM client, tool registry, skill registry                       │
-│      - MemoryProvider (hash-chained writes)                            │
-│      - outbound messages go through MessageBus only                    │
-│      - phase tracker (current social phase per peer)                   │
-│                                                                        │
-│  Transport layer                                                       │
-│    MessageBus (Protocol)                                               │
-│      - InProcessMessageBus  (benchmark default)                        │
-│      - OpenClawMessageBus   (adapter, demo)                            │
-│    AuditedMessageBus (decorator wrapping any MessageBus)               │
-│      - pre-message PolicyHooks                                         │
-│      - action-log append (always)                                      │
-│      - SEM + phase + attribution updates                               │
-│                                                                        │
-│  Audit substrate                                                       │
-│    ActionLog         (SQLite, hash-chained, append-only)               │
-│    SEMStore          (per-agent epistemic models)                      │
-│    AttributionGraph  (online L0/L1/LX/LR/LF DAG)                       │
-│    PhaseTracker      (social-phase state machine)                      │
-│    PolicyRegistry    (flat + phase-scoped predicates)                  │
-│                                                                        │
-│  Scenario layer                                                        │
-│    ScenarioLoader    (loads scenario + GT bundle)                      │
-│    NPCSimulator      (scripted human NPCs)                             │
-│    AttackerInjector  (scripted adversarial agent)                      │
-│    TerminalPredicate (verifiable success check)                        │
+ScenarioRunner (one Python process, one asyncio event loop)
+ │
+ ├── agents = {
+ │     "alice": AuditableAIAgent(llm=BedrockLLMClient(...), bus=shared_bus),
+ │     "bob":   AuditableAIAgent(llm=OpenAILLMClient(...), bus=shared_bus),
+ │     "carol": AuditableAIAgent(llm=..., bus=shared_bus),
+ │   }
+ │
+ └── shared_bus (condition-dependent):
+       ├── BASELINE  → RawMessageBus (asyncio queues, no audit overhead)
+       └── PASSIVE / ENFORCE → AuditedMessageBus(
+             inner = InProcessMessageBus(),
+             action_log   = ActionLog (SQLite, WAL, hash-chained, BEGIN IMMEDIATE),
+             shadow_log   = ShadowLog (independent copy for Recoverability),
+             phase_tracker = PhaseTracker (GT-schedule-driven),
+             hooks = [PolicyHook, ...]  (message-kind + tool-kind)
+           )
+
+Turn loop (ScenarioRunner.run):
+  for turn in range(max_turns):
+      phase_tracker.advance_to_turn(turn)
+      for agent in agents.values():
+          await agent.step()   # recv → LLM → tools? → send
+      if terminal_predicate(state): break
+```
+
+Core subsystems:
+
+```
+┌─────────────────────────── Audit substrate ────────────────────────────┐
+│  ActionLog         (SQLite, hash-chained, WAL + BEGIN IMMEDIATE)      │
+│  ShadowLog         (independent copy; Recoverability scores against)  │
+│  PhaseTracker      (social-phase state machine from GT schedule)      │
+│  PolicyRegistry    (flat + phase-scoped predicates from GT policies)  │
+│  AttributionGraph  (causal via source_action_ids, proximity fallback) │
+│  SEMStore          (per-agent epistemic models; stub in current impl) │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────── Scenario layer ─────────────────────────────┐
+│  ScenarioLoader    (loads scenario.json + scenario.gt.json)           │
+│  Generator CLI     (Template + attack injection + GT assembly)        │
+│  TerminalPredicate (scheduling, aggregation, transaction, decision)   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Protocol interfaces
 
-Four language-agnostic Protocols, all with a JSON-based record schema so TypeScript-side (OpenClaw) plugins can interoperate:
+Four Protocols defined via Python `typing.Protocol` with `@runtime_checkable`:
 
-1. **`MessageBus`** — `send(sender_id, recipient_id, content) -> action_id`
-2. **`ActionLogger`** — `append(ActionRecord) -> hash`
-3. **`PolicyHook`** — `evaluate(Action, Context) -> (Decision, Rewrite?)`
-4. **`ScenarioIO`** — `load(scenario_id)` / `submit(run_id, artifacts)`
+1. **`MessageBus`** — `async send(*, sender_id, recipient_id, content) -> str` / `async recv(*, recipient_id) -> tuple[str, str] | None`. Implementations: `InProcessMessageBus` (asyncio queues), `RawMessageBus` (no-audit baseline), `AuditedMessageBus` (decorator with hash-chain + hooks + shadow).
+2. **`ActionLogger`** — `append(ActionRecord) -> str`. Implementation: `ActionLog` (SQLite, WAL, BEGIN IMMEDIATE, UNIQUE(agent_id, prev_hash)).
+3. **`PolicyHook`** — `evaluate(*, action: ActionRecord, context: dict) -> PolicyDecision`. Hook kind convention: `hook_kind = "message"` (default) or `"tool"` for tool-call-specific enforcement. Implementations: `RuleBasedDLP`, stub hooks for tests.
+4. **`ScenarioIO`** — `load(scenario_id) -> tuple[dict, dict]` / `submit(run_id, artifacts) -> None`. Implementation: `ScenarioLoader` (reads `scenario.json` + `scenario.gt.json` from disk).
 
-These interfaces are designed and implemented in Phase 1. Python implementations ship with the paper; OpenClaw-side TypeScript implementations are future work.
+`AuditedMessageBus` also exposes `record_tool_call(...)` and `record_tool_observation(...)` methods (not on the Protocol, since `RawMessageBus` stubs them as no-ops). These route tool actions through the same condition-gated + shadow-logged + phase-tagged path as outbound messages.
+
+**Future extensibility**: the `MessageBus` Protocol is transport-agnostic. A future `OpenClawMessageBus` adapter could route `send/recv` through HTTP to an OpenClaw gateway, replacing `InProcessMessageBus` without touching the audit or scoring layers. This is future work — the current runtime is fully in-process.
 
 ### 2.3 Action taxonomy
 
@@ -177,27 +193,33 @@ Records are immutable once appended. Hash chain is per-agent; cross-agent refere
 | Hash-chain break | Run invalidated at evaluation Stage 1 |
 | Bus egress bypass attempt | Treated as fatal — log completeness is a runtime invariant |
 
-### 2.8 Reuse from clawsocialos
+### 2.8 Vendored from clawsocialos
 
-- SEM ownership / propagation modules (refactored to work online in AuditedMessageBus)
-- Error-chain classifier (L0/L1/LX/LR/LF) — refactored from post-hoc to streaming
-- Graph topology + Watts-Strogatz generator
-- GESA trace format (retained as a supplementary output)
-- `RuntimeConfig` dataclass (simplified)
+The following modules were copied and adapted (each file carries a vendoring header):
+- `audit/sem.py` — **stubbed from scratch** (clawsocialos's SEM was designed but unmerged). Minimal `SEMStore` mapping `(agent_id, item, owner) → OwnershipState`.
+- `audit/error_chains.py` — vendored from `clawsocialos/evaluation/error_chains.py`; trimmed to portable interface.
+- `graph/topology.py` — vendored from `clawsocialos/graph/topology.py` with inline-stubbed cross-package types.
 
-### 2.9 New components built for this paper
+No runtime dependency on `clawsocialos`. No `import clawsocialos` anywhere.
 
-- `AuditedMessageBus` (decorator)
-- Hash-chained `ActionLog` (SQLite schema + integrity verification)
-- `PolicyRegistry` with phase-scoped predicates
-- Online `AttributionGraph` (L0/L1/LX/LR/LF DAG, updated per action)
-- Phase tracker (state machine over social-phase transitions)
-- Scenario generator with mechanical GT emission
-- Terminal-predicate framework for verifiable task families
-- Three comparison baselines as interchangeable runtime profiles
+### 2.9 Relationship to Hermes and OpenClaw
+
+**Neither is a dependency.** The runtime drew design inspiration from both:
+
+| Pattern adopted | Source | How it appears in ClawSocialArena |
+|---|---|---|
+| SQLite-backed session persistence | Hermes (`SessionDB`) | `ActionLog` (WAL + hash chain + BEGIN IMMEDIATE) |
+| Synchronous agent loop with tool dispatch | Hermes (`AIAgent.run_conversation`) | `AuditableAIAgent.step()` |
+| Channel-agnostic transport protocol | OpenClaw (`ChannelContract`) | `MessageBus` Protocol with `InProcessMessageBus` / `RawMessageBus` / `AuditedMessageBus` |
+| Plugin hook system | OpenClaw (`hook-runner-global.js`) | `PolicyHook` Protocol with `hook_kind` attribute for message/tool dispatch gating |
+
+If Hermes or OpenClaw integration is ever desired:
+- **Hermes adapter**: wrap Hermes's `AIAgent` behind `AuditableAIAgent`'s `step()` interface; thread Hermes's tool calls through `bus.record_tool_call(...)`.
+- **OpenClaw adapter**: implement `OpenClawMessageBus` that routes `send/recv` through HTTP to an OpenClaw gateway; all audit + scoring layers remain unchanged.
 
 ### 2.10 Explicitly not built (future work)
 
+- **Hermes / OpenClaw integration.** Per Approach A (brainstorming §2), the benchmark uses a self-contained in-process runtime. Adapter interfaces exist (`MessageBus`, `LLMClient`) so integration can slot in without changing scoring or evaluation.
 - Real-time pub/sub across processes.
 - Distributed scheduling.
 - **Cryptographic signing beyond hash-chain.** Our Asymmetric Evidence Integrity ordinal is designed to extend upward; future-work directions include cross-agent Merkle DAGs for federated logs, decentralized identity + verifiable credentials for agent message signing, zero-knowledge proofs of policy compliance, external anchoring to public ledgers, and MPC / private aggregation for structural leakage prevention. Expanded paragraph in §7.
@@ -526,13 +548,13 @@ Reported as supplementary columns on the hard-stratum results table. Never enter
 | Sybil attacks | Personal-agent setting is 1-agent-per-user by construction; multi-identity adversaries need DID infrastructure. |
 | Traffic analysis / timing attacks | Not a privacy axis the benchmark addresses. |
 
-**Key runtime invariant**: the `AuditedMessageBus` is the sole egress point for cross-agent communication. Enforced by (i) Hermes's tool registry being the only egress mechanism, (ii) optional OS-level NetworkPolicy on agent processes, (iii) log-completeness check at evaluation Stage 1.
+**Key runtime invariant**: the `MessageBus` is the sole egress point for cross-agent communication (under `passive`/`enforce`, this is `AuditedMessageBus`; under `baseline`, `RawMessageBus`). Enforced by (i) `AuditableAIAgent` sending all outbound exclusively via `self.bus.send(...)` and all tool records via `self.bus.record_tool_call(...)`/`record_tool_observation(...)`, (ii) optional OS-level NetworkPolicy on agent processes, (iii) log-completeness check at evaluation Stage 1.
 
 ### 7.3 Limitations
 
 1. **Personal-agent setting (1 agent per user).** Scope is user-serving personal agents interacting on behalf of their principals. Multi-agent teams per user, market-of-agents settings, and fully-autonomous AI-to-AI networks are out of scope. One-sentence scope qualifier in the abstract.
 2. **Mechanical GT depends on scenario-generator quality.** If the generator's attribution DAG or phase schedule is wrong, SAF scores become "agreement with a buggy spec." Mitigated via the 40-scenario annotator validation.
-3. **Simulated NPCs are scripted.** Real humans interacting with agents produce distributions our benchmark doesn't capture. Human-in-the-loop demos via the Hermes gateway are appendix-only and qualitative.
+3. **Simulated NPCs are scripted.** Real humans interacting with agents produce distributions our benchmark doesn't capture. Human-in-the-loop demos via a future Hermes or OpenClaw gateway adapter are appendix-only and qualitative.
 4. **Rewrite-based enforcement is a specific intervention style.** Hard-reject, ask-agent, and learned-policy interventions are future work.
 5. **Three discrete audit conditions, not a continuum.** Fine-grained per-hook toggles are a design axis left open.
 6. **Evaluation is offline.** Online streaming evaluation for live production systems requires additional engineering.
