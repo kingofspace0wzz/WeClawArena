@@ -80,10 +80,10 @@ def test_rewrite_quality_shows_enforce_minus_passive(tmp_path: Path):
     assert "tabular" in tex
     frame = rewrite_quality_table_df(df)
     assert "delta_mean" in frame.columns
-    # Fixture sets TSR_enforce=0.9, TSR_passive=1.0 -> delta = -0.1.
+    # Fixture sets TSR_enforce=0.95, TSR_passive=1.0 -> delta = -0.05.
     # Averaged over (category, live_or_replay), rounded for tolerance.
     for delta in frame["delta_mean"]:
-        assert abs(delta - (-0.1)) < 1e-6
+        assert abs(delta - (-0.05)) < 1e-6
 
 
 def test_tables_include_live_or_replay_column(tmp_path: Path):

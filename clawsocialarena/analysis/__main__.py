@@ -13,7 +13,11 @@ from pathlib import Path
 
 from clawsocialarena.analysis.aggregator import aggregate_to_csv
 from clawsocialarena.analysis.figures import write_all_figures
-from clawsocialarena.analysis.prereg_check import reconcile, render_report
+from clawsocialarena.analysis.prereg_check import (
+    reconcile,
+    render_report,
+    write_report,
+)
 from clawsocialarena.analysis.tables import (
     headline_table,
     load_long_csv,
@@ -51,6 +55,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     pr.add_argument("--csv", type=Path, required=True)
     pr.add_argument("--out", type=Path, required=True)
+    pr.add_argument(
+        "--version",
+        default="v1.0.0",
+        help="Results version label used in the report header.",
+    )
+    pr.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Emit the Phase 6 dict-shaped report (H2/H4 only).",
+    )
 
     fg = sub.add_parser("figures", help="Write all paper figures as PDFs.")
     fg.add_argument("--csv", type=Path, required=True)
@@ -86,10 +100,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "prereg":
-        results = reconcile(args.csv)
-        report = render_report(results)
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(report)
+        if args.legacy:
+            report = render_report(reconcile(args.csv))
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(report)
+        else:
+            write_report(args.csv, args.out, version=args.version)
         print(f"Wrote {args.out}")
         return 0
 

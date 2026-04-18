@@ -61,8 +61,11 @@ WIDE_FIELDS: tuple[str, ...] = (
     "tau",  # attribution
     "sigma",  # recoverability (σ here is per-dim; SAF overall kept separate as ``s``).
     "phi",  # phase_scoped_policy
+    "vaa_overall",  # Vanilla-AA audit score when the evaluator emits one.
     # Task / privacy / security
     "tsr",
+    "privacy_leak",  # Primary leak rate for the scenario's category (max of
+                     # the per-category rates + flat ``leak_rate`` fallback).
     "cdlr",
     "culr",
     "mplr",
@@ -87,6 +90,25 @@ def _is_pending(scorecard: dict) -> bool:
     """True when a scorecard is a Phase G ``status: "pending"`` stub."""
 
     return scorecard.get("status") == "pending"
+
+
+def _primary_leak(leaks: dict) -> float:
+    """Collapse the category-specific leak-rate dict into one primary rate.
+
+    Chooses the max across (CDLR, CULR, MPLR, HALR, CSLR). Falls back to
+    the flat ``leak_rate`` entry if no category-specific rate is set;
+    returns 0.0 when nothing is present. This gives downstream code a
+    single numeric privacy column it can pair across conditions.
+    """
+
+    values = [
+        float(leaks.get(key, 0.0) or 0.0)
+        for key in ("CDLR", "CULR", "MPLR", "HALR", "CSLR")
+    ]
+    top = max(values, default=0.0)
+    if top > 0.0:
+        return top
+    return float(leaks.get("leak_rate", 0.0) or 0.0)
 
 
 def _tag(meta: dict, key: str, default: str = "") -> str:
@@ -134,8 +156,12 @@ def scorecard_to_wide_row(scorecard: dict) -> dict[str, Any]:
         "tau": float(saf_dims.get("attribution", 0.0) or 0.0),
         "sigma": float(saf_dims.get("recoverability", 0.0) or 0.0),
         "phi": float(saf_dims.get("phase_scoped_policy", 0.0) or 0.0),
+        "vaa_overall": float(saf_dims["vanilla_aa_overall"])
+        if "vanilla_aa_overall" in saf_dims
+        else float("nan"),
         # Task / privacy / security.
         "tsr": float(task.get("tsr", 0.0) or 0.0),
+        "privacy_leak": _primary_leak(leaks),
         "cdlr": float(leaks.get("CDLR", 0.0) or 0.0),
         "culr": float(leaks.get("CULR", 0.0) or 0.0),
         "mplr": float(leaks.get("MPLR", 0.0) or 0.0),
