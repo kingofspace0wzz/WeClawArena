@@ -21,6 +21,50 @@ ClawSocialArena is a runtime-backed benchmark in which auditability is both a me
 
 ---
 
+## Implementation status (2026-04-18)
+
+This section reconciles the spec (an architectural commitment from 2026-04-17) with the code actually shipped under branch `v2-refactor`. The architectural claims above remain unchanged; this is not a redesign, only a state note.
+
+### Phases landed
+
+Phases A through H-infrastructure are complete. Tagged commits:
+
+| Phase | Tag | Scope |
+|---|---|---|
+| A | `phase-A-complete` | Gateway HTTP server, Session, /send /recv / side-channel routes, cassette recorder, MCP host, TypeScript channel plugin, Docker images, minimal compose, `ComposeRunner`, E2E smoke |
+| A.5 | `phase-A5-complete` | Audit-condition reconciliation: three conditions now operate at the gateway (baseline / passive / enforce) with real hook dispatch in passive and enforce; spec §2.9 baseline row updated to match code (`no records`, not "transport log") |
+| B | `phase-B-complete` | v1 `bus/`, `agents/`, `runtime/runner.py`, `audit/sem.py` removed; SEM renamed to MSWM throughout; `run_mvp` uses in-process gateway HTTP |
+| C | `phase-C-complete` | MSWM data model, online update rules for outbound messages and the four side channels, joint-decidability predicate, session wiring, MSWM-aware policy hook, attribution DAG (causal + proximity) with L0 / L1 / LX / LR / LF labels |
+| C.5 | `phase-C5-complete` | MSWM rewrite-reconcile ordering: when an enforce hook rewrites a payload, MSWM reverts its pre-hook update and re-applies against the rewritten payload; `self_knowledge` stores (item_id, action_id) tuples so attribution preserves provenance |
+| D | `phase-D-complete` | Scenario model v2 (MCP + persona manifests), compose / persona / MCP emitters, GT bundle v2, attack injection carries `mentioned_items`, generator CLI v2, scenario loader v2, validator v2 |
+| D.5 | `phase-D5-complete` | Compose emitter uses absolute `build.context` paths; `agent-entrypoint.sh` waits on gateway health and starts the OpenClaw channel; per-agent `allowed_tools` so persona emitter can restrict; validator enforces the runtime contract (services, env vars, persona / MCP files, allowed-tools coverage); `McpToolSpec.schema` documented as advisory with a TODO(F) on gateway-side validation |
+| F | `phase-F-complete` | Psi and tau scorers consume MSWM; cumulative evaluation module; scorecard v2 schema (`cassette_hash`, `live_or_replay`, `episode_graph_id`); EvalRunner v2 five-stage; cassette replay driver; leak detector on v2 logs; vanilla-AA and prompt-ladder / DLP baselines updated |
+| F.5 | `phase-F5-complete` | Inferential MSWM policies wired through `EvalRunner` into `SAFScorer` (Phase F.5 Fix 1); attribution preserves the pre-rewrite causal item under enforce (Phase F.5 Fix 2); `EpisodeGraphEvalRunner` + cumulative adapter added so episode-graph fixtures feed the cumulative metric pipeline directly (Phase F.5 Fix 3) |
+| G (infra) | `phase-G-infrastructure-complete` | Grid config schema + YAML loader, `scripts/run_grid.py` in live / replay / dry-run modes, cost tracking against `clawsocialarena/experiments/rates.yaml`, cassette enrichment for agent-free replay |
+| H (infra) | `phase-H-infrastructure-complete` | Aggregator ingests v2 scorecards, headline / model / rewrite tables (markdown + LaTeX) with live-vs-replay stratification, four paper figures plus episode-graph appendix, Wilcoxon + Kruskal-Wallis + Bonferroni + SAF threshold sensitivity, pre-registration reconciler, reproducibility bundle script |
+
+Final baseline: Python 470 passed + 2 skipped; TypeScript 29 passed; `mypy` and `ruff` clean.
+
+### Deferred and why
+
+Three items remain open. All three need resources outside the autonomous execution loop.
+
+- **Phase E (benchmark content: 14 category × family templates, 2 hard-stratum templates, 5 disagreement vignettes, 5 episode graphs, 150-scenario generation).** Deferred because it needs LLM-assisted instantiation (the `instantiate(..., mode="llm")` branch is still a stub), hand-authored disagreement vignettes whose design-by-construction requires human judgment, and the 3-annotator validation pass on 40 scenarios. Only the `cu_scheduling` template ships today.
+- **Phase G5-G7 (real LLM runs).** Deferred because the spec §5.4 compute budget is $4K-$10K of LLM spend across four providers (Bedrock, OpenAI, DeepSeek, Qwen) plus a Docker host for live-cell compose orchestration. Neither is available in the current workstation. `scripts/run_grid.py` and the supporting infrastructure are ready; see `docs/superpowers/plans/phase-G-deferred.md` for the resume steps.
+- **Phase H8 (`v1.0.0` tag + CHANGELOG).** Deferred because tagging `v1.0.0` blesses an empty `results/v1.0.0/` tree until Phases E and G5-G7 complete. See `docs/superpowers/plans/phase-H-deferred.md`.
+
+### Design changes forced by implementation
+
+Five deltas from the 2026-04-17 commitment. None rewrite architectural claims; each resolves an ambiguity surfaced while coding.
+
+1. **Phase A.5: three audit conditions at the gateway.** The spec originally conflated "baseline" with a `RawMessageBus`-style transport log inherited from v1. Under the gateway-centric v2 runtime the baseline condition cleanly forwards without touching the action log, shadow log, MSWM, or hooks; passive and enforce share the full substrate with hook dispatch differing only in whether blocks / rewrites mutate the payload. The §2.9 row now reads `no records` for baseline, which matches the `Session` factory's conditional construction and the spec §5.1 framing of baseline as "deployment without audit infrastructure".
+2. **Phase C.5: MSWM rewrite-reconcile ordering.** Online MSWM updates fire before policy hooks see the action so that a hook can read the proposed state when deciding to block or rewrite. Under enforce, a rewrite changes `payload.content` and `payload.mentioned_items` after MSWM has already ingested the pre-rewrite form. Resolution: on rewrite, MSWM reverts the pre-hook update and re-applies the rewritten payload; attribution's pre-rewrite causal item is preserved separately so the audit trail still points at the original cause. `self_knowledge` became a set of `(item_id, action_id)` tuples to carry that provenance.
+3. **Phase D.5: compose emitter and validator hardening.** The generator's compose emitter now writes absolute `build.context` paths rooted at the repo so the emitted `docker-compose.yml` resolves identically no matter how deep the bundle is stored on disk. `agent-entrypoint.sh` waits for gateway health before starting the OpenClaw channel, which closes a race seen during E2E smokes. Per-agent `allowed_tools` on `Scenario.agents` lets the persona emitter restrict each agent's tool JSON to a subset of the full manifest. The scenario validator v2 enforces the runtime contract: required compose services, required env vars, persona / MCP file presence, and allowed-tools coverage.
+4. **Phase F.5: MSWM policies threaded through EvalRunner; attribution preserves pre-rewrite cause; episode-graph cumulative adapter.** Fix 1: inferential MSWM policies were reaching the session but not the offline scorers; the evaluation path now wires them through `EvalRunner` into `SAFScorer` so they contribute to psi and tau offline. Fix 2: under enforce, attribution now root-points at the original causal item even when the hook rewrote the outbound payload. Fix 3: `EpisodeGraphEvalRunner` drives per-episode `EvalRunner` calls and exposes an adapter so the cumulative module gets per-episode summaries in the shape it expects; spurious policy flags on undeclared ids are excluded from the cumulative violation set so Social Precision drops correctly when false positives accumulate.
+5. **§2.9 baseline row wording (Phase A.5).** The original row said "minimal transport log for reproducibility only"; the rewritten row says `no records`. Flagged here explicitly because the spec's architectural claims depend on the honest modelling of baseline as a deployment without audit infrastructure.
+
+---
+
 ## 1. Paper framing and contributions
 
 ### 1.1 Setting and core problem
