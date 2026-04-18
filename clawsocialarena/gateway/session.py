@@ -113,7 +113,7 @@ class Session:
             phase_tracker=phase_tracker,
         )
 
-    def _ensure_inbox(self, recipient_id: str) -> asyncio.Queue[tuple[str, str]]:
+    def ensure_inbox(self, recipient_id: str) -> asyncio.Queue[tuple[str, str]]:
         """Return the inbox queue for ``recipient_id``, creating it on first use.
 
         Queues are created lazily so the gateway can serve arbitrary recipient
@@ -158,7 +158,7 @@ class Session:
             action_type=ActionType.OUTBOUND_MESSAGE,
             timestamp=datetime.now(timezone.utc).isoformat(),
             execution_phase=ExecutionPhase.NOMINAL,
-            social_phase=SocialPhase.DISCOVERY,
+            social_phase=SocialPhase.DISCOVERY,  # TODO(A6): phase_tracker.current_phase(turn_index)
             payload={"recipient_id": recipient_id, "content": content},
             integrity_level=IntegrityLevel.HASH_CHAINED,
         )

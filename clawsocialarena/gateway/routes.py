@@ -50,6 +50,10 @@ async def send(request: web.Request) -> web.Response:
     BASELINE the ``action_id`` is ``null``; under PASSIVE or ENFORCE it is
     the freshly-minted ActionLog id.
 
+    Note: under BASELINE the message is still enqueued so recipients can
+    ``/recv`` it, even though no audit record is written; this mirrors the
+    "deployment without audit infrastructure" condition in spec §5.1.
+
     Missing any of the three required fields yields HTTP 400.
     """
 
@@ -79,7 +83,7 @@ async def send(request: web.Request) -> web.Response:
         recipient_id=recipient_id,
         content=content,
     )
-    inbox = session._ensure_inbox(recipient_id)
+    inbox = session.ensure_inbox(recipient_id)
     await inbox.put((sender_id, content))
     return web.json_response({"action_id": action_id})
 
