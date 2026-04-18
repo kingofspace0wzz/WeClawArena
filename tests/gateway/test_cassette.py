@@ -114,6 +114,34 @@ def test_cassette_close_is_idempotent(tmp_path: Path) -> None:
     recorder.close()  # second call must not raise
 
 
+def test_cassette_roundtrip_non_ascii(tmp_path: Path) -> None:
+    """Non-ASCII content should survive as literal UTF-8, not ``\\uXXXX`` escapes.
+
+    A5 review follow-up: the recorder uses ``ensure_ascii=False`` so that
+    Chinese characters, emoji, and accented Latin letters appear verbatim
+    in ``cassette.jsonl``. This keeps the file human-readable for the
+    phase E/F analysis pipeline and for cross-tool inspection.
+    """
+
+    cassette_path = tmp_path / "cassette.jsonl"
+    recorder = CassetteRecorder(cassette_path)
+    content = "hello 你好 \U0001f44b caf\u00e9"
+    recorder.record(
+        kind="outbound_message",
+        payload={"recipient_id": "bob", "content": content},
+    )
+    recorder.close()
+
+    raw_bytes = cassette_path.read_bytes()
+    assert "你好".encode("utf-8") in raw_bytes
+    assert "\U0001f44b".encode("utf-8") in raw_bytes
+    assert "caf\u00e9".encode("utf-8") in raw_bytes
+    assert b"\\u" not in raw_bytes
+
+    entry = json.loads(cassette_path.read_text(encoding="utf-8").splitlines()[0])
+    assert entry["payload"]["content"] == content
+
+
 def test_cassette_timestamp_is_iso_utc(tmp_path: Path) -> None:
     session = Session.build(
         scenario_id="a5-timestamp",
