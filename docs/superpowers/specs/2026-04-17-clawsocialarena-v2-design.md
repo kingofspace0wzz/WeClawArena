@@ -220,7 +220,7 @@ Selected at the gateway, not at each agent. Exactly one condition per run.
 
 | Condition | Gateway behavior | Records |
 |---|---|---|
-| `baseline` | dumb pipe: forwards messages and tool calls; no hash chain, no MSWM, no hooks, no shadow | minimal transport log for reproducibility only |
+| `baseline` | dumb pipe: forwards messages and tool calls; no hash chain, no MSWM, no hooks, no shadow | no records |
 | `passive` | full audit substrate active; policy hooks compute and log verdicts but never block or rewrite | full hash-chained log + MSWM + attribution DAG + phase tracker + shadow log |
 | `enforce` | hooks may block or rewrite messages, tool calls, or memory writes; `policy_decision` records tag intervention type | passive's records plus intervention verdicts |
 
