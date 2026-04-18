@@ -196,10 +196,20 @@ def _write_bundle(shape, out_dir: Path) -> None:
     )
 
     # personas/
+    # Phase D.5 Fix 4: respect each agent's `allowed_tools`. When an agent
+    # sets the field, the emitter writes that subset; when it is `None`
+    # the emitter falls back to the full `mcp_tool_manifest`, which
+    # preserves the previous "every agent gets every tool" default so
+    # legacy templates keep working.
     personas_dir = out_dir / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
+    full_manifest = list(gt_dict.get("mcp_tool_manifest", {}).keys())
     tool_allowlist_by_agent = {
-        agent.agent_id: list(gt_dict.get("mcp_tool_manifest", {}).keys())
+        agent.agent_id: (
+            list(agent.allowed_tools)
+            if agent.allowed_tools is not None
+            else list(full_manifest)
+        )
         for agent in scenario.agents
     }
     for filename, contents in emit_persona_files(

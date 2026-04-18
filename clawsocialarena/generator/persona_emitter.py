@@ -9,9 +9,11 @@ Conventions:
 - `.system.md` starts with an H1 carrying the agent id, followed by the
   persona prompt body. Downstream tooling can parse the H1 as the agent id
   without relying on filenames.
-- `.tools.json` is a JSON array of tool names. Empty by default; the CLI
-  passes a per-agent allowlist when the scenario's MCP bundle is scoped to
-  subsets of agents.
+- `.tools.json` is a JSON array of tool names. Phase D.5 Fix 4 wires the
+  per-agent allowlist: when the caller passes a per-agent list, only that
+  subset lands in the file. Agents that are not in the mapping and do not
+  carry an ``allowed_tools`` override still default to an empty list, which
+  is the safest choice for "tools.json required, but no explicit scope".
 """
 
 from __future__ import annotations
@@ -35,10 +37,15 @@ def emit_persona_files(
         The scenario to emit personas for. One pair of files is emitted per
         ``ScenarioAgent``.
     tool_allowlist_by_agent:
-        Optional per-agent list of tool names the agent may invoke. Missing
-        agents default to an empty list.
+        Optional per-agent list of tool names the agent may invoke. When
+        supplied, it takes precedence over any ``allowed_tools`` set on
+        the ``ScenarioAgent`` itself (the CLI uses this seam to route
+        ``mcp_tool_manifest`` + ``allowed_tools`` into a single call).
+        Missing agents fall back to the agent's own ``allowed_tools``
+        field; if that is ``None`` too, the emitter writes ``[]`` so
+        ``.tools.json`` remains a valid JSON array.
     """
-    allowlist = dict(tool_allowlist_by_agent or {})
+    overrides = dict(tool_allowlist_by_agent or {})
     files: dict[str, str] = {}
     for agent in scenario.agents:
         files[f"{agent.agent_id}.system.md"] = _render_system_md(
@@ -46,7 +53,12 @@ def emit_persona_files(
             user_id=agent.user_id,
             body=agent.system_prompt_template,
         )
-        tools = list(allowlist.get(agent.agent_id, []))
+        if agent.agent_id in overrides:
+            tools = list(overrides[agent.agent_id])
+        elif agent.allowed_tools is not None:
+            tools = list(agent.allowed_tools)
+        else:
+            tools = []
         files[f"{agent.agent_id}.tools.json"] = json.dumps(tools, indent=2) + "\n"
     return files
 

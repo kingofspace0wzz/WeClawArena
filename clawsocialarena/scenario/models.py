@@ -5,9 +5,21 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ScenarioAgent(BaseModel):
+    """Agent record inside a scenario.json (spec §4.1).
+
+    ``allowed_tools`` (Phase D.5 Fix 4) scopes per-agent MCP access: when
+    set, the generator emits only that subset into the agent's
+    ``.tools.json`` so delegation and privacy scenarios can keep tools
+    out of the hands of agents that should not call them. ``None``
+    (the default) is equivalent to "allow every tool declared in the
+    scenario's ``mcp_tool_manifest``", which keeps legacy templates
+    valid without any code changes.
+    """
+
     agent_id: str
     user_id: str
     system_prompt_template: str
+    allowed_tools: list[str] | None = None
 
 
 class Scenario(BaseModel):
