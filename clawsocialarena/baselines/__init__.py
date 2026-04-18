@@ -8,7 +8,7 @@ measured in the main experiments:
 2. Rule-based DLP sanitizer — implemented as a policy hook (see
    ``clawsocialarena.audit.policies.dlp``); listed here for reference only.
 3. Vanilla Auditable Agents post-hoc auditor — same inputs as SAF but
-   without our social-multi-agent adaptations (no SEM, no inference-chain
+   without our social-multi-agent adaptations (no MSWM, no inference-chain
    attribution, no phase-scoped policies).
 """
 

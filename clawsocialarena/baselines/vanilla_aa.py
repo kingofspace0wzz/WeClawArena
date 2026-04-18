@@ -2,7 +2,7 @@
 
 External comparison baseline per spec §5.2 item 3. Audits the same action log
 SAF does, but without our social-multi-agent adaptations:
-- No SEM-aware policy decidability (flat predicates only)
+- No MSWM-aware policy decidability (flat predicates only)
 - No inference-chain causal attribution (proximity fallback only)
 - No phase-scoped policies (dimension = 1.0 by construction)
 
