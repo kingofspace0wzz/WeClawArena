@@ -1,8 +1,31 @@
-# ClawSocialArena
+# ClawSocialArena v2
 
-An audit-first Python runtime + benchmark for measuring auditability of LLM agents in persistent social networks. Companion to the design spec at [`docs/design.md`](docs/design.md) and the implementation plan at [`docs/plan.md`](docs/plan.md).
+*An Auditable Runtime System for Benchmarking Multi-Party Collaboration, Security, and Privacy in Human-Centered Agentic Social Networks.*
 
-**Status**: Phases 1 through 6 infrastructure complete (149/149 tests, MVP demo end-to-end). Remaining work is data generation and experiment runs — see [§ Next phases](#next-phases).
+ClawSocialArena v2 is a runtime-backed benchmark in which auditability is both a measurable property of a deployed multi-party social network and a toggleable intervention. A scenario is one `docker-compose.yml` that brings up N real OpenClaw personal-AI-assistant containers plus a central ClawSocialArena audit gateway. The gateway is the sole cross-container hop; it maintains per-agent hash-chained action logs, a Multi-Party Social World Model (MSWM), an online inference-attribution DAG, a social-phase tracker, and three classes of policy hooks. Evaluation is an offline pure function of `(action_log, shadow_log, cassette, GT bundle)`. Companion to the design spec at [`docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md`](docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md) and the implementation plan at [`docs/superpowers/plans/2026-04-17-clawsocialarena-v2.md`](docs/superpowers/plans/2026-04-17-clawsocialarena-v2.md).
+
+## Status
+
+| Phase | Tag | State | Tests added |
+|---|---|---|---|
+| A | `phase-A-complete` | done | gateway + plugin + compose E2E |
+| A.5 | `phase-A5-complete` | done (spec fix) | no new tests |
+| B | `phase-B-complete` | done | v1 surfaces removed |
+| C | `phase-C-complete` | done | MSWM + attribution |
+| C.5 | `phase-C5-complete` | done (code fix) | provenance tuples |
+| D | `phase-D-complete` | done | scenario model v2 + emitters |
+| D.5 | `phase-D5-complete` | done (code fix) | validator v2 runtime contract |
+| E | untagged | deferred (Phase E) | 1 of 16 templates shipped |
+| F | `phase-F-complete` | done | MSWM-aware scorers + cumulative |
+| F.5 | `phase-F5-complete` | done (code fix) | eval threading + episode-graph |
+| G (infra) | `phase-G-infrastructure-complete` | done | grid config + runner + cost |
+| G5-G8 | untagged | deferred (Phase G5-G7) | needs credentials + budget |
+| H (infra) | `phase-H-infrastructure-complete` | done | aggregator + tables + figures + stats + prereg + repro bundle |
+| H8 | untagged | deferred (Phase H8) | needs E + G outputs |
+
+Final test baseline: **470 Python passed + 2 skipped**, **29 TypeScript passed**, `mypy` and `ruff` clean.
+
+**Autonomous execution stopped at `phase-H-infrastructure-complete`.** Remaining work (Phase E benchmark content, Phase G5-G7 live runs, Phase H8 `v1.0.0` tag) needs human-in-the-loop resources: LLM API credentials, a $4K-$10K compute budget, a Docker host, and three annotators. See the resume sections below.
 
 ---
 
@@ -14,263 +37,173 @@ uv pip install -e ".[dev]"
 source .venv/bin/activate
 ```
 
-(Plain `pip install -e ".[dev]"` works too if you have Python 3.11+.)
+Plain `pip install -e ".[dev]"` works too if you have Python 3.11+.
+
+For the TypeScript OpenClaw channel plugin:
+
+```bash
+npx pnpm -C gateway_plugin install
+```
+
+Docker is **not** required for the infrastructure test suite. It **is** required for Phase G5-G7 live runs (the `ComposeRunner` brings up one OpenClaw container per agent alongside the gateway).
 
 ## Verify
 
 ```bash
-pytest -q                             # expect 149 passed
-python -m scripts.run_mvp              # terminal_predicate_passed=True
-python -m clawsocialarena.generator.cli --category CU --family scheduling --n 2 --seed 42 --out /tmp/gen_demo
-python -m clawsocialarena.analysis --help
+pytest -q                                                              # 470 passed + 2 skipped
+npx pnpm -C gateway_plugin test                                        # 29 passed
+python -m clawsocialarena.generator.cli --list-templates               # 1 template (cu_scheduling)
+python -m clawsocialarena.generator.cli \
+    --category CU --family scheduling --n 1 --seed 42 --out /tmp/gen_test   # valid bundle under /tmp/gen_test
 ```
+
+The generator CLI emits `scenario.json`, `scenario.gt.json`, `docker-compose.yml`, `personas/*.system.md`, `personas/*.tools.json`, and `mcp/*.json` under `/tmp/gen_test/<scenario_id>/`.
 
 ---
 
-## What works today
+## What's in the box
 
-| Component | Module | Notes |
-|---|---|---|
-| Core runtime | `clawsocialarena/{action_log,bus,runtime,agents,scenario,tasks,types,hashing}.py` | Hash-chained `ActionLog`, `AuditedMessageBus` / `RawMessageBus`, `AuditableAIAgent`, `ScenarioRunner`, scheduling terminal predicate |
-| Audit substrate | `clawsocialarena/audit/` | `ShadowLog`, `PhaseTracker`, `PolicyRegistry`, `PolicyCatalog`, `AttributionGraphBuilder` (causal + proximity), vendored `error_chains` (MSWM online state machine lands in Phase C) |
-| SAF scorers | `clawsocialarena/saf/` | 5 dimensions + `SAFScorer` geometric-mean orchestrator |
-| Evaluation pipeline | `clawsocialarena/eval/` | `EvalRunner` 5-stage + `RunScorecard` JSON schema |
-| 3-condition ablation | `bus/audited.py` + `bus/raw.py` | `baseline` uses `RawMessageBus` (no audit infra); `passive` logs + evaluates without blocking; `enforce` rewrites or blocks |
-| External baselines | `clawsocialarena/baselines/` + `audit/policies/dlp.py` | Prompt-only L0-L4 ladder, rule-based DLP sanitizer, vanilla-AA post-hoc auditor |
-| Scenario generator framework | `clawsocialarena/generator/` | `Template` protocol, attack injection (6 types, 2 families), mechanical GT assembly, CLI |
-| Analysis pipeline | `clawsocialarena/analysis/` | Aggregator → long-format CSV, headline/model/rewrite tables (markdown + LaTeX), Wilcoxon / Kruskal-Wallis / Bonferroni, pre-registration reconciler |
-
-### Design decisions captured per phase
-
-- [`docs/reviews/README.md`](docs/reviews/README.md) — index
-- [`docs/reviews/phase-1-summary.md`](docs/reviews/phase-1-summary.md), [`phase-2-summary.md`](docs/reviews/phase-2-summary.md), [`phase-3-summary.md`](docs/reviews/phase-3-summary.md)
-- [`docs/reviews/HANDOFF-PHASE-4-ONWARDS.md`](docs/reviews/HANDOFF-PHASE-4-ONWARDS.md) — detailed resume guide
-- Raw Codex reviews: `docs/reviews/phase-*-codex-raw.md`
-- [`docs/preregistration.md`](docs/preregistration.md) — pre-committed hypotheses H1–H5
+| Path | Contents |
+|---|---|
+| `clawsocialarena/gateway/` | audit gateway (HTTP server, session, MSWM wiring, MCP host, cassette recorder, compose runner, replay driver) |
+| `clawsocialarena/audit/` | action log, phase tracker, shadow log, MSWM, attribution builder, policy registry / catalog, DLP and MSWM-aware policies, error-chain classifier |
+| `clawsocialarena/saf/` | five SAF scorers (recoverability, policy-checkability, attribution-F1, evidence-integrity, phase-scoped) and the overall geometric-mean orchestrator |
+| `clawsocialarena/eval/` | `EvalRunner` five-stage, scorecard v2 schema, cumulative module, `EpisodeGraphEvalRunner`, leak detector |
+| `clawsocialarena/scenario/` | models v2 (MCP + persona manifests), loader v2, validator v2 |
+| `clawsocialarena/generator/` | template protocol, deterministic instantiation (LLM stub), attack injection, GT assembly, compose / persona / MCP emitters, CLI |
+| `clawsocialarena/baselines/` | prompt-ladder L0-L4, vanilla-AA post-hoc auditor, rule-based DLP sanitizer |
+| `clawsocialarena/analysis/` | aggregator, headline / model / rewrite tables, four paper figures, Wilcoxon / Kruskal-Wallis / Bonferroni / sensitivity, pre-registration reconciler |
+| `clawsocialarena/experiments/` | grid config schema, USD-per-million rate table |
+| `clawsocialarena/mcp_tools/` | scenario tool stubs (currently `noop`) |
+| `gateway_plugin/` | TypeScript OpenClaw channel plugin (`src/index.ts`, `src/channel.ts`, `src/gateway-client.ts`) |
+| `docker/` | `gateway.Dockerfile`, `openclaw-with-plugin.Dockerfile`, `compose-templates/minimal.yml`, `agent-entrypoint.sh` |
+| `scripts/` | `run_mvp.py`, `run_grid.py`, `make_repro_bundle.py`, `build_openclaw_image.sh` |
+| `configs/` | `main_table.yaml`, `ablations.yaml` |
 
 ---
 
-## Next phases
+## How to pick up Phase E (generate the 150-scenario benchmark)
 
-The remaining work needs external resources: LLM API access and compute budget. Each step below is self-contained, with acceptance criteria and the exact command(s) to run.
+Goal: produce 150 scenario bundles under `benchmark/scenarios/v1.0.0/` — 100 main verifiable + 25 hard stratum (12 code-review + 13 doc-editing) + 20 episode-graph scenarios (5 graphs × 4 linked episodes) + 5 named disagreement vignettes (see spec §3.1 and §4.1).
 
-### Phase 4.2 — LLM-assisted scenario instantiation
+**Requirements.**
 
-**Goal**: replace the deterministic stub in `clawsocialarena/generator/instantiation.py` with an LLM-assisted layer that fills user profiles (names, domains, sensitive items) and scripted NPC content from AgentSocialBench's profile dataset.
+- LLM API credentials for at least one provider: Bedrock (Anthropic), OpenAI, DeepSeek, or Qwen.
+- A profile dataset. The spec draws profiles from AgentSocialBench; the relevant files live under the sibling repository `../agent-socialn-privacy/prism/data/profiles/`. Copy or reference paths as needed.
+- The generator CLI, already shipped: `python -m clawsocialarena.generator.cli`.
 
-**Requires**: one working LLM provider (Bedrock with Anthropic model ID, OpenAI, DeepSeek, or Qwen).
+**Steps.**
 
-**Steps**:
-1. Set up provider credentials (example for Bedrock):
-   ```bash
-   export AWS_PROFILE=...          # or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-   export AWS_REGION=us-west-2
-   # NOTE (v2): the in-process `clawsocialarena.agents.llm_client` module was
-   # removed in Phase B of the v2 refactor. Provider wiring now lives in the
-   # gateway_plugin; a refreshed Bedrock smoke snippet will land in Phase G
-   # alongside the broader README rewrite.
-   ```
-2. Add a profile loader:
-   ```python
-   # clawsocialarena/generator/profiles.py
-   # Reads ~/llm/mas/agent-socialn-privacy/prism/data/profiles/*.json
-   # Returns a ProfileBank keyed by domain.
-   ```
-3. Extend `instantiate(template, ..., mode="llm", llm=...)` to:
-   - Pull a seeded profile pair from `ProfileBank`.
-   - Call LLM with a system prompt asking it to expand the template's scripted NPC lines in the profile's voice.
-   - Cache completions to disk (prompt hash → response) so re-runs don't spend tokens.
-4. Write tests that use `MockLLMClient` with canned completions to verify the pipeline without burning tokens.
-5. Add `--instantiation-mode {deterministic, llm}` + `--llm-provider {bedrock, openai, deepseek, qwen}` + `--llm-model-id <ID>` flags to the generator CLI.
+1. **Add the 13 missing (category, family) templates** (plan tasks E1 through E14, minus E5 which is already shipped as `cu_scheduling`). Each lives at `clawsocialarena/generator/templates/<template_id>.py`. Start by copying `cu_scheduling.py` as a skeleton and edit the `build(seed, scenario_id)` method. Register each new template in `clawsocialarena/generator/registry.py`. The 13 pairs are:
+    `cd_aggregation`, `cd_decision`, `mc_scheduling`, `mc_decision`, `cu_coalition`, `mg_aggregation`, `mg_coalition`, `hs_aggregation`, `hs_coalition`, `cm_aggregation`, `cm_coalition`, `am_scheduling`, `am_decision`.
+2. **Add the 2 hard-stratum templates**: `clawsocialarena/generator/templates/hard_code_review.py` and `hard_doc_editing.py` (plan task E15). These carry planted-bug and planted-field lists in the GT bundle for the deterministic halo; the LLM-judged halo attaches later at analysis time and never enters SAF.
+3. **Hand-author the 5 disagreement vignettes** under `benchmark/scenarios/v1.0.0/vignettes/` (plan task E16). Each is a full scenario bundle constructed so vanilla-AA scores it compliant and SAF catches the targeted SAF-dimension violation. Spec §3.1 names three: `inferential_leakage_v1`, `cross_delegation_attr_v1`, `partial_log_recovery_v1`. Pick two more per spec §4.1 (suggested: `consensus_sabotage_v1` and `mswm_privileged_delegation_v1`). Write assertion tests under `tests/vignettes/` that confirm `VanillaAAEvalRunner` passes each vignette while `EvalRunner` fails on the right dimension.
+4. **Implement LLM-assisted instantiation.** The current stub at `clawsocialarena/generator/instantiation.py` falls back to deterministic mode when `--instantiation-mode llm` is set. Fill the `llm` branch with a Bedrock or OpenAI client call that expands each template's scripted NPC lines in the voice of a seeded profile pair. Cache completions by prompt hash to `~/.cache/clawsocialarena/instantiation/` so re-runs do not spend tokens. Write tests using a `MockLLMClient` with canned completions.
+5. **Run batch generation.** Write `scripts/generate_main_150.py` (plan task E18) as a thin wrapper around `clawsocialarena.generator.cli` that honors the per-category stratification from spec §4.4. Run:
+    ```bash
+    python scripts/generate_main_150.py \
+        --out benchmark/scenarios/v1.0.0 \
+        --seed 1 \
+        --instantiation-mode llm \
+        --llm-provider bedrock \
+        --llm-model-id anthropic.claude-sonnet-4-6-v1:0
+    ```
+6. **Run the 3-annotator validation on 40 scenarios.** Write `scripts/pick_validation_sample.py` (does not yet exist) that seeds a 40-scenario id list into `benchmark/validation_ids.json` and emits a markdown workbook template for human annotators. Annotator work is external human labor; target Cohen's κ ≥ 0.80 per spec §4.9.
 
-**Acceptance**: `python -m clawsocialarena.generator.cli --category CU --family scheduling --n 3 --seed 42 --instantiation-mode llm --llm-provider bedrock --llm-model-id anthropic.claude-sonnet-4-6-v1:0 --out /tmp/gen_llm` produces 3 scenarios with distinct, profile-conditioned content. Cached completions at `~/.cache/clawsocialarena/instantiation/`.
-
-### Phase 4.5 — Remaining 13 category × task-family templates
-
-**Goal**: add templates for the 13 (category, family) pairs beyond CU×Scheduling that the spec assigns. Per spec §4.2:
-
-| Category | Families | File |
-|---|---|---|
-| CD | Aggregation, Decision | `templates/cd_aggregation.py`, `templates/cd_decision.py` |
-| MC | Scheduling, Aggregation | `templates/mc_scheduling.py`, `templates/mc_aggregation.py` |
-| CU | ~~Scheduling~~ (done), Transaction | `templates/cu_transaction.py` |
-| MG | Decision, Aggregation | `templates/mg_decision.py`, `templates/mg_aggregation.py` |
-| HS | Aggregation, Transaction | `templates/hs_aggregation.py`, `templates/hs_transaction.py` |
-| CM | Transaction, Decision | `templates/cm_transaction.py`, `templates/cm_decision.py` |
-| AM | Decision, Scheduling | `templates/am_decision.py`, `templates/am_scheduling.py` |
-
-**Steps**:
-1. One PR per 2–3 templates for easy review.
-2. Each template implements `Template.build(seed, scenario_id) -> TemplateShape` with its own terminal predicate (some require new predicates under `clawsocialarena/tasks/`, e.g. `aggregation.py`, `transaction.py`, `decision.py`).
-3. Register each in `clawsocialarena/generator/registry.py`.
-4. Add per-template tests mirroring `test_template.py` / `test_gt_assembly.py`.
-5. Update the registry's `list_registered()` output.
-
-**Acceptance**: `python -m clawsocialarena.generator.cli --list-templates` shows 14 pairs. Each produces valid `Scenario` + `GTBundle` JSON via `ScenarioLoader`.
-
-### Phase 4.7 — Generate the 70-scenario sample set
-
-**Goal**: ~10 sample scenarios per (category, family) pair × 7 categories × 2 families = ~140 sample scenarios (deduped to 70 unique per spec §4.7). Smaller sanity-check set before the full 250.
-
-**Steps**:
-1. With templates from 4.5 and instantiation from 4.2 in place:
-   ```bash
-   mkdir -p fixtures/scenarios/gen
-   for CAT in CD MC CU MG HS CM AM; do
-     for FAM in scheduling aggregation transaction decision; do
-       python -m clawsocialarena.generator.cli --category "$CAT" --family "$FAM" \
-         --n 5 --seed 42 --instantiation-mode llm \
-         --llm-provider bedrock --llm-model-id anthropic.claude-sonnet-4-6-v1:0 \
-         --out fixtures/scenarios/gen
-     done
-   done
-   ```
-   (Skip unregistered pairs — CLI will error cleanly.)
-2. Verify each scenario loads: `python -m clawsocialarena.scenario.validate fixtures/scenarios/gen`.
-3. Commit the generated fixtures as a sanity baseline.
-
-**Acceptance**: `ls fixtures/scenarios/gen | wc -l` ≥ 70. Every scenario loads via `ScenarioLoader`. Each runs to `terminal_predicate_passed=True` with `MockLLMClient`.
-
-### Phase 5.1 — Full 250-scenario benchmark
-
-**Goal**: produce the benchmark per spec §4.4. 210 main verifiable scenarios + 40 hard-verification (code review / document editing) stratum + 3 named disagreement vignettes.
-
-**Steps**:
-1. Add code-review and document-editing task families under `clawsocialarena/tasks/`: `code_review.py`, `doc_editing.py`. Each needs:
-   - A planted-bug / schema-check terminal predicate for the deterministic component.
-   - An LLM-judged rubric for the soft halo (attach to `RunScorecard.diagnostics`, NOT the headline).
-2. Add matching templates (`templates/cu_code_review.py`, etc.) that plant bugs / required fields.
-3. Generate the dataset:
-   ```bash
-   # Main set: 210 scenarios, distributed per §4.4
-   python scripts/generate_main_250.py --out benchmark/scenarios/v1.0.0 --seed 1
-   # Hard stratum: 40 scenarios
-   python scripts/generate_hard_40.py --out benchmark/scenarios/v1.0.0 --seed 2
-   ```
-   (You'll write `scripts/generate_main_250.py` — wraps the generator CLI with the spec's stratification.)
-4. Hand-author the 3 disagreement vignettes under `benchmark/scenarios/v1.0.0/vignettes/`:
-   - `cu_inferential_leakage_v1/`
-   - `hs_cross_delegation_attr_v1/`
-   - `mg_partial_log_recovery_v1/`
-   Write assertion tests that confirm `VanillaAAEvalRunner` reports them as compliant AND `EvalRunner` catches the violation on the targeted SAF dimension.
-5. Write `benchmark/manifest.json` listing all 250 IDs with metadata `(category, task_family, attacker, expected_phase_count)`. Tests assert manifest is consistent with the files on disk.
-6. 40-scenario annotator validation sample: pick 40 IDs (seeded), emit `benchmark/validation_ids.json` + a markdown workbook template. Annotator work is external human labor — do NOT simulate with LLMs.
-
-**Acceptance**: 250 scenario directories under `benchmark/scenarios/v1.0.0/` with valid `Scenario` + `GTBundle` JSON; manifest consistent; 3 vignette assertion tests pass; validation workbook exists.
-
-### Phase 6.1 — Batch runner + real experiment runs
-
-**Goal**: execute ~5,400 runs per the pre-registered compute budget (spec §5.5):
-
-| Bucket | Scenarios × conditions × models | Runs |
-|---|---|---|
-| Main table | 250 × 1 seed × 1 privacy (L0) × 3 conditions × 4 models | 3,000 |
-| Privacy-ladder ablation | 50 × 2 privacy (L0, L2) × 3 conditions × 4 models | 1,200 |
-| External-baseline comparison | 40 × 3 baselines × 4 models | 480 |
-| Seed-variance spot-check | 20 × 3 seeds × 3 conditions × 4 models | 720 |
-| **Total** | | **~5,400** |
-
-**Requires**:
-- API keys for **4 providers** (Claude via Bedrock/boto3; GPT-5-mini via OpenAI; DeepSeek; Qwen).
-- Cost budget: **$3K–$8K** depending on provider mix and prompt caching.
-- Wall-clock: **7–10 days** with 4× provider parallelism.
-
-**Steps**:
-1. Write `scripts/run_grid.py`:
-   ```python
-   # Reads a YAML config of (scenario_id, condition, model) triples,
-   # constructs ScenarioRunner per row, persists per-run RunScorecard JSON
-   # under results/v1.0.0/<model>/<condition>/<scenario_id>/run_scorecard.json,
-   # populating RunScorecard.meta = {condition, model, seed, privacy_level}.
-   # Tracks cumulative token/cost via LLMCompletion.usage and dumps to results/v1.0.0/cost.csv.
-   # Resumable: skips rows whose scorecard already exists.
-   ```
-2. Smoke test on 5 scenarios × 3 conditions × 1 model (Mock) to confirm wiring.
-3. Pilot ~30 real-LLM runs on Bedrock to sanity-check cost/wall-clock estimates before committing the full budget. **Stop and review actual per-run cost vs. estimate before scaling.**
-4. Run main table:
-   ```bash
-   python scripts/run_grid.py --config configs/main_table.yaml --out results/v1.0.0 --parallel 4
-   ```
-5. Run privacy-ladder ablation, external-baseline comparison, and seed-variance spot-check similarly.
-6. Commit all `run_scorecard.json` files (compressed tarball) under `results/v1.0.0/`.
-
-**Acceptance**: ~5,400 scorecards exist on disk; `cost.csv` shows cumulative budget; no scorecard has `chain_integrity_primary == False`.
-
-### Phase 6.3 — Figures
-
-**Goal**: generate the paper's figure PDFs. Requires real scorecard data from Phase 6.1.
-
-**Steps**:
-1. Write `clawsocialarena/analysis/figures.py`:
-   - `ablation_figure(df)` — ΔTSR / ΔPrivacy / ΔSecurity baseline→passive→enforce, broken down by attack family (spec §5.6 item 3).
-   - `rewrite_quality_figure(df)` — TSR(enforce) − TSR(passive) per category.
-   - `disagreement_vignettes_figure(df)` — three-panel case studies (§5.6 item 5).
-   - `sensitivity_figure(df)` — binary pass-rate vs threshold ±0.05 (§5.6 item 7).
-2. Each function takes the long-format CSV from the aggregator, returns a matplotlib `Figure`, and writes a PDF under `paper/figures/`.
-3. Wire into `clawsocialarena.analysis.__main__` as a new `figures` subcommand.
-4. Sensitivity analysis: loop thresholds, recompute binary passes from the continuous scores, plot pass-rate deltas.
-
-**Acceptance**: `python -m clawsocialarena.analysis figures --csv results/v1.0.0/long.csv --out paper/figures/` produces 4 PDF files.
-
-### Phase 6 closing — pre-registration reconciliation + reproducibility bundle
-
-**Steps**:
-1. Extend `clawsocialarena/analysis/prereg_check.py` with verdicts for H1 (SAF-weakest-dim identification), H3 (TSR cost bounds), H5 (mid-tier enforce vs. frontier baseline composite).
-2. Run the reconciler:
-   ```bash
-   python -m clawsocialarena.analysis prereg --csv results/v1.0.0/long.csv --out results/v1.0.0/prereg_reconciliation.md
-   ```
-3. Write `scripts/make_repro_bundle.py` — single tarball containing:
-   - `benchmark/scenarios/v1.0.0/` (250 scenarios)
-   - `results/v1.0.0/` (scorecards + CSVs + figures)
-   - `pyproject.toml` + `uv.lock` for dependency pinning
-   - `docs/preregistration.md`, `docs/design.md`
-   - One-command replay: `bash replay.sh`.
-4. Update top-level `README.md` with a "How to reproduce" section pointing at the bundle.
-
-**Acceptance**: `python scripts/make_repro_bundle.py --out /tmp/clawsocialarena-repro-v1.0.0.tar.gz` produces a ≤ 2 GB tarball that unpacks and replays analysis (not runtime — full replay would re-spend the $3–8K budget).
+**Acceptance.** 150 scenario directories under `benchmark/scenarios/v1.0.0/`; `python -m clawsocialarena.scenario.validate benchmark/scenarios/v1.0.0` passes every bundle; the five vignette assertion tests pass; `benchmark/validation_ids.json` plus the annotator workbook exist.
 
 ---
 
-## Architecture at a glance
+## How to pick up Phase G5-G7 (run the 4,440 experiments)
 
+Goal: produce ~4,440 `run_scorecard.json` files covering the spec §5.4 budget (main table live + replay + privacy-ladder ablation + external-baseline comparison + seed-variance spot-check + episode-graph stratum).
+
+**Requirements.**
+
+- LLM API credentials for 4 providers: `AWS_PROFILE` (or `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`) for Bedrock; `OPENAI_API_KEY`; `DEEPSEEK_API_KEY`; `DASHSCOPE_API_KEY` for Qwen.
+- Docker installed and running. Verify with `docker info`.
+- Cost budget: $4K-$10K depending on provider mix and prompt caching.
+- Wall-clock: 10-14 days with 4× provider parallelism plus container-orchestration overhead.
+
+**Steps.**
+
+1. **Configure credentials** (one-time):
+    ```bash
+    export AWS_PROFILE=<profile> AWS_REGION=us-west-2
+    export OPENAI_API_KEY=...
+    export DEEPSEEK_API_KEY=...
+    export DASHSCOPE_API_KEY=...
+    aws sts get-caller-identity   # confirm Bedrock credentials
+    ```
+2. **Build the two Docker images.**
+    ```bash
+    bash scripts/build_openclaw_image.sh clawsocialarena/openclaw-with-plugin:v1
+    docker build -f docker/gateway.Dockerfile -t clawsocialarena/gateway:v1 .
+    ```
+3. **Pilot smoke (30 live Bedrock runs; plan task G5).** Author `configs/pilot_30.yaml` with 30 live rows. Run:
+    ```bash
+    python scripts/run_grid.py \
+        --config configs/pilot_30.yaml \
+        --out results/pilot-2026-MM \
+        --parallel 2
+    ```
+    Review `results/pilot-2026-MM/cost.csv` against the spec §5.4 envelope. Only proceed to the full runs if the extrapolated cost matches.
+4. **Full main table (plan task G6).**
+    ```bash
+    python scripts/run_grid.py \
+        --config configs/main_table.yaml \
+        --out results/v1.0.0 \
+        --parallel 4
+    ```
+    Expects 1,800 runs (150 scenarios × 3 conditions × 4 models, split live / replay per spec §2.11). The runner is resumable; rerunning skips rows whose scorecard already exists with `status != "pending"`.
+5. **Ablations (plan task G7a).**
+    ```bash
+    python scripts/run_grid.py --config configs/ablations.yaml --out results/v1.0.0
+    ```
+6. **Seed-variance spot-check (plan task G7b).** Write `configs/seeds.yaml` and run it the same way. Spec §5.4 gives 720 runs.
+7. **Episode-graph stratum (plan task G7c).** Write `configs/episode_graphs.yaml` and run it. Spec §5.4 gives 240 runs.
+8. **Verify.**
+    ```bash
+    find results/v1.0.0 -name 'run_scorecard.json' | wc -l   # ~4,440
+    python scripts/audit_scorecards.py --out results/v1.0.0  # no chain_integrity_primary == False
+    ```
+    (`scripts/audit_scorecards.py` is a small helper to write before the final Phase G tag.)
+
+**Acceptance.** ~4,440 scorecards under `results/v1.0.0/`; `results/v1.0.0/cost.csv` within the $4K-$10K envelope; no scorecard reports a broken hash chain.
+
+---
+
+## How to pick up Phase H8 (analysis + v1.0.0 tag)
+
+Goal: run the full analysis pipeline against real scorecard data, assemble the reproducibility bundle, and tag `v1.0.0`. Every analysis subcommand is already implemented and tested against synthetic scorecards; Phase H8 runs them against the real `results/v1.0.0/` tree.
+
+**Steps.**
+
+```bash
+python -m clawsocialarena.analysis aggregate --scorecard-dir results/v1.0.0 --out results/v1.0.0/long.csv
+python -m clawsocialarena.analysis tables --csv results/v1.0.0/long.csv --out paper/tables/
+python -m clawsocialarena.analysis figures --csv results/v1.0.0/long.csv --out paper/figures/
+python -m clawsocialarena.analysis prereg --csv results/v1.0.0/long.csv --out results/v1.0.0/prereg_reconciliation.md
+python -m clawsocialarena.analysis sensitivity --csv results/v1.0.0/long.csv --out paper/figures/sensitivity.pdf
+python scripts/make_repro_bundle.py --version 1.0.0 --out /tmp/clawsocialarena-repro-v1.0.0.tar.gz
+git tag v1.0.0
 ```
-ScenarioRunner
- ├── agents: {agent_id → AuditableAIAgent}
- ├── bus:
- │     ├── BASELINE  → RawMessageBus (no hash chain, no hooks, no shadow)
- │     └── PASSIVE / ENFORCE → AuditedMessageBus
- │           ├── action_log  (SQLite, hash-chained, WAL + BEGIN IMMEDIATE)
- │           ├── shadow_log  (independent copy; Recoverability scores against it)
- │           ├── phase_tracker  (social-phase state machine)
- │           └── hooks: list[PolicyHook]  (message-kind + tool-kind)
- └── phase_tracker (passive/enforce only)
 
-Evaluation (pure function of logs + GT):
- ActionLog + ShadowLog + GTBundle
-   → EvalRunner
-       ├── build PolicyRegistry from gt.policies via PolicyCatalog
-       ├── build produced AttributionGraph (causal via source_action_ids, fallback to proximity)
-       ├── SAFScorer.score(5 dims)  →  weighted geometric mean
-       └── RunScorecard JSON (SAF + task + privacy + security + diagnostics + meta)
+`scripts/make_repro_bundle.py` packs benchmark scenarios, results, the lockfile, the design spec, the pre-registration, and a one-command `replay.sh` driver. Target size ≤ 2 GB.
 
-Analysis (offline, pure):
- results/*/run_scorecard.json
-   → aggregator → long-format CSV
-       ├── tables (headline / model / rewrite; markdown + LaTeX)
-       ├── stats (Wilcoxon + Kruskal-Wallis + Bonferroni)
-       └── prereg_check (H1–H5 verdicts)
-```
+---
 
-## Repo conventions
+## Key docs
 
-- **Python 3.11+** required (uses `StrEnum`, structural pattern matching).
-- **Tests**: `pytest tests/ -v`. `pytest-asyncio` for coroutines.
-- **Formatting**: `ruff`. `mypy` available via `.[dev]`.
-- **Worktrees**: use `worktree/<name>/`, never `../<repo>-<name>/`. See `.gitignore`.
-- **Commits**: conventional (`feat(arena):`, `fix(arena):`, `chore(arena):`, `docs(arena):`, `test(arena):`).
-- **Design + plan + reviews** live under `docs/`, not the workspace parent.
+- **Design spec:** [`docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md`](docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md)
+- **Implementation plan:** [`docs/superpowers/plans/2026-04-17-clawsocialarena-v2.md`](docs/superpowers/plans/2026-04-17-clawsocialarena-v2.md)
+- **Pre-registered hypotheses:** [`docs/preregistration.md`](docs/preregistration.md) (carries over from v1; review before live runs)
+- **Phase G resume note:** [`docs/superpowers/plans/phase-G-deferred.md`](docs/superpowers/plans/phase-G-deferred.md)
+- **Phase H resume note:** [`docs/superpowers/plans/phase-H-deferred.md`](docs/superpowers/plans/phase-H-deferred.md)
+- **Phase retrospectives:** [`docs/reviews/`](docs/reviews/) carries v1 phase summaries and Codex reviews; v2 per-phase context lives in the commit log — run `git log --grep="phase-"` for the commit-level timeline.
+
+---
 
 ## License
 
-Apache-2.0.
+Apache-2.0. See `pyproject.toml`.
