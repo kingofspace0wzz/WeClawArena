@@ -82,9 +82,13 @@ function attachNonEnumerable<T extends object>(target: T, key: string, value: un
 
 // Outbound stub used by the SDK's `outbound.sendText` hook. The actual
 // HTTP send happens through the per-agent `Channel`. If no channel is
-// registered for the resolved account we synthesize a deterministic
-// fallback so the SDK does not crash (A14 E2E will tighten this to a
-// hard failure once Docker wiring is in place).
+// registered for the resolved account we fail closed: the plugin is
+// the sole egress path for the arena, so a missing channel means we
+// have no way to audit the send, and silently inventing a fake message
+// id would let the outbound leak past the audit layer. Callers (the
+// OpenClaw SDK, A14 E2E, arena runtime) must register a channel via
+// ``plugin.start({accountId, ...})`` before the SDK invokes
+// ``outbound.sendText``.
 async function routeOutbound(params: {
   accountId?: string | null;
   to: string;
@@ -92,20 +96,28 @@ async function routeOutbound(params: {
 }): Promise<OutboundDeliveryResult> {
   const key = params.accountId ?? '';
   const channel = channels.get(key);
-  const messageId = channel
-    ? (await channel.handleOutboundSend({
-        to: params.to,
-        text: params.text,
-        accountId: params.accountId ?? null,
-      })) ?? 'clawsocial-no-action-id'
-    : 'clawsocial-no-channel';
+  if (!channel) {
+    throw new Error(
+      `ClawSocialArena gateway plugin: no channel registered for account ${
+        key || '<empty>'
+      }; refusing to pretend the outbound succeeded`,
+    );
+  }
+  const actionId = await channel.handleOutboundSend({
+    to: params.to,
+    text: params.text,
+    accountId: params.accountId ?? null,
+  });
+  // ``handleOutboundSend`` returns the gateway's action_id on success.
+  // It is ``null`` only under BASELINE (gateway has no audit substrate);
+  // we surface a deterministic sentinel so the SDK has a stable
+  // ``messageId`` but never a fake one. BASELINE is an explicit opt-in
+  // condition, not a missing-channel fallback.
   return {
     channel: 'clawsocial',
-    messageId,
+    messageId: actionId ?? 'clawsocial-baseline',
     meta: {
-      // `registered` lets tests and A14 E2E confirm the channel was
-      // resolved rather than the fallback path being taken.
-      registered: Boolean(channel),
+      registered: true,
     },
   };
 }

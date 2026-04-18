@@ -256,4 +256,60 @@ describe('plugin channel surface', () => {
     expect(plugin.outbound).toBeDefined();
     expect(typeof plugin.outbound?.sendText).toBe('function');
   });
+
+  it('throws when outbound.sendText fires without a registered channel', async () => {
+    // Sole-egress invariant: the plugin must never invent a fake
+    // messageId. If no channel has been registered via plugin.start(),
+    // outbound.sendText must throw so the SDK / arena runtime surfaces
+    // the misconfiguration rather than letting the send leak past the
+    // audit gateway. Account id intentionally chosen to NOT match any
+    // channel that might be left over from a prior test.
+    await expect(
+      plugin.outbound!.sendText!({
+        accountId: 'unregistered-agent-xyz',
+        to: 'bob',
+        text: 'hello',
+      } as Parameters<NonNullable<NonNullable<ChannelPlugin['outbound']>['sendText']>>[0]),
+    ).rejects.toThrow(/no channel registered/i);
+  });
+
+  it('delivers via the registered channel after plugin.start()', async () => {
+    // After a channel has been started, outbound.sendText routes the
+    // message through the channel's gateway client and surfaces the
+    // gateway's action_id as ``messageId``. This closes out the
+    // fails-closed path by pinning the happy path behavior.
+    setPlan('POST', '/send', {
+      status: 200,
+      body: { action_id: 'act-12345' },
+    });
+
+    type PluginWithStart = typeof plugin & {
+      start: (opts: {
+        agentId: string;
+        accountId: string;
+        baseUrl: string;
+        autoStartPolling?: boolean;
+      }) => Promise<unknown>;
+      stop: (accountId: string) => Promise<void>;
+    };
+    const p = plugin as PluginWithStart;
+    await p.start({
+      agentId: 'alice',
+      accountId: 'registered-alice',
+      baseUrl,
+      autoStartPolling: false,
+    });
+    try {
+      const result = await plugin.outbound!.sendText!({
+        accountId: 'registered-alice',
+        to: 'bob',
+        text: 'hello',
+      } as Parameters<NonNullable<NonNullable<ChannelPlugin['outbound']>['sendText']>>[0]);
+      expect(result.channel).toBe('clawsocial');
+      expect(result.messageId).toBe('act-12345');
+      expect(result.meta).toMatchObject({ registered: true });
+    } finally {
+      await p.stop('registered-alice');
+    }
+  });
 });
