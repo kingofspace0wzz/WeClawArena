@@ -9,15 +9,17 @@ The script walks a :class:`~clawsocialarena.experiments.grid_config.GridRow`
 list, routes each row to either a live gateway session or (for rows
 tagged ``live_or_replay=replay``) a :class:`ReplayDriver` pass over a
 pre-recorded cassette, and persists one ``run_scorecard.json`` per row
-under ``<out>/<model>/<condition>/<scenario_id>/``. Task G4 adds a
-cumulative ``cost.csv`` at the top of the output tree with one row per
-scorecard.
+under ``<out>/<model>/<condition>/<scenario_id>/``. A cumulative
+``cost.csv`` at the top of the output tree records one row per
+finished scorecard with columns: ``scenario_id``, ``condition``,
+``model``, ``input_tokens``, ``output_tokens``, ``cached_tokens``,
+``estimated_cost_usd``, ``wallclock_seconds``.
 
 Replay rows never touch the network: the cassette's enriched format
 already carries every field needed to rehydrate the action log, so
 :class:`EvalRunner` can score the replayed stream deterministically and
 write a real :class:`RunScorecard` (with ``live_or_replay="replay"``)
-in place of the stub.
+in place of the stub. Replay rows log zero LLM tokens in cost.csv.
 
 Phase G lands the infrastructure only. Docker is not installed in this
 worktree and the LLM-API runs (tasks G5-G7) are deferred pending credit
@@ -37,13 +39,15 @@ restarted without manual cleanup).
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from clawsocialarena.experiments.grid_config import GridRow, load_grid
+from clawsocialarena.experiments.rates import estimate_cost_usd
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -157,6 +161,89 @@ def _row_is_complete(scorecard_path: Path) -> bool:
         # example a RunScorecard dump from EvalRunner.evaluate).
         return True
     return status != "pending"
+
+
+COST_CSV_FIELDS = [
+    "scenario_id",
+    "condition",
+    "model",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "estimated_cost_usd",
+    "wallclock_seconds",
+]
+
+
+def _aggregate_llm_call_tokens(
+    records: Iterable[Any],
+) -> tuple[int, int, int]:
+    """Sum ``input_tokens`` / ``output_tokens`` / ``cached_tokens`` across LLM calls.
+
+    Accepts anything iterable that yields :class:`ActionRecord`-like
+    objects with ``.action_type`` and ``.payload`` attributes. Records
+    that are not ``llm_call`` type are skipped. Missing token fields
+    default to zero so a partial log does not blow the aggregator up.
+    """
+
+    input_tokens = 0
+    output_tokens = 0
+    cached_tokens = 0
+    for rec in records:
+        action_type = getattr(rec, "action_type", None)
+        action_val = getattr(action_type, "value", action_type)
+        if action_val != "llm_call":
+            continue
+        payload = getattr(rec, "payload", {}) or {}
+        input_tokens += int(payload.get("input_tokens", 0) or 0)
+        output_tokens += int(payload.get("output_tokens", 0) or 0)
+        cached_tokens += int(payload.get("cached_tokens", 0) or 0)
+    return input_tokens, output_tokens, cached_tokens
+
+
+def _append_cost_row(
+    out: Path,
+    row: GridRow,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cached_tokens: int,
+    wallclock_seconds: float,
+) -> None:
+    """Append one line to ``<out>/cost.csv`` for the just-completed row.
+
+    Creates the file with a header on first write. The header is fixed
+    (:data:`COST_CSV_FIELDS`) so downstream Phase H aggregators can load
+    the file with pandas without inferring columns. Costs are computed
+    via :func:`estimate_cost_usd` against the rate table; unknown models
+    report zero.
+    """
+
+    cost_csv = out / "cost.csv"
+    cost_csv.parent.mkdir(parents=True, exist_ok=True)
+    is_new = not cost_csv.exists()
+    estimated = estimate_cost_usd(
+        model=row.model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_tokens=cached_tokens,
+    )
+    with cost_csv.open("a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=COST_CSV_FIELDS)
+        if is_new:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "scenario_id": row.scenario_id,
+                "condition": row.condition.value,
+                "model": row.model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cached_tokens": cached_tokens,
+                "estimated_cost_usd": f"{estimated:.6f}",
+                "wallclock_seconds": f"{wallclock_seconds:.3f}",
+            }
+        )
 
 
 def _resolve_gt_bundle_path(cassette_path: Path) -> Path:
@@ -355,6 +442,18 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         status = outcome.get("status", "unknown")
+        input_tokens = int(outcome.get("input_tokens", 0) or 0)
+        output_tokens = int(outcome.get("output_tokens", 0) or 0)
+        cached_tokens = int(outcome.get("cached_tokens", 0) or 0)
+        wallclock = float(outcome.get("wallclock_seconds", 0.0) or 0.0)
+        _append_cost_row(
+            args.out,
+            row,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+            wallclock_seconds=wallclock,
+        )
         if status == "ok":
             completed += 1
         elif isinstance(status, str) and status.startswith("pending"):
