@@ -81,7 +81,7 @@ def test_proximity_with_mswm_item_overlap_still_adds_edge() -> None:
     """Even with MSWM present, proximity works when mentioned items align."""
     # Build an MSWM where alice knows item z (via self-knowledge).
     mswm = MSWM()
-    mswm.self_knowledge["alice"] = {"z"}
+    mswm.self_knowledge["alice"] = {("z", "self-seed")}
 
     # Stripped source_action_ids but mentioned_items in the candidates.
     log = [

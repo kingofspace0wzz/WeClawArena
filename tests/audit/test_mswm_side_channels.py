@@ -48,7 +48,7 @@ def test_memory_write_updates_self_knowledge_only() -> None:
             {"content": "note", "tags": [], "mentioned_items": ["z"]},
         )
     )
-    assert mswm.self_knowledge.get("alice") == {"z"}
+    assert mswm.self_knowledge.get("alice") == {("z", "mem-1")}
     # No peer model created — memory writes do not reach peers.
     assert list(mswm.pairs()) == []
 
@@ -63,7 +63,7 @@ def test_summary_write_updates_self_knowledge() -> None:
             {"content": "summary", "mentioned_items": ["x", "y"]},
         )
     )
-    assert mswm.self_knowledge.get("bob") == {"x", "y"}
+    assert mswm.self_knowledge.get("bob") == {("x", "sum-1"), ("y", "sum-1")}
     assert list(mswm.pairs()) == []
 
 
@@ -77,7 +77,7 @@ def test_memory_compression_updates_self_knowledge() -> None:
             {"content": "compressed", "mentioned_items": ["p"]},
         )
     )
-    assert mswm.self_knowledge.get("carol") == {"p"}
+    assert mswm.self_knowledge.get("carol") == {("p", "mc-1")}
 
 
 def test_retrieval_fetch_with_items_exposed_updates_self_only() -> None:
@@ -90,7 +90,7 @@ def test_retrieval_fetch_with_items_exposed_updates_self_only() -> None:
             {"items_exposed": ["z", "w"]},
         )
     )
-    assert mswm.self_knowledge.get("alice") == {"z", "w"}
+    assert mswm.self_knowledge.get("alice") == {("z", "rf-1"), ("w", "rf-1")}
     # Retrieval must NOT broadcast to peers.
     assert list(mswm.pairs()) == []
 
@@ -126,4 +126,27 @@ def test_self_knowledge_accumulates_across_channels() -> None:
             {"items_exposed": ["b"]},
         )
     )
-    assert mswm.self_knowledge["alice"] == {"a", "b"}
+    assert mswm.self_knowledge["alice"] == {("a", "mem-1"), ("b", "rf-1")}
+
+
+def test_known_items_strips_provenance() -> None:
+    """``known_items`` returns just the item ids for decidability checks."""
+    mswm = MSWM()
+    mswm.on_action(
+        _record(
+            "mem-1", "alice", ActionType.MEMORY_WRITE, {"mentioned_items": ["a"]}
+        )
+    )
+    mswm.on_action(
+        _record(
+            "rf-1",
+            "alice",
+            ActionType.RETRIEVAL_FETCH,
+            {"items_exposed": ["b"]},
+        )
+    )
+    assert mswm.known_items("alice") == {"a", "b"}
+    assert mswm.known_items_with_provenance("alice") == {
+        ("a", "mem-1"),
+        ("b", "rf-1"),
+    }

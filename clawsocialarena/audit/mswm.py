@@ -78,13 +78,17 @@ class MSWM:
 
     def __init__(self) -> None:
         self.state: dict[str, dict[str, PeerModel]] = {}
-        # Self-knowledge bag: ``self_knowledge[agent_id] -> set[item_id]``.
+        # Self-knowledge bag:
+        # ``self_knowledge[agent_id] -> set[(item_id, action_id)]``.
         # This is ADDITIONAL state orthogonal to ``state[i][j]``. It captures
         # items an agent knows about from non-peer sources (memory reads,
-        # retrieval) so that downstream decidability checks can distinguish
+        # retrieval) so downstream decidability checks can distinguish
         # "known" from "not known" without conflating that with
-        # "learned from peer j".
-        self.self_knowledge: dict[str, set[str]] = {}
+        # "learned from peer j". Storing the introducing ``action_id`` alongside
+        # the item lets Phase F attribution trace a self-known item back to the
+        # exact memory_write / retrieval_fetch / summary_write that introduced
+        # it.
+        self.self_knowledge: dict[str, set[tuple[str, str]]] = {}
 
     def get(self, i: str, j: str) -> PeerModel:
         """Return ``MSWM[i][j]``, materializing a default on first access."""
@@ -205,6 +209,10 @@ class MSWM:
         knows without notifying any peer. The payload key differs per
         action type (``mentioned_items`` for memory/summary, ``items_exposed``
         for retrieval) so the caller selects the right field.
+
+        Each item is stored as ``(item_id, action.action_id)`` so Phase F
+        attribution can walk from a self-known item back to the introducing
+        action.
         """
 
         items = action.payload.get(key) or []
@@ -213,7 +221,7 @@ class MSWM:
         bag = self.self_knowledge.setdefault(action.agent_id, set())
         for item_id in items:
             if isinstance(item_id, str):
-                bag.add(item_id)
+                bag.add((item_id, action.action_id))
 
     # ------------------------------------------------------------------
     # Joint decidability (SAF dim 2 / ψ)
@@ -222,26 +230,43 @@ class MSWM:
         """Return every item ``agent_id`` knows, across all sources.
 
         Union of:
-        - ``self_knowledge[agent_id]`` (memory, summary, retrieval).
+        - items in ``self_knowledge[agent_id]`` (memory, summary, retrieval),
+          with provenance stripped.
         - items in ``MSWM[agent_id][j].items_learned_from_j`` for every
           peer j (things ``agent_id`` has been told).
-
-        Items ``agent_id`` has TOLD (``items_told_to_j``) also count: the
-        agent necessarily knew them to tell them in the first place.
+        - items ``agent_id`` has TOLD (``items_told_to_j``): the agent
+          necessarily knew them to tell them in the first place.
         """
 
         known: set[str] = set()
-        known.update(self.self_knowledge.get(agent_id, set()))
+        known.update(item for item, _ in self.self_knowledge.get(agent_id, set()))
         peers = self.state.get(agent_id, {})
         for peer_model in peers.values():
             known.update(item for item, _ in peer_model.items_learned_from_j)
             known.update(item for item, _ in peer_model.items_told_to_j)
         return known
 
+    def known_items_with_provenance(
+        self, agent_id: str
+    ) -> set[tuple[str, str]]:
+        """Return ``(item_id, action_id)`` tuples for every item ``agent_id`` knows.
+
+        Union of self-knowledge plus every peer-sourced tuple. Used by
+        attribution code that needs to walk back to the introducing action.
+        """
+
+        tuples: set[tuple[str, str]] = set()
+        tuples.update(self.self_knowledge.get(agent_id, set()))
+        peers = self.state.get(agent_id, {})
+        for peer_model in peers.values():
+            tuples.update(peer_model.items_learned_from_j)
+            tuples.update(peer_model.items_told_to_j)
+        return tuples
+
     def _has_any_entry(self, agent_id: str) -> bool:
         """Return True if MSWM has ANY record of ``agent_id``.
 
-        Record means either at least one self-knowledge entry or at least
+        Record means either at least one self-knowledge tuple or at least
         one peer model (even if its contents are empty). If the agent has
         never appeared on either side of an action, decidability is
         undecidable because the model carries no evidence about the agent
@@ -271,7 +296,7 @@ class MSWM:
         """
 
         for bag in self.self_knowledge.values():
-            if item_id in bag:
+            if any(item == item_id for item, _ in bag):
                 return True
         for peers in self.state.values():
             for peer_model in peers.values():
