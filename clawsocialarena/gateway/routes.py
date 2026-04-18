@@ -48,14 +48,14 @@ def _get_session(request: web.Request) -> Session:
 
 
 def _require_fields(data: dict, *keys: str) -> list[str]:
-    """Return the list of ``keys`` that are missing or present-but-empty in ``data``.
+    """Return the list of ``keys`` that are missing from ``data``.
 
-    A key is considered missing if it is absent, ``None``, or an empty
-    string. Non-string values are allowed through (e.g. the ``arguments``
-    dict on ``/tool_call`` or ``input_tokens`` int on ``/llm_call``); the
-    per-endpoint handler performs any stricter type check needed. The
-    shape of the return value lets each handler turn a missing list into
-    a uniform 400 response:
+    Presence means ``key in body and body[key] is not None``; empty dicts,
+    empty strings, and empty lists are allowed (per-handler type checks
+    enforce stricter semantics, e.g. the ``arguments`` dict on
+    ``/tool_call`` or the integer fields on ``/llm_call``). The shape of
+    the return value lets each handler turn a missing list into a uniform
+    400 response:
 
         missing = _require_fields(body, "agent_id", "content")
         if missing:
@@ -63,11 +63,7 @@ def _require_fields(data: dict, *keys: str) -> list[str]:
     """
     missing: list[str] = []
     for key in keys:
-        value = data.get(key)
-        if value is None:
-            missing.append(key)
-            continue
-        if isinstance(value, str) and value == "":
+        if key not in data or data[key] is None:
             missing.append(key)
     return missing
 
@@ -127,10 +123,7 @@ async def recv(request: web.Request) -> web.Response:
     body = await _read_json(request)
     recipient_id = body.get("recipient_id")
     if not isinstance(recipient_id, str) or recipient_id == "":
-        return web.json_response(
-            {"error": "missing_required_fields", "fields": ["recipient_id"]},
-            status=400,
-        )
+        return _bad_request(["recipient_id"])
 
     session = _get_session(request)
     inbox = session.inboxes.get(recipient_id)

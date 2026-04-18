@@ -191,6 +191,11 @@ class Session:
         Payload mirrors v1's ``AuditedMessageBus.record_tool_observation``:
         ``{tool_call_action_id, tool_name, observation}``. Baseline returns
         ``None``; passive/enforce append and return the new ``action_id``.
+
+        TODO(A6): ``tool_call_action_id`` is recorded verbatim and is not yet
+        validated against existing ``TOOL_CALL`` records in the action log.
+        The A6 MCP host will introduce call/return pairing verification so
+        orphaned or mismatched observations are rejected at ingress.
         """
 
         return self._record_action(
@@ -236,7 +241,7 @@ class Session:
     ) -> str | None:
         """Append an ``LLM_CALL`` ActionRecord with token accounting, if audited.
 
-        The payload carries all six accounting fields (``input_tokens``,
+        The payload carries five accounting fields (``input_tokens``,
         ``output_tokens``, ``cached_tokens``, ``latency_ms``, ``model``).
         ``cached_tokens`` defaults to 0 when the caller omits it. Baseline
         returns ``None`` and writes nothing.
