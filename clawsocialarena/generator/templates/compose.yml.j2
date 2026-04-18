@@ -4,12 +4,17 @@
 # One OpenClaw container per agent + one gateway container on a private
 # `clawnet` bridge. The gateway exposes :8080 on the host so the runner can
 # poll /healthz; agent containers reach the gateway by service name.
+#
+# `build.context` is an absolute path so this compose file resolves
+# correctly regardless of how deep the scenario bundle lives. Persona +
+# MCP files are mounted into each agent container read-only so the
+# OpenClaw CLI can load them without baking them into the image.
 
 services:
   gateway:
     image: clawsocialarena/gateway:dev
     build:
-      context: ../..
+      context: {{ build_context }}
       dockerfile: docker/gateway.Dockerfile
     environment:
       - CLAWSOCIAL_GATEWAY_PORT=8080
@@ -29,7 +34,7 @@ services:
   {{ agent.agent_id }}:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: ../..
+      context: {{ build_context }}
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:
@@ -38,9 +43,12 @@ services:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
       - CLAWSOCIAL_AGENT_ID={{ agent.agent_id }}
       - CLAWSOCIAL_USER_ID={{ agent.user_id }}
+    volumes:
+      - ./personas/{{ agent.agent_id }}.system.md:/workspace/persona.system.md:ro
+      - ./personas/{{ agent.agent_id }}.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
-    entrypoint: ["sh", "-c"]
-    command: ["sleep infinity"]
+    command: ["/usr/local/bin/agent-entrypoint.sh"]
 {% endfor %}
 networks:
   clawnet:

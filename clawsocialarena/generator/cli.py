@@ -42,6 +42,12 @@ from clawsocialarena.scenario.models import Scenario
 
 INSTANTIATION_MODES = ("deterministic", "llm")
 
+# Repo root (the directory that holds ``docker/`` + ``pyproject.toml``).
+# The compose emitter writes this path into every ``build.context`` so the
+# generated compose file resolves identically regardless of how deep the
+# bundle lives on disk.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -183,8 +189,11 @@ def _write_bundle(shape, out_dir: Path) -> None:
     # Build the Scenario pydantic model for the emitters that want typed input.
     scenario = Scenario.model_validate(scenario_dict)
 
-    # docker-compose.yml
-    (out_dir / "docker-compose.yml").write_text(emit_compose_yaml(scenario))
+    # docker-compose.yml -- absolute build context so the emitted compose
+    # resolves identically no matter how deep the bundle sits on disk.
+    (out_dir / "docker-compose.yml").write_text(
+        emit_compose_yaml(scenario, compose_build_root=_REPO_ROOT)
+    )
 
     # personas/
     personas_dir = out_dir / "personas"

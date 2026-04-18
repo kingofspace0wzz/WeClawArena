@@ -1,4 +1,4 @@
-"""Compose emitter tests (Task D2).
+"""Compose emitter tests (Task D2 + Phase D.5 runtime-contract fix).
 
 The emitter takes a `Scenario` and returns a docker-compose YAML string with:
 - one service per agent plus one `gateway` service,
@@ -6,9 +6,18 @@ The emitter takes a `Scenario` and returns a docker-compose YAML string with:
 - `CLAWSOCIAL_GATEWAY_URL=http://gateway:8080` and
   `CLAWSOCIAL_AGENT_ID=<agent_id>` injected per agent,
 - the output parseable via `yaml.safe_load`.
+
+Phase D.5 additions:
+- ``build.context`` is emitted as an absolute path (the ``compose_build_root``).
+- Agent services declare per-agent persona volume mounts and the shared mcp
+  directory mount.
+- The agent service ``command`` points at the entrypoint script, not
+  ``sleep infinity``.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import yaml
 
@@ -84,3 +93,64 @@ def test_emit_compose_yaml_is_deterministic_for_same_scenario():
     a = emit_compose_yaml(scenario)
     b = emit_compose_yaml(scenario)
     assert a == b
+
+
+# --- Phase D.5 additions -----------------------------------------------------
+
+
+def test_emit_compose_yaml_build_context_is_absolute(tmp_path: Path):
+    """build.context must be an absolute path (Phase D.5 Fix 1)."""
+    scenario = _scenario(2)
+    doc = yaml.safe_load(
+        emit_compose_yaml(scenario, compose_build_root=tmp_path)
+    )
+    for svc in doc["services"].values():
+        ctx = svc["build"]["context"]
+        assert Path(ctx).is_absolute(), f"expected absolute path, got {ctx!r}"
+        # And it should match the build root we supplied.
+        assert Path(ctx) == tmp_path.resolve()
+
+
+def test_emit_compose_yaml_default_build_context_is_repo_root():
+    """With no explicit root, the emitter falls back to the repo root."""
+    scenario = _scenario(1)
+    doc = yaml.safe_load(emit_compose_yaml(scenario))
+    for svc in doc["services"].values():
+        ctx = Path(svc["build"]["context"])
+        assert ctx.is_absolute()
+        # Repo root must hold the two Dockerfiles the compose file refers to.
+        assert (ctx / "docker" / "gateway.Dockerfile").exists()
+        assert (ctx / "docker" / "openclaw-with-plugin.Dockerfile").exists()
+
+
+def test_emit_compose_yaml_declares_persona_and_mcp_volume_mounts():
+    """Each agent must mount its persona files + the shared mcp dir (Fix 1)."""
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario))
+    for agent in scenario.agents:
+        volumes = doc["services"][agent.agent_id]["volumes"]
+        # Volume entries are "host:container[:mode]" strings.
+        joined = "\n".join(volumes)
+        assert (
+            f"./personas/{agent.agent_id}.system.md:/workspace/persona.system.md:ro"
+            in joined
+        )
+        assert (
+            f"./personas/{agent.agent_id}.tools.json:/workspace/persona.tools.json:ro"
+            in joined
+        )
+        assert "./mcp:/workspace/mcp:ro" in joined
+
+
+def test_emit_compose_yaml_agent_command_is_not_sleep_infinity():
+    """Fix 1: agents must launch the entrypoint script, not idle forever."""
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario))
+    for agent in scenario.agents:
+        svc = doc["services"][agent.agent_id]
+        cmd = svc.get("command")
+        assert cmd is not None
+        joined = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+        assert "sleep infinity" not in joined
+        # Positive check: command points at the arena's entrypoint script.
+        assert "agent-entrypoint.sh" in joined
