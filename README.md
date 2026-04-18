@@ -65,7 +65,10 @@ The remaining work needs external resources: LLM API access and compute budget. 
    ```bash
    export AWS_PROFILE=...          # or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
    export AWS_REGION=us-west-2
-   python -c "from clawsocialarena.agents.llm_client import BedrockLLMClient; c = BedrockLLMClient(model_id='anthropic.claude-sonnet-4-6-v1:0'); print(c.complete(messages=[], tools=None, params={'max_tokens': 10}))"
+   # NOTE (v2): the in-process `clawsocialarena.agents.llm_client` module was
+   # removed in Phase B of the v2 refactor. Provider wiring now lives in the
+   # gateway_plugin; a refreshed Bedrock smoke snippet will land in Phase G
+   # alongside the broader README rewrite.
    ```
 2. Add a profile loader:
    ```python
