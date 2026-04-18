@@ -157,10 +157,58 @@ class AttributionGraphBuilder:
             l0_agent_id: str
             l0_sources: list[str]
             l0_mentioned: list[str]
+            rewritten_flag = False
             if target_rec is not None:
                 l0_agent_id = target_rec.agent_id
                 l0_sources = list(target_rec.source_action_ids)
-                l0_mentioned = list(target_rec.payload.get("mentioned_items") or [])
+                # Fix 2 (Phase F.5): under an ENFORCE rewrite verdict the
+                # persisted target's ``mentioned_items`` is the REDUCED
+                # list (the forbidden item was redacted). The policy_decision
+                # payload still carries the ORIGINAL pre-rewrite list in
+                # ``mentioned_items`` plus the post-rewrite list in
+                # ``rewritten_mentioned_items``. Prefer the policy's
+                # original list so the backward walk roots on every item
+                # the agent intended to disclose, not just the residual
+                # the rewrite let through.
+                rewrite_pol = _select_rewrite_policy(policies)
+                if rewrite_pol is not None:
+                    original_mentioned = rewrite_pol.payload.get(
+                        "mentioned_items"
+                    )
+                    target_mentioned = target_rec.payload.get(
+                        "mentioned_items"
+                    )
+                    if (
+                        original_mentioned is not None
+                        and list(original_mentioned) != list(target_mentioned or [])
+                    ):
+                        l0_mentioned = list(original_mentioned)
+                        rewritten_flag = True
+                        # Prefer richer source_action_ids from the policy
+                        # payload too; the persisted target's sources may
+                        # have been stripped when the rewrite dropped the
+                        # upstream item entirely.
+                        pol_sources = rewrite_pol.payload.get(
+                            "source_action_ids"
+                        )
+                        if pol_sources:
+                            # Merge: union of target sources + policy
+                            # payload sources, preserving order of first
+                            # appearance.
+                            seen_srcs: set[str] = set()
+                            merged: list[str] = []
+                            for s in list(l0_sources) + list(pol_sources):
+                                if s in seen_srcs:
+                                    continue
+                                seen_srcs.add(s)
+                                merged.append(s)
+                            l0_sources = merged
+                    else:
+                        l0_mentioned = list(target_mentioned or [])
+                else:
+                    l0_mentioned = list(
+                        target_rec.payload.get("mentioned_items") or []
+                    )
             else:
                 # Blocked target — reconstruct context from the first
                 # policy_decision (all policies share the same target).
@@ -174,9 +222,17 @@ class AttributionGraphBuilder:
                 )
 
             if target_id not in seen_ids:
-                nodes.append(
-                    {"id": target_id, "label": "L0", "agent_id": l0_agent_id}
-                )
+                l0_node: dict = {
+                    "id": target_id,
+                    "label": "L0",
+                    "agent_id": l0_agent_id,
+                }
+                # Annotate the L0 node when the rewrite materially
+                # changed mentioned_items so downstream consumers can
+                # distinguish "rewritten target" from "pristine target".
+                if rewritten_flag:
+                    l0_node["rewritten"] = True
+                nodes.append(l0_node)
                 seen_ids.add(target_id)
 
             # Annotation edges: each policy_decision that addresses this
@@ -497,5 +553,22 @@ def _mswm_has_links(mswm: MSWM) -> bool:
             if peer.items_learned_from_j or peer.items_told_to_j:
                 return True
     return False
+
+
+def _select_rewrite_policy(
+    policies: list[ActionRecord],
+) -> ActionRecord | None:
+    """Return the first rewrite-verdict policy for a target, or ``None``.
+
+    Multiple policy hooks may address the same target; only a rewrite
+    (not a block) carries an ORIGINAL vs post-rewrite asymmetry that Fix 2
+    needs to recover the pre-rewrite causal chain. Block verdicts already
+    follow the synthetic-L0 path because the target has no ActionRecord.
+    """
+
+    for pol in policies:
+        if pol.payload.get("verdict") == "rewrite":
+            return pol
+    return None
 
 
