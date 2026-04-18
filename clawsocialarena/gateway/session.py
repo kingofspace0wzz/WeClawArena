@@ -215,6 +215,7 @@ class Session:
         recipient_id: str,
         content: str,
         source_action_ids: list[str] | None = None,
+        mentioned_items: list[str] | None = None,
     ) -> RecordOutcome:
         """Append an ``OUTBOUND_MESSAGE`` ActionRecord for a send, if audited.
 
@@ -232,12 +233,21 @@ class Session:
         - ``block``: ``blocked`` is True, ``action_id`` is ``None``, no
           OUTBOUND_MESSAGE row is written (the caller must skip the
           inbox enqueue).
+
+        ``mentioned_items`` is the MSWM payload convention introduced in
+        Phase C. When supplied, the items are attached to ``payload`` under
+        the ``mentioned_items`` key so ``MSWM.on_action`` can update the
+        sender / recipient peer models. When absent the payload omits the
+        key and MSWM is left unchanged for this action.
         """
 
+        payload: dict = {"recipient_id": recipient_id, "content": content}
+        if mentioned_items:
+            payload["mentioned_items"] = list(mentioned_items)
         return await self._record_action(
             agent_id=sender_id,
             action_type=ActionType.OUTBOUND_MESSAGE,
-            payload={"recipient_id": recipient_id, "content": content},
+            payload=payload,
             id_prefix="act",
             hook_target_content=content,
             source_action_ids=source_action_ids,

@@ -141,12 +141,32 @@ async def send(request: web.Request) -> web.Response:
     if isinstance(sources, web.Response):
         return sources
 
+    # Phase C: optional ``mentioned_items`` list drives MSWM disclosure
+    # updates. Accept absent / null / array-of-string; anything else is a
+    # 400. An empty list is allowed but does nothing MSWM-wise.
+    raw_mentioned: Any = body.get("mentioned_items")
+    mentioned: list[str] = []
+    if raw_mentioned is not None:
+        if not isinstance(raw_mentioned, list) or not all(
+            isinstance(x, str) for x in raw_mentioned
+        ):
+            return web.json_response(
+                {
+                    "error": "invalid_field_type",
+                    "field": "mentioned_items",
+                    "expected": "array[str]",
+                },
+                status=400,
+            )
+        mentioned = list(raw_mentioned)
+
     session = _get_session(request)
     outcome = await session.record_outbound(
         sender_id=sender_id,
         recipient_id=recipient_id,
         content=content,
         source_action_ids=sources,
+        mentioned_items=mentioned,
     )
     if outcome.blocked:
         # ENFORCE block: no inbox enqueue, caller gets a structured hint.
