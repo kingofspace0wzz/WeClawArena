@@ -127,6 +127,21 @@ class MSWM:
 
         if action.action_type == ActionType.OUTBOUND_MESSAGE:
             self._on_outbound_message(action)
+        elif action.action_type in (
+            ActionType.MEMORY_WRITE,
+            ActionType.SUMMARY_WRITE,
+            ActionType.MEMORY_COMPRESSION,
+        ):
+            # Writer-only update: the agent reinforces its own knowledge of
+            # items in the payload. These actions do NOT disclose anything
+            # to peers — they are private to the agent's own memory store.
+            self._on_self_knowledge(action, key="mentioned_items")
+        elif action.action_type == ActionType.RETRIEVAL_FETCH:
+            # Retrieval brings external items into the agent's own knowledge
+            # but — critically — does not broadcast anything to peers.
+            # ``items_exposed`` is the payload convention: a list of item_id
+            # strings surfaced by the retrieval result.
+            self._on_self_knowledge(action, key="items_exposed")
 
     def _on_outbound_message(self, action: ActionRecord) -> None:
         payload = action.payload
@@ -147,3 +162,21 @@ class MSWM:
             recipient_model.items_learned_from_j.add((item_id, action_id))
         sender_model.phase_of_last_interaction = action.social_phase
         recipient_model.phase_of_last_interaction = action.social_phase
+
+    def _on_self_knowledge(self, action: ActionRecord, *, key: str) -> None:
+        """Mark ``action.agent_id`` as knowing each item in ``payload[key]``.
+
+        Self-knowledge is orthogonal to peer disclosure: memory writes,
+        summaries, and retrieval fetches update what the agent privately
+        knows without notifying any peer. The payload key differs per
+        action type (``mentioned_items`` for memory/summary, ``items_exposed``
+        for retrieval) so the caller selects the right field.
+        """
+
+        items = action.payload.get(key) or []
+        if not items:
+            return
+        bag = self.self_knowledge.setdefault(action.agent_id, set())
+        for item_id in items:
+            if isinstance(item_id, str):
+                bag.add(item_id)
