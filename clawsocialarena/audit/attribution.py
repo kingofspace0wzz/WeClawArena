@@ -132,6 +132,7 @@ class AttributionGraphBuilder:
 
         # BFS from the L0 set over the reverse index.
         descendants: set[str] = set()
+        parent_of: dict[str, set[str]] = {}
         frontier: set[str] = set(violations.keys())
         while frontier:
             nxt: set[str] = set()
@@ -139,6 +140,7 @@ class AttributionGraphBuilder:
                 for child in reverse.get(parent, []):
                     if child.action_id in violations:
                         continue
+                    parent_of.setdefault(child.action_id, set()).add(parent)
                     if child.action_id in descendants:
                         edges.append(
                             {"src": parent, "dst": child.action_id, "label": "L1"}
@@ -150,7 +152,9 @@ class AttributionGraphBuilder:
                         nodes.append(
                             {
                                 "id": child.action_id,
-                                "label": "L1",
+                                "label": _label_for_descendant(
+                                    child, action_log, mswm
+                                ),
                                 "agent_id": child.agent_id,
                             }
                         )
@@ -159,6 +163,23 @@ class AttributionGraphBuilder:
                         {"src": parent, "dst": child.action_id, "label": "L1"}
                     )
             frontier = nxt
+
+        # LF pass: scan the log for outbound or memory actions whose
+        # mentioned_items appear in no MSWM peer model (item "forgotten"
+        # before landing). These are orphaned in the DAG and receive LF.
+        if mswm is not None:
+            for rec in action_log:
+                if rec.action_id in seen_ids:
+                    continue
+                if _is_forgotten(rec, mswm):
+                    nodes.append(
+                        {
+                            "id": rec.action_id,
+                            "label": "LF",
+                            "agent_id": rec.agent_id,
+                        }
+                    )
+                    seen_ids.add(rec.action_id)
 
         return {"nodes": nodes, "edges": edges}
 
@@ -231,6 +252,85 @@ class AttributionGraphBuilder:
                 )
 
         return {"nodes": nodes, "edges": edges}
+
+
+def _label_for_descendant(
+    rec: ActionRecord,
+    action_log: list[ActionRecord],
+    mswm: MSWM | None,
+) -> str:
+    """Assign a label in {L1, LX, LR} to a DAG descendant node.
+
+    Precedence:
+
+    - ``LR`` (repaired): the record's ``payload.repair_of`` names another
+      action_id that exists in the log. This is the explicit repair marker
+      scenarios use to mark retraction messages.
+    - ``LX`` (cascaded): the record's ``mentioned_items`` overlap with
+      items already disclosed to at least one peer model's
+      ``items_told_to_j`` that is a DIFFERENT recipient than this record's
+      recipient. I.e. the same item reached a new / unintended recipient.
+    - ``L1`` (default): the record inherits inference from the chain but
+      does not itself trigger LX or LR.
+    """
+
+    payload = rec.payload
+    repair_of = payload.get("repair_of")
+    if repair_of:
+        for other in action_log:
+            if other.action_id == repair_of:
+                return "LR"
+
+    if mswm is None:
+        return "L1"
+
+    mentioned = payload.get("mentioned_items") or []
+    recipient_id = payload.get("recipient_id")
+    if mentioned and recipient_id:
+        # LX detection: check if any of the mentioned items was previously
+        # told to a DIFFERENT peer by this same sender.
+        peers = mswm.state.get(rec.agent_id, {})
+        for peer_id, peer_model in peers.items():
+            if peer_id == recipient_id:
+                continue
+            told_items = {item for item, _ in peer_model.items_told_to_j}
+            if any(m in told_items for m in mentioned):
+                return "LX"
+
+    return "L1"
+
+
+def _is_forgotten(rec: ActionRecord, mswm: MSWM) -> bool:
+    """LF detection heuristic.
+
+    An action is "forgotten" when it mentions an item the current MSWM no
+    longer tracks anywhere — i.e. every peer model with a reference to
+    ``(item_id, rec.action_id)`` has been cleared (only possible via
+    ``revert_action`` under the current implementation) AND the item does
+    not appear anywhere in the current ``items_told_to_j`` /
+    ``items_learned_from_j`` indices. Under the current codebase this
+    signal lights up on BLOCKED actions after the Session reverts the MSWM
+    update: the action_id is still in the log as a POLICY_DECISION but the
+    MSWM no longer carries the peer-tuple it once did. This is the exact
+    "LF" semantic the spec describes as "decays from MSWM without agent
+    action" — blocks produce the same empty-MSWM footprint.
+    """
+
+    if rec.action_type != ActionType.OUTBOUND_MESSAGE:
+        return False
+    mentioned = rec.payload.get("mentioned_items") or []
+    if not mentioned:
+        return False
+    action_id = rec.action_id
+    for peers in mswm.state.values():
+        for peer_model in peers.values():
+            for item_id, linked_id in peer_model.items_told_to_j:
+                if linked_id == action_id and item_id in mentioned:
+                    return False
+            for item_id, linked_id in peer_model.items_learned_from_j:
+                if linked_id == action_id and item_id in mentioned:
+                    return False
+    return True
 
 
 def _proximity_score(
