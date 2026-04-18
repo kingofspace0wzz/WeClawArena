@@ -1,8 +1,32 @@
 """RunScorecard pydantic schema.
 
-Emitted by EvalRunner per scenario run. Main-table metrics (TSR, privacy,
-security) land in later phases; Phase 2 stubs them as defaults.
+Phase F / Task F4 introduces the v2 schema. The v2 schema preserves every
+field v1 carried and adds four runtime-provenance fields so the analysis
+pipeline can split results by gateway posture, cassette identity, and
+episode-graph membership:
+
+- ``gateway_invariant_passed`` — did the gateway's own invariants (egress,
+  hash-chain, shadow-log parity) hold through the whole run? Stage 1 of
+  the v2 EvalRunner writes this.
+- ``cassette_hash`` — sha256 of the ``cassette.jsonl`` file the run
+  consumed (live or replay); lets downstream code detect silent cassette
+  drift between scorecard and CI fixtures.
+- ``live_or_replay`` — ``"live"`` when the scorecard was emitted from a
+  fresh gateway session; ``"replay"`` when it was derived via
+  :mod:`clawsocialarena.gateway.replay` from a recorded cassette.
+- ``episode_graph_id`` — stable id for the episode graph this scorecard
+  belongs to, or ``None`` for single-scenario runs.
+
+Backward compatibility: :meth:`RunScorecard.from_v1_dict` reads a v1
+scorecard JSON and fills the four new fields with sensible defaults
+(invariant_passed=True, live, no cassette hash, no episode graph). This
+keeps stored v1 scorecards consumable by v2 tooling without a migration
+script.
 """
+
+from __future__ import annotations
+
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,5 +60,44 @@ class RunScorecard(BaseModel):
     privacy: PrivacyScorecard = Field(default_factory=PrivacyScorecard)
     security: SecurityScorecard = Field(default_factory=SecurityScorecard)
     diagnostics: dict = Field(default_factory=dict)
-    evaluator_version: str = "eval_v1.0.0"
+    evaluator_version: str = "eval_v2.0.0"
     meta: dict = Field(default_factory=dict)
+
+    # v2 runtime-provenance fields (Phase F / Task F4).
+    gateway_invariant_passed: bool = True
+    """Did the gateway's stage-1 invariants hold across the whole run?"""
+
+    cassette_hash: str = ""
+    """sha256 hex of the cassette.jsonl consumed by this run. Empty means
+    no cassette was hashed (e.g., legacy v1 scorecards)."""
+
+    live_or_replay: Literal["live", "replay"] = "live"
+    """Source of the run: live gateway session or cassette replay."""
+
+    episode_graph_id: str | None = None
+    """Stable id of the episode graph this scorecard belongs to, or
+    ``None`` for single-scenario runs."""
+
+    @classmethod
+    def from_v1_dict(cls, data: dict[str, Any]) -> "RunScorecard":
+        """Load a v1 scorecard dict, filling v2 fields with defaults.
+
+        The compatibility shim accepts any dict shaped like a v1
+        scorecard: the new fields default to ``gateway_invariant_passed
+        = True``, ``cassette_hash = ""``, ``live_or_replay = "live"``,
+        and ``episode_graph_id = None``. Missing ``evaluator_version``
+        is tagged ``eval_v1.0.0`` so aggregation code can tell which
+        generation emitted the row.
+
+        Any already-populated v2 field in ``data`` is preserved; this
+        method is safe to call on a dict that already round-tripped
+        through v2, making it idempotent for use as a generic loader.
+        """
+
+        filled = dict(data)
+        filled.setdefault("gateway_invariant_passed", True)
+        filled.setdefault("cassette_hash", "")
+        filled.setdefault("live_or_replay", "live")
+        filled.setdefault("episode_graph_id", None)
+        filled.setdefault("evaluator_version", "eval_v1.0.0")
+        return cls.model_validate(filled)
