@@ -16,6 +16,7 @@ import type {} from 'openclaw/plugin-sdk/channel-contract';
 // TODO(A8/A9): the fields below are minimal scaffold stubs that satisfy the
 // `ChannelPlugin` type contract. They do not implement any real behavior.
 // Replace with real wiring once the channel and gateway-client layers land.
+// TODO(A8): tighten to ChannelPlugin<ArenaAccount> once the account shape lands.
 export const plugin: ChannelPlugin = {
   id: 'clawsocial',
   meta: {
@@ -32,7 +33,7 @@ export const plugin: ChannelPlugin = {
     // TODO(A8): populate from arena config once the channel layer lands.
     listAccountIds: () => [],
     // TODO(A8): resolve the per-account record from OpenClawConfig.
-    resolveAccount: () => ({}),
+    resolveAccount: () => ({} as never),
   },
 };
 
