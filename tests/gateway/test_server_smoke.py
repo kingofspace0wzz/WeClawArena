@@ -9,6 +9,8 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from clawsocialarena.gateway.server import build_app
+from clawsocialarena.gateway.session import Session
+from clawsocialarena.types import AuditCondition
 
 
 def _free_port() -> int:
@@ -21,7 +23,12 @@ def _free_port() -> int:
 @pytest.mark.asyncio
 async def test_server_health():
     """GET /healthz on a live aiohttp server returns {"ok": true} on a free port."""
-    app = build_app()
+    session = Session.build(
+        scenario_id="smoke",
+        condition=AuditCondition.BASELINE,
+        db_path="/dev/null",
+    )
+    app = build_app(session)
     assert isinstance(app, web.Application)
 
     port = _free_port()

@@ -12,18 +12,34 @@ Under :data:`~clawsocialarena.types.AuditCondition.BASELINE` all substrate
 fields are ``None``, mirroring the "deployment without audit infrastructure"
 condition in spec §5.1. Under ``PASSIVE`` or ``ENFORCE`` the full set of
 audit primitives is instantiated.
+
+Task A3 extends this object with lazily-created per-recipient
+``asyncio.Queue`` inboxes and a ``record_outbound`` helper that wraps
+``ActionLog.append`` with an ``OUTBOUND_MESSAGE`` record. Policy hooks,
+phase tagging, shadow double-write, and cassette recording are deliberately
+left out: those land in A4, A5, and C5.
 """
 
 from __future__ import annotations
 
+import asyncio
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from clawsocialarena.action_log import ActionLog
 from clawsocialarena.audit.phase_tracker import PhaseTracker
 from clawsocialarena.audit.shadow_log import ShadowLog
 from clawsocialarena.protocols.policy_hook import PolicyHook
-from clawsocialarena.types import AuditCondition
+from clawsocialarena.types import (
+    ActionRecord,
+    ActionType,
+    AuditCondition,
+    ExecutionPhase,
+    IntegrityLevel,
+    SocialPhase,
+)
 
 
 @dataclass
@@ -38,6 +54,8 @@ class Session:
         phase_tracker: Social-phase tracker, or ``None`` under BASELINE.
         cassette: Optional cassette recorder (Task A5 will populate this).
         hooks: Ordered list of ``PolicyHook`` instances to consult at egress.
+        inboxes: Lazily-created per-recipient message queues. Each entry is a
+            FIFO of ``(sender_id, content)`` tuples waiting for a ``/recv``.
     """
 
     scenario_id: str
@@ -47,6 +65,7 @@ class Session:
     phase_tracker: PhaseTracker | None = None
     cassette: object | None = None
     hooks: list[PolicyHook] = field(default_factory=list)
+    inboxes: dict[str, asyncio.Queue[tuple[str, str]]] = field(default_factory=dict)
 
     @classmethod
     def build(
@@ -93,3 +112,55 @@ class Session:
             shadow_log=shadow_log,
             phase_tracker=phase_tracker,
         )
+
+    def _ensure_inbox(self, recipient_id: str) -> asyncio.Queue[tuple[str, str]]:
+        """Return the inbox queue for ``recipient_id``, creating it on first use.
+
+        Queues are created lazily so the gateway can serve arbitrary recipient
+        ids without preconfiguration. The first ``/send`` or ``/recv`` for a
+        recipient materializes the queue.
+        """
+
+        queue = self.inboxes.get(recipient_id)
+        if queue is None:
+            queue = asyncio.Queue()
+            self.inboxes[recipient_id] = queue
+        return queue
+
+    def record_outbound(
+        self,
+        *,
+        sender_id: str,
+        recipient_id: str,
+        content: str,
+    ) -> str | None:
+        """Append an ``OUTBOUND_MESSAGE`` ActionRecord for a send, if audited.
+
+        Under BASELINE this is a no-op and returns ``None``: the baseline
+        condition simulates "deployment without audit infrastructure" so no
+        log exists to append to. Under PASSIVE or ENFORCE the record is
+        appended to the primary ``ActionLog`` and the assigned ``action_id``
+        is returned.
+
+        Policy hooks, phase tagging, shadow double-write, and cassette
+        recording are deliberately omitted at this stage; they land in
+        subsequent tasks (A4 side channels, A5 cassette, C5 MSWM wiring).
+        """
+
+        if self.condition == AuditCondition.BASELINE or self.action_log is None:
+            return None
+
+        action_id = f"act-{uuid.uuid4().hex[:12]}"
+        record = ActionRecord(
+            action_id=action_id,
+            prev_hash=self.action_log.head_hash(sender_id),
+            agent_id=sender_id,
+            action_type=ActionType.OUTBOUND_MESSAGE,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=SocialPhase.DISCOVERY,
+            payload={"recipient_id": recipient_id, "content": content},
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+        )
+        self.action_log.append(record)
+        return action_id
