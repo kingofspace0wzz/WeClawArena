@@ -397,14 +397,18 @@ class Session:
         2. Mint a stable ``action_id`` up front so every POLICY_DECISION
            emitted here can reference the target action even when that
            target is ultimately blocked (no row written).
-        3. For each hook matching ``_HOOK_KIND_FOR_ACTION[action_type]``,
-           evaluate against a provisional ActionRecord whose payload carries
-           the CURRENT (post-previous-rewrite) content under ENFORCE or the
-           ORIGINAL content under PASSIVE, emit a POLICY_DECISION row to
-           primary + shadow + cassette, and update the rewrite/block state.
-        4. If blocked under ENFORCE, return early — no primary record is
-           appended.
-        5. Append the final record to primary log, shadow log, and cassette.
+        3. Apply a provisional MSWM update so hooks see the fresh state
+           (spec §2.6 "MSWM is updated before policy hooks run").
+        4. For each hook matching ``_HOOK_KIND_FOR_ACTION[action_type]``,
+           evaluate against a provisional ActionRecord and emit a
+           POLICY_DECISION row per verdict.
+        5. If blocked under ENFORCE, revert the provisional MSWM update
+           and return early — no primary record is appended.
+        6. Under ENFORCE, if a rewrite modified ``mentioned_items`` the
+           provisional MSWM update no longer matches the persisted
+           payload — revert the provisional and re-apply MSWM from the
+           rewritten payload so MSWM, action log, and cassette agree.
+        7. Append the final record to primary log, shadow log, and cassette.
 
         Under BASELINE this always returns an empty :class:`RecordOutcome`.
         """
@@ -432,15 +436,24 @@ class Session:
 
         original_content = hook_target_content
         current_content = hook_target_content
+        # Track the mentioned_items list separately so rewrites that drop
+        # items get reflected in the final payload AND in MSWM.
+        original_mentioned = list(payload.get("mentioned_items") or [])
+        current_mentioned: list[str] | None = (
+            list(original_mentioned) if "mentioned_items" in payload else None
+        )
         blocked = False
+        rewrite_decision: PolicyDecision | None = None
 
         # Build a provisional representing the current action so MSWM can
         # update immediately and so hooks can see the fresh state (spec §2.6
         # explicitly says MSWM is updated before policy hooks run). We
         # rebuild the provisional inside the hook loop when a rewrite
-        # composes, but the MSWM update uses the ORIGINAL provisional only
-        # once — MSWM models what the agent intends, not the rewriter's
-        # edits.
+        # composes, but the MSWM update uses the ORIGINAL provisional once
+        # — MSWM models what the agent intends. After the hook loop, if a
+        # rewrite MODIFIED mentioned_items under ENFORCE, we revert the
+        # provisional update and re-apply MSWM from the rewritten payload
+        # so the persisted record and MSWM agree.
         initial_provisional = ActionRecord(
             action_id=action_id,
             prev_hash=self.action_log.head_hash(agent_id),
@@ -469,6 +482,11 @@ class Session:
                     content_key = _content_key_for_action(action_type)
                     if content_key is not None:
                         provisional_payload[content_key] = current_content
+                if (
+                    self.condition == AuditCondition.ENFORCE
+                    and current_mentioned is not None
+                ):
+                    provisional_payload["mentioned_items"] = list(current_mentioned)
 
                 provisional = ActionRecord(
                     action_id=action_id,
@@ -504,11 +522,14 @@ class Session:
                     if decision.verdict == PolicyVerdict.BLOCK:
                         blocked = True
                         break
-                    if (
-                        decision.verdict == PolicyVerdict.REWRITE
-                        and decision.rewritten_content is not None
-                    ):
-                        current_content = decision.rewritten_content
+                    if decision.verdict == PolicyVerdict.REWRITE:
+                        rewrite_decision = decision
+                        if decision.rewritten_content is not None:
+                            current_content = decision.rewritten_content
+                        if decision.rewritten_mentioned_items is not None:
+                            current_mentioned = list(
+                                decision.rewritten_mentioned_items
+                            )
 
         if blocked:
             # No primary record, no cassette line for the action itself;
@@ -518,18 +539,27 @@ class Session:
             self.mswm.revert_action(initial_provisional)
             return RecordOutcome(action_id=None, blocked=True)
 
-        # Build the final payload: under ENFORCE with a rewrite, the
-        # persisted content is the post-rewrite content; otherwise the
-        # original payload wins.
+        # Build the final payload. Under ENFORCE a rewrite may have changed
+        # ``content`` and/or ``mentioned_items``; apply those to the payload
+        # before constructing the final record.
         final_payload = dict(payload)
-        if (
+        content_changed = (
             self.condition == AuditCondition.ENFORCE
             and hook_target_content is not None
             and current_content != original_content
-        ):
+        )
+        if content_changed:
             content_key = _content_key_for_action(action_type)
             if content_key is not None:
                 final_payload[content_key] = current_content
+
+        mentioned_changed = (
+            self.condition == AuditCondition.ENFORCE
+            and current_mentioned is not None
+            and current_mentioned != original_mentioned
+        )
+        if mentioned_changed and current_mentioned is not None:
+            final_payload["mentioned_items"] = list(current_mentioned)
 
         record = ActionRecord(
             action_id=action_id,
@@ -543,6 +573,17 @@ class Session:
             integrity_level=IntegrityLevel.HASH_CHAINED,
             source_action_ids=sources,
         )
+
+        # MSWM reconciliation: if the rewrite altered ``mentioned_items``
+        # under ENFORCE, the provisional MSWM update (keyed on the ORIGINAL
+        # mentioned set) is now inconsistent with the persisted payload.
+        # Revert the provisional and re-apply MSWM from the final record
+        # so MSWM, action log, and cassette agree on what the recipient
+        # actually learned.
+        if mentioned_changed and rewrite_decision is not None:
+            self.mswm.revert_action(initial_provisional)
+            self.mswm.on_action(record)
+
         self.action_log.append(record)
 
         if self.shadow_log is not None:
@@ -554,15 +595,7 @@ class Session:
         if self.cassette is not None:
             self.cassette.record(kind=action_type.value, payload=final_payload)
 
-        rewritten = (
-            current_content
-            if (
-                self.condition == AuditCondition.ENFORCE
-                and hook_target_content is not None
-                and current_content != original_content
-            )
-            else None
-        )
+        rewritten = current_content if content_changed else None
         return RecordOutcome(
             action_id=action_id,
             rewritten_content=rewritten,

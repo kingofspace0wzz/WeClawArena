@@ -84,9 +84,11 @@ class MswmAwareHook:
             mode = inv.get("action", "block")
             if mode == "rewrite":
                 rewritten = self._redact(action, inv)
+                rewritten_items = self._rewrite_mentioned_items(action, inv)
                 return PolicyDecision(
                     verdict=PolicyVerdict.REWRITE,
                     rewritten_content=rewritten,
+                    rewritten_mentioned_items=rewritten_items,
                     reason=reason,
                     policy_id=policy_id,
                 )
@@ -102,14 +104,29 @@ class MswmAwareHook:
     def _redact(action: ActionRecord, invariant: dict[str, Any]) -> str:
         """Return a textual replacement for the outbound content.
 
-        The hook cannot rewrite the ``mentioned_items`` list in-place via
-        the ``PolicyDecision.rewritten_content`` contract (which only
-        carries the textual content). So the redaction inserts a
-        sentinel marker; the hook is deliberately conservative and
-        primarily relies on ``block`` in practice.
+        The hook signals which items were redacted via
+        ``rewritten_mentioned_items`` on the :class:`PolicyDecision`; the
+        text itself gets a sentinel marker appended so human readers of
+        cassettes can see the redaction occurred.
         """
 
         content = str(action.payload.get("content", ""))
         forbidden = invariant.get("forbidden_inference") or []
         marker = f" [redacted items referencing {', '.join(forbidden)}]"
         return content + marker
+
+    @staticmethod
+    def _rewrite_mentioned_items(
+        action: ActionRecord, invariant: dict[str, Any]
+    ) -> list[str]:
+        """Drop every forbidden item from ``payload.mentioned_items``.
+
+        Any item listed in the invariant's ``forbidden_inference`` is
+        considered the trigger; filtering it out makes the post-rewrite
+        payload consistent with the MSWM update that the Session must
+        re-apply after the hook returns.
+        """
+
+        mentioned = action.payload.get("mentioned_items") or []
+        forbidden = set(invariant.get("forbidden_inference") or [])
+        return [item for item in mentioned if item not in forbidden]

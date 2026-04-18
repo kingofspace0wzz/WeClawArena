@@ -15,6 +15,7 @@ class PolicyVerdict(StrEnum):
 class PolicyDecision(BaseModel):
     verdict: PolicyVerdict
     rewritten_content: str | None = None
+    rewritten_mentioned_items: list[str] | None = None
     reason: str | None = None
     policy_id: str | None = None
 

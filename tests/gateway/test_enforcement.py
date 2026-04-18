@@ -315,3 +315,96 @@ async def test_shadow_log_mirrors_primary_on_passive_send(tmp_path: Path) -> Non
     assert len(primary) == len(shadow)
     assert [r.action_id for r in primary] == [r.action_id for r in shadow]
     assert [r.action_type for r in primary] == [r.action_type for r in shadow]
+
+
+class MswmAwareRedactHook:
+    """Rewrite hook that drops ``forbidden_item`` from mentioned_items.
+
+    Mimics the MswmAwareHook rewrite mode: on trigger, returns a
+    PolicyDecision whose ``rewritten_mentioned_items`` excludes the
+    forbidden item. Used by the Fix-1 acceptance test to pin the MSWM
+    reconciliation invariant.
+    """
+
+    hook_kind = "message"
+
+    def __init__(self, forbidden_item: str) -> None:
+        self._forbidden = forbidden_item
+
+    def evaluate(self, *, action: ActionRecord, context: dict) -> PolicyDecision:
+        mentioned = list(action.payload.get("mentioned_items") or [])
+        if self._forbidden not in mentioned:
+            return PolicyDecision(verdict=PolicyVerdict.ALLOW)
+        rewritten = [m for m in mentioned if m != self._forbidden]
+        return PolicyDecision(
+            verdict=PolicyVerdict.REWRITE,
+            rewritten_content=action.payload.get("content", "")
+            + f" [redacted {self._forbidden}]",
+            rewritten_mentioned_items=rewritten,
+            policy_id="mswm-redact",
+            reason=f"redact {self._forbidden}",
+        )
+
+
+@pytest.mark.asyncio
+async def test_enforce_rewrite_updates_mswm_to_match_rewritten_content(
+    tmp_path: Path,
+) -> None:
+    """ENFORCE + rewrite that drops a mentioned item ⇒ MSWM reflects the
+    rewritten payload, not the original.
+
+    This is the Codex-flagged Fix-1 invariant: previously the provisional
+    MSWM update left ``items_learned_from_j`` carrying the redacted item
+    even though the persisted action removed it. The Session now reverts
+    and re-applies MSWM so the peer's peer model agrees with the
+    persisted payload.
+    """
+
+    session = _enforce_session(
+        tmp_path, [MswmAwareRedactHook("forbidden_item")]
+    )
+    outcome = await session.record_outbound(
+        sender_id="alice",
+        recipient_id="bob",
+        content="hello",
+        mentioned_items=["ok_item", "forbidden_item"],
+    )
+    assert outcome.blocked is False
+    assert outcome.rewritten_content is not None
+
+    # MSWM must NOT carry forbidden_item on either side.
+    sender_model = session.mswm.get("alice", "bob")
+    recipient_model = session.mswm.get("bob", "alice")
+    told_items = {item for item, _ in sender_model.items_told_to_j}
+    learned_items = {item for item, _ in recipient_model.items_learned_from_j}
+    assert told_items == {"ok_item"}
+    assert learned_items == {"ok_item"}
+    assert "forbidden_item" not in told_items
+    assert "forbidden_item" not in learned_items
+
+
+@pytest.mark.asyncio
+async def test_passive_rewrite_leaves_mswm_reflecting_original(
+    tmp_path: Path,
+) -> None:
+    """PASSIVE + rewrite verdict ⇒ MSWM still reflects the ORIGINAL payload.
+
+    PASSIVE logs the rewrite as a policy_decision but the original
+    action proceeds unchanged. MSWM, like the persisted record, mirrors
+    the original (still-leaked) items_learned_from_j.
+    """
+
+    session = _passive_session(
+        tmp_path, [MswmAwareRedactHook("forbidden_item")]
+    )
+    await session.record_outbound(
+        sender_id="alice",
+        recipient_id="bob",
+        content="hello",
+        mentioned_items=["ok_item", "forbidden_item"],
+    )
+
+    recipient_model = session.mswm.get("bob", "alice")
+    learned_items = {item for item, _ in recipient_model.items_learned_from_j}
+    # Under PASSIVE the original payload stands — forbidden_item leaked.
+    assert learned_items == {"ok_item", "forbidden_item"}
