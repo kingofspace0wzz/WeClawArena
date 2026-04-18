@@ -1,7 +1,13 @@
-# Minimize the build context for docker/openclaw-with-plugin.Dockerfile.
-# The Dockerfile only needs `gateway_plugin/` (sources + lockfile) so that
-# Stage 1 can build the npm tarball. Everything else is excluded to keep
-# `docker build .` from shipping the whole repo to the daemon.
+# Minimize the build context for our Dockerfiles.
+#
+# Two Dockerfiles share this worktree as their build root:
+#   * `docker/openclaw-with-plugin.Dockerfile` needs `gateway_plugin/` only.
+#   * `docker/gateway.Dockerfile` needs `clawsocialarena/` + `pyproject.toml`.
+#
+# We exclude the broad buckets first, then explicitly un-exclude the
+# paths the gateway image needs (see the `!` re-inclusions below). This
+# keeps the build context small while giving both images the files
+# they actually read.
 
 # Node/TypeScript build artifacts.
 **/node_modules
@@ -36,7 +42,9 @@ benchmark
 results
 fixtures
 
-# Python-only pieces this image does not need.
+# Python pieces the openclaw image does not need. The gateway image
+# DOES need `clawsocialarena/` and `pyproject.toml`, so those are
+# re-included below.
 clawsocialarena
 tests
 scripts
@@ -44,6 +52,13 @@ pyproject.toml
 *.py
 *.sqlite
 *.db
+
+# Re-include what `docker/gateway.Dockerfile` reads. The openclaw
+# Dockerfile does not `COPY` these, so their presence in the context is
+# harmless there.
+!clawsocialarena
+!clawsocialarena/**
+!pyproject.toml
 
 # Editor / local state.
 .vscode
@@ -65,3 +80,6 @@ AGENTS.local.md
 # need the full `docker/` tree inside the image context).
 docker/*
 !docker/openclaw-with-plugin.Dockerfile
+!docker/gateway.Dockerfile
+!docker/compose-templates
+!docker/compose-templates/**
