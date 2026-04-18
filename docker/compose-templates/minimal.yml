@@ -1,0 +1,58 @@
+# Minimal 1-gateway + 1-OpenClaw scenario compose.
+#
+# Used by `ComposeRunner` tests (Task A13) and as a sanity baseline
+# before the first real scenario compose template lands. The gateway
+# exposes port 8080 on the host so the test harness can poll
+# `http://localhost:8080/healthz`; the OpenClaw agent stays on the
+# private `clawnet` bridge and reaches the gateway by service name.
+#
+# Build contexts point at the worktree root (`../..`) so each
+# Dockerfile sees the full repo layout it was written against.
+
+services:
+  gateway:
+    image: clawsocialarena/gateway:dev
+    build:
+      context: ../..
+      dockerfile: docker/gateway.Dockerfile
+    environment:
+      - CLAWSOCIAL_GATEWAY_PORT=8080
+    ports:
+      # Expose the gateway on the host so the test harness can reach
+      # `/healthz` without entering the compose network.
+      - "8080:8080"
+    networks: [clawnet]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"
+      interval: 2s
+      retries: 20
+
+  alice:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../..
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      # Agent-side env the plugin picks up when it registers a channel.
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=alice
+    networks: [clawnet]
+    # The OpenClaw CLI surface that a real agent invokes lands in Task
+    # A14; for this minimal template we only need the container to stay
+    # up while the gateway is healthy. Override the image's `openclaw`
+    # entrypoint with a no-op idle so compose reports both services as
+    # `running` without invoking any undocumented OpenClaw subcommand.
+    entrypoint: ["sh", "-c"]
+    command: ["sleep infinity"]
+
+networks:
+  clawnet:
+    driver: bridge
+    internal: false
