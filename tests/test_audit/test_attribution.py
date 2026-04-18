@@ -8,7 +8,16 @@ from clawsocialarena.types import (
 )
 
 
-def _pol(action_id: str, agent: str, verdict: str = "rewrite") -> ActionRecord:
+def _pol(
+    action_id: str,
+    agent: str,
+    verdict: str = "rewrite",
+    *,
+    target_action_id: str | None = None,
+) -> ActionRecord:
+    payload: dict = {"verdict": verdict, "policy_id": "p1", "reason": "x"}
+    if target_action_id is not None:
+        payload["target_action_id"] = target_action_id
     return ActionRecord(
         action_id=action_id,
         prev_hash="0" * 64,
@@ -17,7 +26,7 @@ def _pol(action_id: str, agent: str, verdict: str = "rewrite") -> ActionRecord:
         timestamp="2026-04-15T00:00:00Z",
         execution_phase=ExecutionPhase.NOMINAL,
         social_phase=SocialPhase.DISCOVERY,
-        payload={"verdict": verdict, "policy_id": "p1", "reason": "x"},
+        payload=payload,
         integrity_level=IntegrityLevel.HASH_CHAINED,
     )
 
@@ -115,35 +124,48 @@ def test_cascade_window_limits_edges():
     assert ("p1", "m2", "L1") not in edge_pairs
 
 
-def test_causal_attribution_via_source_ids():
-    """If an outbound has source_action_ids that include a policy_decision, it's an L1 descendant."""
-    builder = AttributionGraphBuilder(cascade_window=0)  # disable proximity fallback
-    log = [
-        _pol("p1", "a", verdict="rewrite"),
-        _record_with_sources("a", 1, source_ids=["p1"]),  # cites p1 as source
-        _record_with_sources("a", 2, source_ids=[]),  # unrelated
-    ]
-    dag = builder.build(action_log=log)
-    # p1 is L0; a-1 is L1 (it cites p1); a-2 is NOT in the DAG (no causal link)
-    node_ids = {n["id"] for n in dag["nodes"]}
-    assert "p1" in node_ids
-    assert "a-1" in node_ids
-    assert "a-2" not in node_ids
-    edges = {(e["src"], e["dst"], e["label"]) for e in dag["edges"]}
-    assert ("p1", "a-1", "L1") in edges
+def test_causal_attribution_roots_at_target_action() -> None:
+    """Fix-2 rooting: the target action is L0; its source_action_ids are L1.
 
+    Previously these tests fabricated descendants that cited the
+    policy_decision as a source — a pattern that does not occur in real
+    gateway traces, because agents do not observe their own
+    policy_decision rows. The replacement is a realistic shape: an
+    outbound action cites an upstream outbound via source_action_ids,
+    and a policy_decision names the downstream outbound as its target.
+    """
 
-def test_transitive_attribution():
-    """Chain: p1 -> a-1 -> a-2 via source_ids."""
     builder = AttributionGraphBuilder(cascade_window=0)
-    log = [
-        _pol("p1", "a", verdict="rewrite"),
-        _record_with_sources("a", 1, source_ids=["p1"]),
-        _record_with_sources("a", 2, source_ids=["a-1"]),  # descends via a-1
-    ]
+    upstream = _record_with_sources("a", 1, source_ids=[])
+    downstream = _record_with_sources("a", 2, source_ids=["a-1"])
+    pol = _pol("p1", "a", verdict="rewrite", target_action_id="a-2")
+    # An unrelated third action should not enter the DAG.
+    unrelated = _record_with_sources("a", 3, source_ids=[])
+    log = [upstream, downstream, pol, unrelated]
+    dag = builder.build(action_log=log)
+
+    node_ids = {n["id"] for n in dag["nodes"]}
+    assert "a-2" in node_ids  # L0 target
+    assert "a-1" in node_ids  # L1 ancestor via source_action_ids
+    assert "p1" in node_ids  # policy annotation
+    assert "a-3" not in node_ids
+    edges = {(e["src"], e["dst"], e["label"]) for e in dag["edges"]}
+    assert ("a-2", "a-1", "L1") in edges
+    assert ("a-2", "p1", "policy") in edges
+
+
+def test_transitive_attribution_via_source_ids() -> None:
+    """Chain: L0 target ← a-2 ← a-1 via source_ids (backward walk)."""
+
+    builder = AttributionGraphBuilder(cascade_window=0)
+    root = _record_with_sources("a", 1, source_ids=[])
+    middle = _record_with_sources("a", 2, source_ids=["a-1"])
+    target = _record_with_sources("a", 3, source_ids=["a-2"])
+    pol = _pol("p1", "a", verdict="rewrite", target_action_id="a-3")
+    log = [root, middle, target, pol]
     dag = builder.build(action_log=log)
     node_ids = {n["id"] for n in dag["nodes"]}
-    assert {"p1", "a-1", "a-2"} <= node_ids
+    assert {"a-3", "a-2", "a-1", "p1"} <= node_ids
 
 
 def test_fallback_to_proximity_when_no_source_ids():

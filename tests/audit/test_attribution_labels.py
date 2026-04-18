@@ -1,4 +1,11 @@
-"""Tests for DAG node labels L0 / L1 / LX / LR / LF (Phase C / Task C9)."""
+"""Tests for DAG node labels L0 / L1 / LX / LR / LF (Phase C / Task C9).
+
+Fix-2 rooting semantics: the L0 node is the policy_decision's
+``target_action_id``, and the DAG walks BACKWARD to ancestors. L1 / LX /
+LR / LF therefore label ancestor nodes — the action that caused the
+forbidden inference, the cascade disclosure, the repair retraction, or
+the forgotten outbound.
+"""
 
 from __future__ import annotations
 
@@ -62,97 +69,149 @@ def _label_of(dag: dict, node_id: str) -> str:
     raise AssertionError(f"node {node_id} not in DAG: {dag}")
 
 
-def test_policy_violation_gets_l0_label() -> None:
-    log = [_policy("pol", "alice", target="m1")]
+def test_policy_violation_target_gets_l0_label() -> None:
+    """The policy_decision's target action is the L0 node (Fix-2 rooting).
+
+    The old builder treated the policy_decision row itself as L0; Fix 2
+    roots at the target so causal chains can walk backward from the
+    offending action.
+    """
+
+    target = _outbound("m1", "alice", "bob", mentioned=["z"])
+    log = [target, _policy("pol", "alice", target="m1")]
     dag = AttributionGraphBuilder(action_log=log).build()
-    assert _label_of(dag, "pol") == "L0"
+    assert _label_of(dag, "m1") == "L0"
 
 
-def test_descendant_default_is_l1() -> None:
-    log = [
-        _policy("pol", "alice", target="m1"),
-        _outbound("m1", "alice", "bob", mentioned=["z"], sources=["pol"]),
-    ]
-    dag = AttributionGraphBuilder(action_log=log).build()
-    assert _label_of(dag, "m1") == "L1"
+def test_ancestor_via_source_action_ids_gets_l1_label() -> None:
+    """An ancestor cited by source_action_ids gets the default L1 label."""
 
-
-def test_cascaded_disclosure_gets_lx_label() -> None:
-    """Same sender, same item, new recipient → LX."""
-    # Alice tells Bob z; later the L0 fires and Alice's NEW message to Carol
-    # mentioning z again is a cascade to a different recipient.
-    a_to_b = _outbound("a1", "alice", "bob", mentioned=["z"])
-    pol = _policy("pol", "alice", target="a2")
-    a_to_c = _outbound(
-        "a2", "alice", "carol", mentioned=["z"], sources=["pol"]
-    )
-    log = [a_to_b, pol, a_to_c]
-
-    mswm = MSWM()
-    # Replay to populate items_told_to_j for (alice, bob).
-    for rec in log:
-        mswm.on_action(rec)
-
-    dag = AttributionGraphBuilder(action_log=log, mswm=mswm).build()
-    assert _label_of(dag, "a2") == "LX"
-
-
-def test_repair_action_gets_lr_label() -> None:
-    """An outbound with ``repair_of`` citing an existing action gets LR."""
-    original = _outbound("a1", "alice", "bob", mentioned=["z"])
-    pol = _policy("pol", "alice", target="a2")
-    repair = _outbound(
-        "a2",
+    ancestor = _outbound("parent", "alice", "bob", mentioned=["z"])
+    target = _outbound(
+        "target",
         "alice",
         "bob",
         mentioned=["z"],
-        sources=["pol"],
-        repair_of="a1",
+        sources=["parent"],
     )
-    log = [original, pol, repair]
+    pol = _policy("pol", "alice", target="target")
+    log = [ancestor, target, pol]
+    dag = AttributionGraphBuilder(action_log=log).build()
+    # target is L0; parent is an L1 ancestor.
+    assert _label_of(dag, "target") == "L0"
+    assert _label_of(dag, "parent") == "L1"
+
+
+def test_cascaded_ancestor_gets_lx_label() -> None:
+    """Same sender's older disclosure to a different peer → LX on the ancestor.
+
+    Alice disclosed z to bob, then alice disclosed z to carol (cascade).
+    Policy fires on alice's carol disclosure. Walking backward cites
+    alice's earlier bob disclosure as the ancestor — that ancestor's
+    recipient differs from the target's recipient, so it gets LX.
+    """
+
+    parent = _outbound("parent", "alice", "bob", mentioned=["z"])
+    target = _outbound(
+        "target",
+        "alice",
+        "carol",
+        mentioned=["z"],
+        sources=["parent"],
+    )
+    pol = _policy("pol", "alice", target="target")
+    log = [parent, target, pol]
+
+    mswm = MSWM()
+    for rec in log:
+        mswm.on_action(rec)
+
+    dag = AttributionGraphBuilder(action_log=log, mswm=mswm).build()
+    assert _label_of(dag, "parent") == "LX"
+
+
+def test_repair_ancestor_gets_lr_label() -> None:
+    """An ancestor marked as a repair of an even earlier action gets LR."""
+
+    original = _outbound("original", "alice", "bob", mentioned=["z"])
+    repair = _outbound(
+        "repair",
+        "alice",
+        "bob",
+        mentioned=["z"],
+        sources=["original"],
+        repair_of="original",
+    )
+    target = _outbound(
+        "target",
+        "alice",
+        "bob",
+        mentioned=["z"],
+        sources=["repair"],
+    )
+    pol = _policy("pol", "alice", target="target")
+    log = [original, repair, target, pol]
     mswm = MSWM()
     for rec in log:
         mswm.on_action(rec)
     dag = AttributionGraphBuilder(action_log=log, mswm=mswm).build()
-    assert _label_of(dag, "a2") == "LR"
+    assert _label_of(dag, "repair") == "LR"
 
 
 def test_forgotten_outbound_gets_lf_label() -> None:
-    """Outbound whose MSWM tuples were reverted (e.g. a block) → LF."""
+    """Outbound whose MSWM tuples were reverted (e.g. a block) → LF.
 
-    a1 = _outbound("a1", "alice", "bob", mentioned=["z"])
-    blocked = _outbound("a2", "alice", "carol", mentioned=["z"])
-    pol = _policy("pol", "alice", target="a2")
-    log = [a1, blocked, pol]
+    The forgotten action is not part of the policy's target chain; it is
+    a separate outbound whose MSWM footprint was cleared. It still ends
+    up in the DAG as an LF orphan so analysts can see the block.
+    """
 
-    # Build MSWM, then simulate the Session's revert on the blocked action.
+    # Build a minimal scenario where some action 'blocked' was blocked
+    # and another policy_decision targets a real outbound 'target'.
+    target = _outbound("target", "alice", "bob", mentioned=["z"])
+    blocked = _outbound("blocked", "alice", "carol", mentioned=["z"])
+    pol = _policy("pol", "alice", target="target")
+    log = [target, blocked, pol]
+
     mswm = MSWM()
-    mswm.on_action(a1)
+    mswm.on_action(target)
     mswm.on_action(blocked)
     mswm.revert_action(blocked)  # Block causes MSWM revert.
 
     dag = AttributionGraphBuilder(action_log=log, mswm=mswm).build()
-    # pol is L0; a2 is orphaned (not cited by anything) but its mswm
-    # footprint is gone → LF.
-    assert _label_of(dag, "a2") == "LF"
+    # blocked is orphaned (not cited by anything) but its mswm footprint
+    # is gone → LF.
+    assert _label_of(dag, "blocked") == "LF"
 
 
-def test_lr_takes_precedence_over_lx() -> None:
-    """When both repair and cascade apply, LR wins (explicit repair marker)."""
-    a1 = _outbound("a1", "alice", "bob", mentioned=["z"])
-    # a2 would be LX (z cascaded to carol) but carries a repair_of marker.
-    pol = _policy("pol", "alice", target="a2")
-    a2 = _outbound(
-        "a2",
+def test_lr_takes_precedence_over_lx_on_ancestor() -> None:
+    """When an ancestor has both a repair marker and a cascade, LR wins."""
+
+    # alice's earlier disclosure to bob is the original.
+    original = _outbound("original", "alice", "bob", mentioned=["z"])
+    # alice's repair (to a new peer carol + repair_of marker) is the
+    # ancestor of the target.
+    repair = _outbound(
+        "repair",
         "alice",
         "carol",
         mentioned=["z"],
-        sources=["pol"],
-        repair_of="a1",
+        sources=["original"],
+        repair_of="original",
     )
-    log = [a1, pol, a2]
+    target = _outbound(
+        "target",
+        "alice",
+        "carol",
+        mentioned=["z"],
+        sources=["repair"],
+    )
+    pol = _policy("pol", "alice", target="target")
+    log = [original, repair, target, pol]
     mswm = MSWM()
     for rec in log:
         mswm.on_action(rec)
     dag = AttributionGraphBuilder(action_log=log, mswm=mswm).build()
-    assert _label_of(dag, "a2") == "LR"
+    # repair matches both LR (has repair_of) and LX (new recipient carol
+    # vs old bob). LR wins.
+    assert _label_of(dag, "repair") == "LR"
