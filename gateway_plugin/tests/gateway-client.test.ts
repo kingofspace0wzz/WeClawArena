@@ -399,3 +399,64 @@ describe('GatewayClient baseUrl normalisation', () => {
     expect(captured[0].url).toBe('/send');
   });
 });
+
+describe('GatewayClient source_action_ids threading', () => {
+  it('forwards source_action_ids on /send', async () => {
+    setPlan('POST', '/send', { status: 200, body: { action_id: 's1' } });
+    const client = new GatewayClient({ baseUrl });
+    await client.send({
+      sender_id: 'alice',
+      recipient_id: 'bob',
+      content: 'hi',
+      source_action_ids: ['act-upstream-1', 'act-upstream-2'],
+    });
+    expect(captured[0].body).toEqual({
+      sender_id: 'alice',
+      recipient_id: 'bob',
+      content: 'hi',
+      source_action_ids: ['act-upstream-1', 'act-upstream-2'],
+    });
+  });
+
+  it('forwards source_action_ids on /memory_write', async () => {
+    setPlan('POST', '/memory_write', {
+      status: 200,
+      body: { action_id: 'mw-3' },
+    });
+    const client = new GatewayClient({ baseUrl });
+    await client.recordMemoryWrite({
+      agent_id: 'alice',
+      content: 'note',
+      tags: ['x'],
+      source_action_ids: ['act-parent'],
+    });
+    expect(captured[0].body).toEqual({
+      agent_id: 'alice',
+      content: 'note',
+      tags: ['x'],
+      source_action_ids: ['act-parent'],
+    });
+  });
+
+  it('forwards source_action_ids on /mcp/<tool_name>', async () => {
+    setPlan('POST', '/mcp/search', {
+      status: 200,
+      body: {
+        tool_call_action_id: 'tc-1',
+        tool_observation_action_id: 'obs-1',
+        observation: {},
+      },
+    });
+    const client = new GatewayClient({ baseUrl });
+    await client.callMcp('search', {
+      agent_id: 'alice',
+      arguments: { q: 'hi' },
+      source_action_ids: ['act-parent-mcp'],
+    });
+    expect(captured[0].body).toEqual({
+      agent_id: 'alice',
+      arguments: { q: 'hi' },
+      source_action_ids: ['act-parent-mcp'],
+    });
+  });
+});

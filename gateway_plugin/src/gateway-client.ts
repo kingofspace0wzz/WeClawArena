@@ -12,7 +12,17 @@ export interface GatewayClientOptions {
   timeoutMs?: number;
 }
 
-export interface SendBody {
+// Provenance field threaded through every endpoint that records an
+// ActionRecord. The Python ``ActionRecord`` dataclass exposes
+// ``source_action_ids: list[str]`` so Phase C (MSWM) and Phase F
+// (attribution) can walk the causal chain without positional
+// heuristics. The gateway defaults it to ``[]`` when the caller omits
+// it, so this is strictly optional on the wire.
+export interface ActionProvenance {
+  source_action_ids?: string[];
+}
+
+export interface SendBody extends ActionProvenance {
   sender_id: string;
   recipient_id: string;
   content: string;
@@ -23,26 +33,26 @@ export interface Inbound {
   content: string;
 }
 
-export interface ToolCallBody {
+export interface ToolCallBody extends ActionProvenance {
   agent_id: string;
   tool_name: string;
   arguments: Record<string, unknown>;
 }
 
-export interface ToolObservationBody {
+export interface ToolObservationBody extends ActionProvenance {
   agent_id: string;
   tool_call_action_id: string;
   tool_name: string;
   observation: string;
 }
 
-export interface MemoryWriteBody {
+export interface MemoryWriteBody extends ActionProvenance {
   agent_id: string;
   content: string;
   tags?: string[];
 }
 
-export interface LlmCallBody {
+export interface LlmCallBody extends ActionProvenance {
   agent_id: string;
   input_tokens: number;
   output_tokens: number;
@@ -51,7 +61,7 @@ export interface LlmCallBody {
   model: string;
 }
 
-export interface McpCallBody {
+export interface McpCallBody extends ActionProvenance {
   agent_id: string;
   arguments: Record<string, unknown>;
 }
@@ -140,13 +150,22 @@ export class GatewayClient {
   async recordMemoryWrite(body: MemoryWriteBody): Promise<string | null> {
     // The Python server defaults `tags` to `[]`; we mirror that here so the
     // wire payload is deterministic regardless of caller-side omission.
-    const payload: Required<Pick<MemoryWriteBody, 'agent_id' | 'content'>> & {
+    // ``source_action_ids`` is forwarded verbatim so Phase C/F analysis
+    // code can walk causal links even when this client is talking to a
+    // BASELINE gateway that will discard them.
+    const payload: {
+      agent_id: string;
+      content: string;
       tags: string[];
+      source_action_ids?: string[];
     } = {
       agent_id: body.agent_id,
       content: body.content,
       tags: body.tags ?? [],
     };
+    if (body.source_action_ids !== undefined) {
+      payload.source_action_ids = body.source_action_ids;
+    }
     return this.postForActionId('/memory_write', payload);
   }
 

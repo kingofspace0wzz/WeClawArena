@@ -136,3 +136,79 @@ async def test_recv_validates_required_recipient(tmp_path: Path) -> None:
     async with TestClient(TestServer(app)) as client:
         resp = await client.post("/recv", json={})
         assert resp.status == 400
+
+
+@pytest.mark.asyncio
+async def test_send_threads_source_action_ids_into_record(tmp_path: Path) -> None:
+    """Optional source_action_ids on /send lands in ActionRecord.source_action_ids.
+
+    Phase A.5 Fix 3: MSWM (C) and attribution (F) walk this list to
+    derive causal links without positional heuristics, so the gateway
+    must persist whatever the caller provides verbatim.
+    """
+
+    session = _make_passive_session(tmp_path)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/send",
+            json={
+                "sender_id": "alice",
+                "recipient_id": "bob",
+                "content": "hi",
+                "source_action_ids": ["act-upstream-1", "act-upstream-2"],
+            },
+        )
+        assert resp.status == 200
+
+    assert session.action_log is not None
+    rows = session.action_log.read_all()
+    assert len(rows) == 1
+    assert rows[0].source_action_ids == ["act-upstream-1", "act-upstream-2"]
+
+
+@pytest.mark.asyncio
+async def test_send_rejects_malformed_source_action_ids(tmp_path: Path) -> None:
+    """Non-array source_action_ids yields a uniform HTTP 400."""
+
+    session = _make_passive_session(tmp_path)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/send",
+            json={
+                "sender_id": "alice",
+                "recipient_id": "bob",
+                "content": "hi",
+                "source_action_ids": "not-an-array",
+            },
+        )
+        assert resp.status == 400
+        body = await resp.json()
+        assert body["field"] == "source_action_ids"
+
+
+@pytest.mark.asyncio
+async def test_memory_write_threads_source_action_ids(tmp_path: Path) -> None:
+    """/memory_write forwards source_action_ids into the ActionRecord."""
+
+    session = _make_passive_session(tmp_path)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/memory_write",
+            json={
+                "agent_id": "alice",
+                "content": "note",
+                "tags": ["t1"],
+                "source_action_ids": ["act-source"],
+            },
+        )
+        assert resp.status == 200
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    assert len(rows) == 1
+    assert rows[0].source_action_ids == ["act-source"]
