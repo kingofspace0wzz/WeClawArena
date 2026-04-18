@@ -44,6 +44,7 @@ from clawsocialarena.eval.scorecard import (
     TaskScorecard,
 )
 from clawsocialarena.saf.saf_scorer import SAFScorer
+from clawsocialarena.saf.scorers import policy_checkability
 from clawsocialarena.scenario.models import GTBundle
 from clawsocialarena.types import ActionRecord
 
@@ -109,9 +110,12 @@ class EvalRunner:
         # ------------------------------------------------------------------
         # Stage 2 — Trace reconstruction.
         # ------------------------------------------------------------------
-        mswm = MSWM()
-        for rec in a_records:
-            mswm.on_action(rec)
+        # Replay per-turn MSWM snapshots so ψ can evaluate inferential
+        # policies at each policy's ``evaluation_turn``. The terminal
+        # snapshot (index ``len(a_records)``) is the same state the
+        # attribution builder uses.
+        mswm_snapshots = policy_checkability.snapshots_from_log(a_records)
+        mswm = mswm_snapshots[-1] if mswm_snapshots else MSWM()
         phase_tags = self._tag_phases(a_records)
 
         # ------------------------------------------------------------------
@@ -132,6 +136,8 @@ class EvalRunner:
             shadow_log=s_records,
             produced_dag=produced_dag,
             gt=gt,
+            mswm=mswm,
+            mswm_snapshots=mswm_snapshots,
         )
 
         # ------------------------------------------------------------------
