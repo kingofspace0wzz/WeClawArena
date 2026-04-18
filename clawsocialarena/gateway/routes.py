@@ -234,6 +234,70 @@ async def memory_write(request: web.Request) -> web.Response:
     return web.json_response({"action_id": action_id})
 
 
+async def mcp_dispatch(request: web.Request) -> web.Response:
+    """Dispatch a tool call to the session's in-process ``McpHost``.
+
+    Path: ``POST /mcp/{tool_name}``.
+    Request JSON: ``{"agent_id": str, "arguments": dict}``.
+    Response JSON:
+        ``{"tool_call_action_id": str | null,
+           "tool_observation_action_id": str | null,
+           "observation": dict}``.
+
+    Flow: validate the two required fields, record a ``TOOL_CALL`` action,
+    dispatch through ``session.mcp_host``, record a
+    ``TOOL_OBSERVATION_RETURN`` linked to the call, and return the
+    observation dict unchanged. Unknown tool names yield HTTP 404;
+    missing or malformed fields yield HTTP 400. Under BASELINE both
+    action ids are ``null`` but the handler still runs.
+    """
+
+    tool_name = request.match_info["tool_name"]
+    body = await _read_json(request)
+    missing = _require_fields(body, "agent_id", "arguments")
+    if missing:
+        return _bad_request(missing)
+
+    arguments = body["arguments"]
+    if not isinstance(arguments, dict):
+        return web.json_response(
+            {"error": "invalid_field_type", "field": "arguments", "expected": "object"},
+            status=400,
+        )
+
+    agent_id: str = body["agent_id"]
+    session = _get_session(request)
+
+    tc_action_id = session.record_tool_call(
+        agent_id=agent_id,
+        tool_name=tool_name,
+        arguments=arguments,
+    )
+
+    try:
+        observation = await session.mcp_host.dispatch(tool_name, arguments)
+    except KeyError:
+        return web.json_response(
+            {"error": "unknown tool", "tool_name": tool_name},
+            status=404,
+        )
+
+    obs_action_id = session.record_tool_observation(
+        agent_id=agent_id,
+        tool_call_action_id=tc_action_id or "",
+        tool_name=tool_name,
+        observation=json.dumps(observation, sort_keys=True, ensure_ascii=False),
+    )
+
+    return web.json_response(
+        {
+            "tool_call_action_id": tc_action_id,
+            "tool_observation_action_id": obs_action_id,
+            "observation": observation,
+        }
+    )
+
+
 async def llm_call(request: web.Request) -> web.Response:
     """Log an ``LLM_CALL`` token-accounting record.
 

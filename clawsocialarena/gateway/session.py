@@ -32,6 +32,7 @@ from clawsocialarena.action_log import ActionLog
 from clawsocialarena.audit.phase_tracker import PhaseTracker
 from clawsocialarena.audit.shadow_log import ShadowLog
 from clawsocialarena.gateway.cassette import CassetteRecorder
+from clawsocialarena.gateway.mcp_host import McpHost
 from clawsocialarena.protocols.policy_hook import PolicyHook
 from clawsocialarena.types import (
     ActionRecord,
@@ -57,6 +58,10 @@ class Session:
         hooks: Ordered list of ``PolicyHook`` instances to consult at egress.
         inboxes: Lazily-created per-recipient message queues. Each entry is a
             FIFO of ``(sender_id, content)`` tuples waiting for a ``/recv``.
+        mcp_host: In-process MCP tool registry. Present under every audit
+            condition (BASELINE too) so scenario setup code has a uniform
+            registration surface; BASELINE dispatches still run but are not
+            logged.
     """
 
     scenario_id: str
@@ -67,6 +72,7 @@ class Session:
     cassette: CassetteRecorder | None = None
     hooks: list[PolicyHook] = field(default_factory=list)
     inboxes: dict[str, asyncio.Queue[tuple[str, str]]] = field(default_factory=dict)
+    mcp_host: McpHost = field(default_factory=McpHost)
 
     @classmethod
     def build(

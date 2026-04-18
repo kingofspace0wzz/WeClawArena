@@ -42,6 +42,7 @@ def build_app(session: Session) -> web.Application:
     app.router.add_post("/tool_observation_return", routes.tool_observation_return)
     app.router.add_post("/memory_write", routes.memory_write)
     app.router.add_post("/llm_call", routes.llm_call)
+    app.router.add_post("/mcp/{tool_name}", routes.mcp_dispatch)
     return app
 
 
