@@ -6,10 +6,18 @@ Usage::
         --out results/v1.0.0 --dry-run
 
 The script walks a :class:`~clawsocialarena.experiments.grid_config.GridRow`
-list, routes each row to either a live gateway session or (Task G3) a
-cassette replay, and persists one ``run_scorecard.json`` per row under
-``<out>/<model>/<condition>/<scenario_id>/``. Task G4 adds a cumulative
-``cost.csv`` at the top of the output tree with one row per scorecard.
+list, routes each row to either a live gateway session or (for rows
+tagged ``live_or_replay=replay``) a :class:`ReplayDriver` pass over a
+pre-recorded cassette, and persists one ``run_scorecard.json`` per row
+under ``<out>/<model>/<condition>/<scenario_id>/``. Task G4 adds a
+cumulative ``cost.csv`` at the top of the output tree with one row per
+scorecard.
+
+Replay rows never touch the network: the cassette's enriched format
+already carries every field needed to rehydrate the action log, so
+:class:`EvalRunner` can score the replayed stream deterministically and
+write a real :class:`RunScorecard` (with ``live_or_replay="replay"``)
+in place of the stub.
 
 Phase G lands the infrastructure only. Docker is not installed in this
 worktree and the LLM-API runs (tasks G5-G7) are deferred pending credit
@@ -151,6 +159,110 @@ def _row_is_complete(scorecard_path: Path) -> bool:
     return status != "pending"
 
 
+def _resolve_gt_bundle_path(cassette_path: Path) -> Path:
+    """Return the path to ``scenario.gt.json`` near a cassette.
+
+    Replay rows typically put the cassette under the scenario's fixture
+    directory. We look for ``scenario.gt.json`` in the same directory
+    and fall back to walking up one level, which covers both the
+    ``fixtures/scenarios/<scenario_id>/`` layout and the run-work-dir
+    layout ``results/.../<scenario_id>/cassette.jsonl``.
+    """
+
+    candidates = [
+        cassette_path.parent / "scenario.gt.json",
+        cassette_path.parent.parent / "scenario.gt.json",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    raise FileNotFoundError(
+        f"could not locate scenario.gt.json near cassette {cassette_path}; "
+        f"looked in {candidates}"
+    )
+
+
+def _load_gt_bundle(path: Path) -> Any:
+    """Parse ``scenario.gt.json`` into a :class:`GTBundle`."""
+
+    from clawsocialarena.scenario.models import GTBundle
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return GTBundle.model_validate(data)
+
+
+def _execute_replay(row: GridRow, out: Path) -> dict[str, Any]:
+    """Replay a cassette into a real scorecard.
+
+    Loads the scenario's GT bundle adjacent to the cassette, drives
+    :class:`ReplayDriver`, seeds a shadow log from the replayed records
+    so :class:`EvalRunner` stage-1 invariants have something to compare
+    against, and writes the resulting :class:`RunScorecard` in place of
+    the stub. Returns accounting totals so the caller (Task G4) can
+    feed them into ``cost.csv`` — replay rows always report zero LLM
+    tokens because the LLM was never invoked.
+    """
+
+    from clawsocialarena.action_log import ActionLog
+    from clawsocialarena.audit.shadow_log import ShadowLog
+    from clawsocialarena.eval.runner import EvalRunner
+    from clawsocialarena.gateway.replay import ReplayDriver
+
+    if row.cassette_path is None:
+        raise ValueError(
+            f"replay row for {row.scenario_id} has no cassette_path"
+        )
+    cassette_path = row.cassette_path
+    if not cassette_path.exists():
+        raise FileNotFoundError(f"cassette not found: {cassette_path}")
+
+    gt_path = _resolve_gt_bundle_path(cassette_path)
+    gt = _load_gt_bundle(gt_path)
+
+    row_dir = _row_dir(out, row)
+    row_dir.mkdir(parents=True, exist_ok=True)
+
+    start = time.perf_counter()
+    driver = ReplayDriver(cassette_path, gt)
+    result = driver.run(db_path=row_dir / "primary.db")
+
+    # Build a shadow log seeded from the replayed records so stage-1
+    # invariants have something to compare against. Shadow records
+    # re-compute prev_hash against the shadow chain head so the shadow
+    # chain is internally consistent (same pattern Session uses live).
+    shadow = ShadowLog(db_path=row_dir / "primary.shadow.db")
+    for rec in result.records:
+        shadow_rec = rec.model_copy(
+            update={"prev_hash": shadow.head_hash(rec.agent_id)}
+        )
+        shadow.append(shadow_rec)
+
+    primary = ActionLog(db_path=row_dir / "primary.db")
+    runner = EvalRunner()
+    scorecard = runner.evaluate(
+        action_log=primary,
+        shadow_log=shadow,
+        gt=gt,
+        cassette_path=cassette_path,
+        live_or_replay="replay",
+        meta=_row_metadata(row),
+    )
+
+    scorecard_path = _scorecard_path(out, row)
+    scorecard_path.write_text(
+        scorecard.model_dump_json(indent=2), encoding="utf-8"
+    )
+
+    wallclock = time.perf_counter() - start
+    return {
+        "status": "ok",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cached_tokens": 0,
+        "wallclock_seconds": wallclock,
+    }
+
+
 def _execute_live(row: GridRow, out: Path, dry_run: bool) -> dict[str, Any]:
     """Run a live row: compose bring-up, scenario, teardown, scorecard.
 
@@ -230,10 +342,7 @@ def run(args: argparse.Namespace) -> int:
 
         try:
             if row.live_or_replay == "replay":
-                # Replay path lands in Task G3; for G2 we mark the row
-                # pending so the scorecard tree still has a row stub.
-                _write_pending_stub(args.out, row)
-                outcome = {"status": "pending_replay_deferred"}
+                outcome = _execute_replay(row, args.out)
             else:
                 outcome = _execute_live(row, args.out, dry_run=args.dry_run)
         except Exception as exc:

@@ -144,3 +144,110 @@ def test_parse_args_defaults() -> None:
     args = run_grid.parse_args(["--config", "x.yaml", "--out", "o"])
     assert args.dry_run is True
     assert args.parallel == 1
+
+
+@pytest.fixture
+def replay_grid_yaml(tmp_path: Path) -> Path:
+    """Single-row replay grid pointing at the fixture cassette."""
+
+    rows = [
+        {
+            "scenario_id": "cu-scheduling-mvp",
+            "condition": "passive",
+            "model": "claude-sonnet-4-6",
+            "privacy_level": "L2",
+            "seed": 0,
+            "live_or_replay": "replay",
+            "cassette_path": str(SAMPLE_CASSETTE),
+            "tags": {"bucket": "replay_smoke"},
+        },
+    ]
+    path = tmp_path / "replay_grid.yaml"
+    path.write_text(yaml.safe_dump(rows, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def test_replay_row_writes_real_scorecard(
+    replay_grid_yaml: Path, tmp_path: Path
+) -> None:
+    """Replay rows must produce a full RunScorecard, not a pending stub."""
+
+    out = tmp_path / "results"
+    rc = run_grid.main(
+        ["--config", str(replay_grid_yaml), "--out", str(out)]
+    )
+    assert rc == 0
+
+    scorecard_path = (
+        out
+        / "claude-sonnet-4-6"
+        / "passive"
+        / "cu-scheduling-mvp"
+        / "run_scorecard.json"
+    )
+    assert scorecard_path.exists()
+
+    data = json.loads(scorecard_path.read_text(encoding="utf-8"))
+    # Real scorecard has no top-level "status" field (that only appears
+    # on pending stubs). It must carry the five SAF dims + the runtime
+    # provenance fields.
+    assert "status" not in data
+    assert data["scenario_id"] == "cu-scheduling-mvp"
+    assert data["live_or_replay"] == "replay"
+    saf = data["saf"]
+    assert set(saf["dims"].keys()) == {
+        "recoverability",
+        "policy_checkability",
+        "attribution",
+        "evidence_integrity",
+        "phase_scoped_policy",
+    }
+    # cassette_hash is non-empty — we hashed the fixture file.
+    assert data["cassette_hash"]
+    # gateway_invariant_passed holds because replay re-computes hash chain.
+    assert data["gateway_invariant_passed"] is True
+
+
+def test_replay_row_is_resumable(
+    replay_grid_yaml: Path, tmp_path: Path
+) -> None:
+    """A second invocation should skip the replay row once complete."""
+
+    out = tmp_path / "results"
+    run_grid.main(["--config", str(replay_grid_yaml), "--out", str(out)])
+    scorecard_path = (
+        out
+        / "claude-sonnet-4-6"
+        / "passive"
+        / "cu-scheduling-mvp"
+        / "run_scorecard.json"
+    )
+    first_mtime = scorecard_path.stat().st_mtime_ns
+
+    # Run again; the completed scorecard should not be rewritten.
+    run_grid.main(["--config", str(replay_grid_yaml), "--out", str(out)])
+    assert scorecard_path.stat().st_mtime_ns == first_mtime
+
+
+def test_replay_missing_cassette_reports_failure(
+    tmp_path: Path,
+) -> None:
+    """A replay row pointing at a nonexistent cassette must be flagged."""
+
+    rows = [
+        {
+            "scenario_id": "cu-scheduling-mvp",
+            "condition": "passive",
+            "model": "claude-sonnet-4-6",
+            "privacy_level": "L2",
+            "seed": 0,
+            "live_or_replay": "replay",
+            "cassette_path": str(tmp_path / "nope.jsonl"),
+        },
+    ]
+    grid = tmp_path / "grid.yaml"
+    grid.write_text(yaml.safe_dump(rows, sort_keys=False), encoding="utf-8")
+    out = tmp_path / "out"
+    rc = run_grid.main(["--config", str(grid), "--out", str(out)])
+    # run() returns exit code 1 when any row fails.
+    assert rc == 1
