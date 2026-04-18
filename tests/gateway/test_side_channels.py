@@ -281,6 +281,11 @@ async def test_side_channels_under_baseline_return_null_action_id(
         resp = await client.post(path, json=payload)
         assert resp.status == 200
         body = await resp.json()
-        assert body == {"action_id": None}
+        assert body.get("action_id") is None
+        # /tool_call and /memory_write responses carry blocked=False under
+        # baseline because a future ENFORCE hook could set it to True; the
+        # schema is uniform across conditions so clients do not branch.
+        if path in ("/tool_call", "/memory_write"):
+            assert body.get("blocked") is False
 
     assert session.action_log is None

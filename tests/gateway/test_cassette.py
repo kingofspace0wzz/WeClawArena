@@ -18,35 +18,36 @@ from clawsocialarena.gateway.session import Session
 from clawsocialarena.types import AuditCondition
 
 
-def _drive_five_record_calls(session: Session) -> None:
+async def _drive_five_record_calls(session: Session) -> None:
     """Invoke each of the five record_* helpers once in a fixed order.
 
     The order matches the ordering we assert in the cassette test so that
     kind sequence is deterministic: outbound, tool_call, tool_observation,
-    memory_write, llm_call.
+    memory_write, llm_call. As of Phase A.5 every ``record_*`` helper is
+    async because the session now dispatches policy hooks inline.
     """
 
-    session.record_outbound(
+    await session.record_outbound(
         sender_id="alice",
         recipient_id="bob",
         content="hello bob",
     )
-    tc_id = session.record_tool_call(
+    tc_outcome = await session.record_tool_call(
         agent_id="alice",
         tool_name="web_search",
         arguments={"q": "hi"},
     )
-    session.record_tool_observation(
+    await session.record_tool_observation(
         agent_id="alice",
-        tool_call_action_id=tc_id or "tc-stub",
+        tool_call_action_id=tc_outcome.action_id or "tc-stub",
         tool_name="web_search",
         observation="1 result",
     )
-    session.record_memory_write(
+    await session.record_memory_write(
         agent_id="alice",
         content="bob prefers async",
     )
-    session.record_llm_call(
+    await session.record_llm_call(
         agent_id="alice",
         input_tokens=10,
         output_tokens=5,
@@ -55,7 +56,7 @@ def _drive_five_record_calls(session: Session) -> None:
     )
 
 
-def test_cassette_captures_every_action(tmp_path: Path) -> None:
+async def test_cassette_captures_every_action(tmp_path: Path) -> None:
     session = Session.build(
         scenario_id="a5-passive",
         condition=AuditCondition.PASSIVE,
@@ -65,7 +66,7 @@ def test_cassette_captures_every_action(tmp_path: Path) -> None:
 
     assert isinstance(session.cassette, CassetteRecorder)
 
-    _drive_five_record_calls(session)
+    await _drive_five_record_calls(session)
     session.close()
 
     cassette_path = tmp_path / "cassette.jsonl"
@@ -142,7 +143,7 @@ def test_cassette_roundtrip_non_ascii(tmp_path: Path) -> None:
     assert entry["payload"]["content"] == content
 
 
-def test_cassette_timestamp_is_iso_utc(tmp_path: Path) -> None:
+async def test_cassette_timestamp_is_iso_utc(tmp_path: Path) -> None:
     session = Session.build(
         scenario_id="a5-timestamp",
         condition=AuditCondition.PASSIVE,
@@ -150,7 +151,7 @@ def test_cassette_timestamp_is_iso_utc(tmp_path: Path) -> None:
         work_dir=tmp_path,
     )
 
-    session.record_memory_write(agent_id="alice", content="note")
+    await session.record_memory_write(agent_id="alice", content="note")
     session.close()
 
     cassette_path = tmp_path / "cassette.jsonl"

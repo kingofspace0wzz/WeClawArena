@@ -7,9 +7,18 @@ four side-channel endpoints, :func:`tool_call`,
 :func:`tool_observation_return`, :func:`memory_write`, and
 :func:`llm_call`, which let agents report events that bypass the message
 bus (tool invocations, tool observations, memory writes, and LLM token
-accounting). Policy-hook evaluation, cassette recording, and shadow-log
-double-writes arrive in later tasks; this module intentionally does only
-the action-log append and inbox queue management.
+accounting). Phase A.5 ports the enforce/passive policy-hook semantics
+into the :class:`Session`; each route now awaits a
+:class:`~clawsocialarena.gateway.session.RecordOutcome` and, for ``/send``
+and ``/mcp/{tool_name}``, reflects ``block`` / ``rewrite`` verdicts back
+to the caller: blocked sends return ``{"blocked": true}`` and are never
+enqueued on the recipient inbox; rewritten sends go out with the
+rewritten content; blocked tool calls skip the MCP dispatch.
+
+Every route that records an action also accepts an optional
+``source_action_ids`` array which is threaded through to the ActionRecord
+so Phase C (MSWM) and Phase F (attribution) can walk the provenance
+chain without positional heuristics.
 """
 
 from __future__ import annotations
@@ -76,19 +85,47 @@ def _bad_request(missing: list[str]) -> web.Response:
     )
 
 
+def _parse_source_action_ids(body: dict) -> list[str] | web.Response:
+    """Return the optional ``source_action_ids`` array or a 400 response.
+
+    Accepts an absent key (default ``[]``), an explicit ``null`` (also
+    coerced to ``[]``), or a list of strings. Any other shape produces a
+    uniform HTTP 400 so the caller can surface the error identically to
+    the other ``invalid_field_type`` responses in this module.
+    """
+
+    raw: Any = body.get("source_action_ids")
+    if raw is None:
+        return []
+    if isinstance(raw, list) and all(isinstance(x, str) for x in raw):
+        return list(raw)
+    return web.json_response(
+        {
+            "error": "invalid_field_type",
+            "field": "source_action_ids",
+            "expected": "array[str]",
+        },
+        status=400,
+    )
+
+
 async def send(request: web.Request) -> web.Response:
     """Enqueue a message for ``recipient_id`` and log an outbound record.
 
-    Request JSON: ``{"sender_id": str, "recipient_id": str, "content": str}``.
-    Response JSON: ``{"action_id": str | null}`` with HTTP 200. Under
-    BASELINE the ``action_id`` is ``null``; under PASSIVE or ENFORCE it is
-    the freshly-minted ActionLog id.
+    Request JSON: ``{"sender_id": str, "recipient_id": str, "content": str,
+    "source_action_ids": list[str]?}``. Response JSON:
+    ``{"action_id": str | null, "blocked": bool}`` with HTTP 200.
 
-    Note: under BASELINE the message is still enqueued so recipients can
-    ``/recv`` it, even though no audit record is written; this mirrors the
-    "deployment without audit infrastructure" condition in spec §5.1.
+    Under BASELINE the ``action_id`` is ``null`` and the message is still
+    enqueued so recipients can ``/recv`` it, mirroring the "deployment
+    without audit infrastructure" condition in spec §5.1. Under PASSIVE
+    the message is enqueued unchanged and every hook verdict is logged as
+    a POLICY_DECISION. Under ENFORCE a ``rewrite`` verdict replaces the
+    enqueued content; a ``block`` verdict suppresses the enqueue entirely
+    and the response carries ``"blocked": true``.
 
-    Missing any of the three required fields yields HTTP 400.
+    Missing any of the three required fields yields HTTP 400, as does an
+    invalid ``source_action_ids`` payload.
     """
 
     body = await _read_json(request)
@@ -100,15 +137,25 @@ async def send(request: web.Request) -> web.Response:
     recipient_id: str = body["recipient_id"]
     content: str = body["content"]
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     session = _get_session(request)
-    action_id = session.record_outbound(
+    outcome = await session.record_outbound(
         sender_id=sender_id,
         recipient_id=recipient_id,
         content=content,
+        source_action_ids=sources,
     )
+    if outcome.blocked:
+        # ENFORCE block: no inbox enqueue, caller gets a structured hint.
+        return web.json_response({"action_id": None, "blocked": True})
+
+    delivered = outcome.rewritten_content if outcome.rewritten_content is not None else content
     inbox = session.ensure_inbox(recipient_id)
-    await inbox.put((sender_id, content))
-    return web.json_response({"action_id": action_id})
+    await inbox.put((sender_id, delivered))
+    return web.json_response({"action_id": outcome.action_id, "blocked": False})
 
 
 async def recv(request: web.Request) -> web.Response:
@@ -142,12 +189,15 @@ async def tool_call(request: web.Request) -> web.Response:
     """Log a ``TOOL_CALL`` action record reported by an agent.
 
     Request JSON:
-        ``{"agent_id": str, "tool_name": str, "arguments": dict}``.
+        ``{"agent_id": str, "tool_name": str, "arguments": dict,
+           "source_action_ids": list[str]?}``.
 
-    Response JSON: ``{"action_id": str | null}``. Missing required fields
-    yield HTTP 400. Under BASELINE the log append is skipped and the
-    response carries ``action_id=null``; the endpoint still returns 200
-    so the calling agent does not have to branch on the condition.
+    Response JSON: ``{"action_id": str | null, "blocked": bool}``. Missing
+    required fields yield HTTP 400. Under BASELINE the log append is
+    skipped and the response carries ``action_id=null`` with ``blocked=false``;
+    the endpoint still returns 200 so the calling agent does not have to
+    branch on the condition. Under ENFORCE a hook-driven block sets
+    ``blocked=true`` and suppresses the log row.
     """
 
     body = await _read_json(request)
@@ -162,21 +212,29 @@ async def tool_call(request: web.Request) -> web.Response:
             status=400,
         )
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     session = _get_session(request)
-    action_id = session.record_tool_call(
+    outcome = await session.record_tool_call(
         agent_id=body["agent_id"],
         tool_name=body["tool_name"],
         arguments=arguments,
+        source_action_ids=sources,
     )
-    return web.json_response({"action_id": action_id})
+    return web.json_response(
+        {"action_id": outcome.action_id, "blocked": outcome.blocked}
+    )
 
 
 async def tool_observation_return(request: web.Request) -> web.Response:
     """Log a ``TOOL_OBSERVATION_RETURN`` linked to a prior tool call.
 
     Request JSON: ``{"agent_id": str, "tool_call_action_id": str,
-    "tool_name": str, "observation": str}``. Missing required fields
-    yield HTTP 400. Baseline short-circuits with a null ``action_id``.
+    "tool_name": str, "observation": str, "source_action_ids": list[str]?}``.
+    Missing required fields yield HTTP 400. Baseline short-circuits with a
+    null ``action_id``.
     """
 
     body = await _read_json(request)
@@ -190,23 +248,30 @@ async def tool_observation_return(request: web.Request) -> web.Response:
     if missing:
         return _bad_request(missing)
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     session = _get_session(request)
-    action_id = session.record_tool_observation(
+    outcome = await session.record_tool_observation(
         agent_id=body["agent_id"],
         tool_call_action_id=body["tool_call_action_id"],
         tool_name=body["tool_name"],
         observation=body["observation"],
+        source_action_ids=sources,
     )
-    return web.json_response({"action_id": action_id})
+    return web.json_response({"action_id": outcome.action_id})
 
 
 async def memory_write(request: web.Request) -> web.Response:
     """Log a ``MEMORY_WRITE`` action record.
 
-    Request JSON: ``{"agent_id": str, "content": str, "tags": list[str]}``.
-    ``tags`` is optional and defaults to the empty list in the resulting
-    payload. Missing ``agent_id`` or ``content`` yields HTTP 400. Baseline
-    short-circuits with a null ``action_id``.
+    Request JSON: ``{"agent_id": str, "content": str, "tags": list[str],
+    "source_action_ids": list[str]?}``. ``tags`` is optional and defaults
+    to the empty list in the resulting payload. Missing ``agent_id`` or
+    ``content`` yields HTTP 400. Baseline short-circuits with a null
+    ``action_id``. Under ENFORCE a ``block`` verdict returns
+    ``blocked=true`` without persisting the memory write.
     """
 
     body = await _read_json(request)
@@ -225,31 +290,44 @@ async def memory_write(request: web.Request) -> web.Response:
             status=400,
         )
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     session = _get_session(request)
-    action_id = session.record_memory_write(
+    outcome = await session.record_memory_write(
         agent_id=body["agent_id"],
         content=body["content"],
         tags=tags,
+        source_action_ids=sources,
     )
-    return web.json_response({"action_id": action_id})
+    return web.json_response(
+        {"action_id": outcome.action_id, "blocked": outcome.blocked}
+    )
 
 
 async def mcp_dispatch(request: web.Request) -> web.Response:
     """Dispatch a tool call to the session's in-process ``McpHost``.
 
     Path: ``POST /mcp/{tool_name}``.
-    Request JSON: ``{"agent_id": str, "arguments": dict}``.
+    Request JSON:
+        ``{"agent_id": str, "arguments": dict,
+           "source_action_ids": list[str]?}``.
     Response JSON:
         ``{"tool_call_action_id": str | null,
            "tool_observation_action_id": str | null,
-           "observation": dict}``.
+           "observation": dict,
+           "blocked": bool}``.
 
     Flow: validate the two required fields, record a ``TOOL_CALL`` action,
     dispatch through ``session.mcp_host``, record a
     ``TOOL_OBSERVATION_RETURN`` linked to the call, and return the
     observation dict unchanged. Unknown tool names yield HTTP 404;
     missing or malformed fields yield HTTP 400. Under BASELINE both
-    action ids are ``null`` but the handler still runs.
+    action ids are ``null`` but the handler still runs. Under ENFORCE a
+    hook-driven ``block`` on the TOOL_CALL short-circuits the dispatch:
+    no MCP call, no observation row, and the response carries
+    ``"blocked": true`` with both action ids ``null``.
     """
 
     tool_name = request.match_info["tool_name"]
@@ -265,14 +343,28 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
             status=400,
         )
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     agent_id: str = body["agent_id"]
     session = _get_session(request)
 
-    tc_action_id = session.record_tool_call(
+    tc_outcome = await session.record_tool_call(
         agent_id=agent_id,
         tool_name=tool_name,
         arguments=arguments,
+        source_action_ids=sources,
     )
+    if tc_outcome.blocked:
+        return web.json_response(
+            {
+                "tool_call_action_id": None,
+                "tool_observation_action_id": None,
+                "observation": None,
+                "blocked": True,
+            }
+        )
 
     try:
         observation = await session.mcp_host.dispatch(tool_name, arguments)
@@ -282,18 +374,20 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
             status=404,
         )
 
-    obs_action_id = session.record_tool_observation(
+    obs_outcome = await session.record_tool_observation(
         agent_id=agent_id,
-        tool_call_action_id=tc_action_id,
+        tool_call_action_id=tc_outcome.action_id,
         tool_name=tool_name,
         observation=json.dumps(observation, sort_keys=True, ensure_ascii=False),
+        source_action_ids=sources,
     )
 
     return web.json_response(
         {
-            "tool_call_action_id": tc_action_id,
-            "tool_observation_action_id": obs_action_id,
+            "tool_call_action_id": tc_outcome.action_id,
+            "tool_observation_action_id": obs_outcome.action_id,
             "observation": observation,
+            "blocked": False,
         }
     )
 
@@ -303,8 +397,9 @@ async def llm_call(request: web.Request) -> web.Response:
 
     Request JSON: ``{"agent_id": str, "input_tokens": int,
     "output_tokens": int, "cached_tokens": int, "latency_ms": int,
-    "model": str}``. ``cached_tokens`` is optional and defaults to 0.
-    Baseline short-circuits with a null ``action_id``.
+    "model": str, "source_action_ids": list[str]?}``. ``cached_tokens``
+    is optional and defaults to 0. Baseline short-circuits with a null
+    ``action_id``.
     """
 
     body = await _read_json(request)
@@ -335,13 +430,18 @@ async def llm_call(request: web.Request) -> web.Response:
                 status=400,
             )
 
+    sources = _parse_source_action_ids(body)
+    if isinstance(sources, web.Response):
+        return sources
+
     session = _get_session(request)
-    action_id = session.record_llm_call(
+    outcome = await session.record_llm_call(
         agent_id=body["agent_id"],
         input_tokens=body["input_tokens"],
         output_tokens=body["output_tokens"],
         cached_tokens=cached_tokens,
         latency_ms=body["latency_ms"],
         model=body["model"],
+        source_action_ids=sources,
     )
-    return web.json_response({"action_id": action_id})
+    return web.json_response({"action_id": outcome.action_id})

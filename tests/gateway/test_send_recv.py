@@ -87,7 +87,7 @@ async def test_send_under_baseline_returns_null_action_id() -> None:
         )
         assert resp.status == 200
         body = await resp.json()
-        assert body == {"action_id": None}
+        assert body == {"action_id": None, "blocked": False}
 
         # The message should still be deliverable: baseline is audit-free but
         # the gateway still routes traffic.
