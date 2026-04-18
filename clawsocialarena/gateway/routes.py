@@ -284,7 +284,7 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
 
     obs_action_id = session.record_tool_observation(
         agent_id=agent_id,
-        tool_call_action_id=tc_action_id or "",
+        tool_call_action_id=tc_action_id,
         tool_name=tool_name,
         observation=json.dumps(observation, sort_keys=True, ensure_ascii=False),
     )

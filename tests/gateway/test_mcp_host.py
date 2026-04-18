@@ -172,6 +172,40 @@ async def test_mcp_host_register_and_dispatch_unit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_handler_exception_logs_call_without_observation(tmp_path: Path) -> None:
+    """Non-KeyError exceptions from a handler propagate as HTTP 500.
+
+    The gateway records the ``TOOL_CALL`` before dispatching, then calls
+    the handler. When the handler raises something other than ``KeyError``
+    (which the route translates to 404 for "unknown tool"), the exception
+    bubbles up to aiohttp, which responds with HTTP 500. The audit log
+    must keep exactly one record for the attempt: the pre-dispatch
+    ``TOOL_CALL``. No orphan ``TOOL_OBSERVATION_RETURN`` is written,
+    since the observation never materialized.
+    """
+    session = _make_passive_session(tmp_path, "handler-exc")
+
+    async def boom(_arguments: dict) -> dict:
+        raise ValueError("boom")
+
+    session.mcp_host.register("boom", boom)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/mcp/boom",
+            json={"agent_id": "alice", "arguments": {"x": 1}},
+        )
+        assert resp.status == 500
+
+    assert session.action_log is not None
+    records = session.action_log.read_all()
+    assert len(records) == 1
+    assert records[0].action_type == ActionType.TOOL_CALL
+    assert records[0].payload == {"tool_name": "boom", "arguments": {"x": 1}}
+
+
+@pytest.mark.asyncio
 async def test_mcp_noop_under_baseline_runs_but_does_not_log() -> None:
     """BASELINE: the noop tool still runs and returns observation; no log entries."""
     session = _make_baseline_session()

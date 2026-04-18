@@ -210,7 +210,7 @@ class Session:
         self,
         *,
         agent_id: str,
-        tool_call_action_id: str,
+        tool_call_action_id: str | None,
         tool_name: str,
         observation: str,
     ) -> str | None:
@@ -220,10 +220,20 @@ class Session:
         ``{tool_call_action_id, tool_name, observation}``. Baseline returns
         ``None``; passive/enforce append and return the new ``action_id``.
 
-        TODO(A6): ``tool_call_action_id`` is recorded verbatim and is not yet
-        validated against existing ``TOOL_CALL`` records in the action log.
-        The A6 MCP host will introduce call/return pairing verification so
-        orphaned or mismatched observations are rejected at ingress.
+        ``tool_call_action_id`` accepts ``None`` so callers in the
+        ``/mcp/{tool_name}`` route can thread the result of
+        :meth:`record_tool_call` through unchanged. Under BASELINE the
+        record is not written so the ``None`` is never serialized; under
+        PASSIVE or ENFORCE the prior ``record_tool_call`` always yields a
+        concrete id, so the ``None`` branch is unreachable in practice
+        and the type simply relaxes the contract to match.
+
+        TODO(F-pair): ``tool_call_action_id`` is recorded verbatim and
+        not yet validated against existing ``TOOL_CALL`` records in the
+        action log. Call/return pairing verification belongs in the
+        MSWM-aware attribution phase (see Phase F in the plan), where
+        the attribution graph walker already rebuilds tool call/return
+        edges.
         """
 
         return self._record_action(
