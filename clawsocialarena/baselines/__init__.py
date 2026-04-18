@@ -17,15 +17,11 @@ from clawsocialarena.baselines.prompt_ladder import (
     level_prefix,
     system_prompt_with_level,
 )
-from clawsocialarena.baselines.vanilla_aa import (
-    VanillaAAEvalRunner,
-    VanillaAAScorecard,
-)
+from clawsocialarena.baselines.vanilla_aa import VanillaAAEvalRunner
 
 __all__ = [
     "PrivacyLevel",
     "level_prefix",
     "system_prompt_with_level",
     "VanillaAAEvalRunner",
-    "VanillaAAScorecard",
 ]
