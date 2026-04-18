@@ -18,8 +18,6 @@ from clawsocialarena.analysis.tables import (
     load_long_csv,
     model_comparison_table,
     rewrite_quality_table,
-    to_latex,
-    to_markdown,
 )
 
 
@@ -63,12 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "table":
         df = load_long_csv(args.csv)
         if args.kind == "headline":
-            out = headline_table(df)
+            md, tex = headline_table(df)
         elif args.kind == "model":
-            out = model_comparison_table(df, condition=args.condition)
+            md, tex = model_comparison_table(df, condition=args.condition)
         else:
-            out = rewrite_quality_table(df)
-        rendered = to_latex(out) if args.format == "latex" else to_markdown(out)
+            md, tex = rewrite_quality_table(df)
+        rendered = tex if args.format == "latex" else md
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(rendered)

@@ -249,17 +249,31 @@ def _enumerate_specs(
     scenarios_per_category: int,
     live_fraction: float,
 ) -> Iterable[_ScorecardSpec]:
-    """Cartesian product of (model, condition, category, scenario) specs."""
+    """Cartesian product of (model, condition, category, scenario) specs.
 
-    # Stable interleaving: live every 1/live_fraction rows.
+    ``live_or_replay`` is pinned per (model, category, scenario) triple so
+    every condition for the same scenario/model pair carries the same
+    strata label. Without that, the pairwise rewrite-quality delta loses
+    rows because the same scenario appears under ``live`` for one
+    condition and ``replay`` for another.
+    """
+
     step = max(1, int(round(1.0 / max(live_fraction, 1e-6))))
+
+    # Pre-compute the strata label for every (model, cat, scenario) cell.
+    strata: dict[tuple[str, str, int], str] = {}
     index = 0
+    for model in models:
+        for cat, _fam in categories:
+            for s in range(scenarios_per_category):
+                strata[(model, cat, s)] = "live" if index % step == 0 else "replay"
+                index += 1
+
     for model in models:
         for condition in conditions:
             for cat, fam in categories:
                 for s in range(scenarios_per_category):
                     sid = f"{cat}-{fam}-{s}"
-                    live_or_replay = "live" if index % step == 0 else "replay"
                     yield _ScorecardSpec(
                         scenario_id=sid,
                         category=cat,
@@ -267,9 +281,8 @@ def _enumerate_specs(
                         model=model,
                         condition=condition,
                         seed=s,
-                        live_or_replay=live_or_replay,
+                        live_or_replay=strata[(model, cat, s)],
                     )
-                    index += 1
 
 
 def default_synthetic_tree(root: Path) -> Path:
