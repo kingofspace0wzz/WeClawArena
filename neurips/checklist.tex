@@ -5,7 +5,7 @@
 \item {\bf Claims}
     \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The abstract and introduction enumerate the three contributions (audit-first runtime, Social Auditability Framework, and $250$-scenario benchmark) and explicitly mark the experimental section as preregistered with numerical results deferred to the camera-ready revision. No capability claims are made beyond what the released code and ground-truth bundles support.
+    \item[] Justification: The abstract and introduction enumerate the three contributions (audit-first runtime around real OpenClaw containers in Docker Compose, the Social Auditability Framework powered by a Multi-Party Social World Model, and a $150$-scenario benchmark extending AgentSocialBench) and explicitly mark the experimental section as preregistered with numerical results deferred to the camera-ready revision. No capability claims are made beyond what the released code and ground-truth bundles support.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the abstract and introduction do not include the claims made in the paper.
@@ -17,7 +17,7 @@
 \item {\bf Limitations}
     \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Section~\ref{sec:discussion} discusses the personal-agent scope restriction, reliance on mechanical ground truth whose quality is bounded by the scenario generator, scripted NPCs in place of human participants, the specific intervention style (rewrite-based enforcement), discrete rather than continuous audit conditions, offline rather than online evaluation, pretrained-model dependence, and the sensitivity of SAF thresholds.
+    \item[] Justification: Section~\ref{sec:discussion} discusses the personal-agent scope restriction, reliance on mechanical ground truth whose quality is bounded by the scenario generator, scripted NPCs in place of human participants, the specific intervention style (rewrite-based enforcement), discrete rather than continuous audit conditions, offline rather than online evaluation, pretrained-model dependence, the sensitivity of SAF thresholds, the evaluation-layer-only reproducibility (real containers introduce runtime non-determinism that the cassette mechanism records but does not remove), and the live-versus-replay cell split where only roughly one in three cells uses real OpenClaw containers.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper has no limitation while the answer \answerNo{} means that the paper has limitations, but those are not discussed in the paper.
@@ -47,7 +47,7 @@
     \item {\bf Experimental result reproducibility}
     \item[] Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Section~\ref{sec:experiments} preregisters the full configuration (three audit conditions, three external baselines, four model backbones, compute budget, metric families, statistical tests, and five hypotheses) prior to execution. The released code contains the runtime, the evaluator, the scenario generator, all $250$ scenario specifications and ground-truth bundles, and the YAML configurations for every preregistered run. Numerical results are filled in for the camera-ready revision.
+    \item[] Justification: Section~\ref{sec:experiments} preregisters the full configuration (three audit conditions, three external baselines, four model backbones, compute budget split into live and replay strata, metric families, statistical tests, and five hypotheses) prior to execution. The released code contains the gateway, the ClawSocialArena channel plugin, the evaluator, the four-layer scenario generator, all $150$ scenario bundles (\texttt{scenario.json}, \texttt{scenario.gt.json}, \texttt{docker-compose.yml}, \texttt{personas/}, \texttt{mcp/}), and the YAML configurations for every preregistered run. Reproducibility is at the evaluation layer: cassettes captured by the gateway make SAF scoring bit-for-bit reproducible even though runtime container and provider behavior is not. Numerical results are filled in for the camera-ready revision.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.
@@ -67,7 +67,7 @@
 \item {\bf Open access to data and code}
     \item[] Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The runtime, the SAF evaluator, the scenario generator, the $250$ scenario specifications and ground-truth bundles, and all reference implementations of the external baselines are released open-source alongside the paper. The evaluation pipeline is a pure function of (action log, ground-truth bundle), and the release includes a golden log-and-bundle pair that pins expected scorecards for continuous integration. An anonymized release link is provided for review.
+    \item[] Justification: The gateway, the ClawSocialArena channel plugin, the SAF evaluator, the four-layer scenario generator, the $150$ scenario bundles, and all reference implementations of the external baselines are released open-source alongside the paper. The evaluation pipeline is a pure function of (cassette, action log, shadow log, ground-truth bundle), and the release includes a golden cassette-plus-bundle triple that pins expected scorecards for continuous integration. An anonymized release link is provided for review.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that paper does not include experiments requiring code.
@@ -95,7 +95,7 @@
 \item {\bf Experiment statistical significance}
     \item[] Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The observational unit is a scenario ($n=250$). Headline tables report means with $95\%$ confidence intervals; paired condition comparisons use Wilkinson signed-rank, multi-category comparisons use Kruskal--Wallis, and Bonferroni correction is applied where appropriate. A seed-variance spot-check ($20$ scenarios $\times$ $3$ seeds) bounds within-scenario randomness. Threshold sensitivity of the SAF binary pass rate is reported over $\pm 0.05$. Full details in Section~\ref{sec:exp:hyp}.
+    \item[] Justification: The observational unit is a scenario ($n=150$). Headline tables report means with $95\%$ confidence intervals; paired condition comparisons use Wilcoxon signed-rank, multi-category comparisons use Kruskal--Wallis, and Bonferroni correction is applied where appropriate. A seed-variance spot-check ($20$ scenarios $\times$ $3$ seeds live) bounds within-scenario randomness. Threshold sensitivity of the SAF binary pass rate is reported over $\pm 0.05$. Full details in Section~\ref{sec:exp:hyp}.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.
@@ -112,7 +112,7 @@
 \item {\bf Experiments compute resources}
     \item[] Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Section~\ref{sec:exp:compute} specifies the compute budget: approximately $5{,}400$ evaluation runs, $\approx 400$M tokens, and $7$--$10$ wall-clock days at four-provider parallelism. The runtime orchestrates from a single commodity CPU machine; LLM inference is via public APIs. Per-provider cost and token accounting are reported in the appendix.
+    \item[] Justification: Section~\ref{sec:exp:compute} specifies the compute budget: approximately $4{,}440$ runs ($600$ main-table live $+$ $1{,}200$ main-table replay $+$ $1{,}200$ privacy-ladder $+$ $480$ external-baseline $+$ $720$ seed-variance $+$ $240$ episode-graph), roughly $350$M tokens, and $10$--$14$ wall-clock days at four-provider parallelism plus Docker Compose orchestration overhead. The gateway orchestrates from a single commodity CPU machine; live cells run Docker Compose with real OpenClaw containers, and LLM inference is via public APIs. Per-provider cost and token accounting are reported in the appendix.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.
@@ -124,7 +124,7 @@
 \item {\bf Code of ethics}
     \item[] Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics \url{https://neurips.cc/public/EthicsGuidelines}?
     \item[] Answer: \answerYes{}
-    \item[] Justification: All simulated users and private attributes are synthetically generated by the scenario pipeline. The runtime does not train or fine-tune any released model. The $40$-scenario annotator validation uses paid annotators under standard research-lab compensation. No human subjects data is collected.
+    \item[] Justification: All simulated users and private attributes are synthetically generated by the scenario pipeline. The gateway does not train or fine-tune any released model. The $40$-scenario annotator validation uses paid annotators under standard research-lab compensation. No human-subjects data is collected; the optional Discord / Telegram field-channel bridge is appendix-only and disabled by default.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the authors have not reviewed the NeurIPS Code of Ethics.
@@ -136,7 +136,7 @@
 \item {\bf Broader impacts}
     \item[] Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Positive: making auditability a measurable, interventional property of deployed agent systems supports post-deployment accountability and provides evidence for operators, regulators, and users. Negative: the $250$-scenario benchmark, including the six-type attacker taxonomy, could guide adversarial research if misused. Section~\ref{sec:discussion} scopes this explicitly by bounding the attacker taxonomy to high-level categories rather than operational playbooks, and by restricting the runtime to simulated rather than real-user environments.
+    \item[] Justification: Positive: making auditability a measurable, interventional property of deployed agent systems supports post-deployment accountability and provides evidence for operators, regulators, and users. Negative: the $150$-scenario benchmark, including the three-axis attacker taxonomy, could guide adversarial research if misused. Section~\ref{sec:discussion} scopes this explicitly by binning the six attacker types into high-level axes (Collaboration, Security, Privacy) rather than operational playbooks, and by restricting the runtime to simulated users with the Discord / Telegram field-channel bridge appendix-only and disabled by default.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that there is no societal impact of the work performed.
@@ -150,7 +150,7 @@
 \item {\bf Safeguards}
     \item[] Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)?
     \item[] Answer: \answerNA{}
-    \item[] Justification: The paper releases a runtime, an evaluator, scenario specifications, and ground-truth bundles. No pretrained model weights, scraped user data, or dual-use generative artifacts are released. The runtime consumes existing model APIs under their providers' terms of service and is not itself a high-risk release.
+    \item[] Justification: The paper releases a gateway, a channel plugin, an evaluator, scenario bundles (including \texttt{docker-compose.yml} and persona prompts), and ground-truth bundles. No pretrained model weights, scraped user data, or dual-use generative artifacts are released. The runtime consumes existing model APIs under their providers' terms of service and is not itself a high-risk release.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper poses no such risks.
@@ -162,7 +162,7 @@
 \item {\bf Licenses for existing assets}
     \item[] Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected?
     \item[] Answer: \answerYes{}
-    \item[] Justification: ClawSocialArena reuses AgentSocialBench's scenario JSON and privacy-boundary declarations (\S\ref{sec:bench:categories}) under their release license, and the Auditable Agents framework structure is attributed throughout the paper (\S\ref{sec:saf}). The runtime consumes LLM APIs from Anthropic, OpenAI, DeepSeek, and Alibaba under their respective terms of service. All third-party Python dependencies use permissive open-source licenses compatible with research use.
+    \item[] Justification: ClawSocialArena reuses AgentSocialBench's \citep{wang2026agentsocialbench} scenario JSON and privacy-boundary declarations (\S\ref{sec:bench:categories}) under their release license, wraps OpenClaw \citep{openclaw2025} via its public plugin contract (\texttt{openclaw/plugin-sdk/channel-contract}), and attributes the Auditable Agents framework structure throughout the paper (\S\ref{sec:saf}). The runtime consumes LLM APIs from Anthropic, OpenAI, DeepSeek, and Alibaba under their respective terms of service. All third-party Python and TypeScript dependencies use permissive open-source licenses compatible with research use.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not use existing assets.
@@ -178,7 +178,7 @@
 \item {\bf New assets}
     \item[] Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The released runtime, SAF evaluator, scenario generator, $250$ scenario specifications, and ground-truth bundles are documented via a README, JSON schemas (for action records, ground-truth bundles, and scorecards), CLI docstrings, and reference implementations of the external baselines. The $40$-scenario annotator-validation protocol and artifact-level agreement numbers are released as part of the benchmark documentation.
+    \item[] Justification: The released gateway, ClawSocialArena channel plugin, SAF evaluator, four-layer scenario generator, $150$ scenario bundles, and ground-truth bundles are documented via a README, JSON schemas (for action records, ground-truth bundles, cassettes, and scorecards), the \texttt{docker-compose.yml} template, CLI docstrings, and reference implementations of the external baselines. The $40$-scenario annotator-validation protocol and artifact-level agreement numbers are released as part of the benchmark documentation.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not release new assets.
