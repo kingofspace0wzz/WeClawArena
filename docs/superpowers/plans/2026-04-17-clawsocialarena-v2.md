@@ -2,6 +2,44 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Status as of 2026-04-18
+
+Autonomous execution paused after `phase-H-infrastructure-complete`. Remaining work (Phase E benchmark content, Phase G5-G7 live runs, Phase H8 `v1.0.0` tag) needs human-in-the-loop resources: LLM API credentials, compute budget, annotators. See `docs/superpowers/plans/phase-G-deferred.md` and `docs/superpowers/plans/phase-H-deferred.md` for the resume instructions.
+
+Test baseline at pause: Python 470 passed + 2 skipped; TypeScript 29 passed; mypy + ruff clean.
+
+### Phase rollup
+
+| Phase | Tag | Status | Notes |
+|---|---|---|---|
+| A | `phase-A-complete` | done | Gateway + Session + cassette + MCP host + plugin + Docker + minimal compose + E2E smoke (tasks A1-A15). |
+| A.5 | `phase-A5-complete` | done (fix) | Spec §2.9 baseline row reconciled with code: baseline keeps no records. |
+| B | `phase-B-complete` | done | v1 bus / agents / runtime / sem deleted; SEM -> MSWM rename complete (tasks B1-B8). |
+| C | `phase-C-complete` | done | MSWM + attribution DAG + labels (tasks C1-C10). |
+| C.5 | `phase-C5-complete` | done (fix) | MSWM rewrite-reconcile ordering; `self_knowledge` carries `(item_id, action_id)` provenance. |
+| D | `phase-D-complete` | done | Scenario model v2, compose / persona / MCP emitters, GT v2, CLI, loader, validator (tasks D1-D10). |
+| D.5 | `phase-D5-complete` | done (fix) | Absolute compose build paths; per-agent `allowed_tools`; validator enforces runtime contract; `McpToolSpec.schema` marked advisory. |
+| E | not tagged | deferred | Only `cu_scheduling` shipped. Needs 13 more (category, family) templates (E1-E14 minus E5), 2 hard-stratum templates (E15), 5 vignettes (E16), 5 episode graphs (E17), and the 150-scenario batch script (E18). Requires LLM-assisted instantiation plus hand-authoring plus 3-annotator validation. |
+| F | `phase-F-complete` | done | Psi / tau scorers consume MSWM, cumulative module, scorecard v2, EvalRunner v2, replay driver, leak detector, baselines updated (tasks F1-F10). |
+| F.5 | `phase-F5-complete` | done (fix) | Fix 1: MSWM inferential policies wired through EvalRunner into SAFScorer. Fix 2: attribution preserves pre-rewrite causal item under enforce. Fix 3: `EpisodeGraphEvalRunner` + cumulative adapter added. |
+| G | `phase-G-infrastructure-complete` | partial | Infrastructure tasks (G1-G4) done. Tasks G5 (pilot), G6 (full main table), G7 (ablations + seed + episode), G8 (tag) deferred; see `phase-G-deferred.md`. |
+| H | `phase-H-infrastructure-complete` | partial | Analysis infrastructure tasks (H1-H7) done; tests run against synthetic scorecards. Task H8 (`v1.0.0` tag + CHANGELOG) deferred; see `phase-H-deferred.md`. |
+
+### Fix phases in one line each
+
+- **A.5 (Spec update).** Spec §2.9 originally described baseline as a "minimal transport log"; code leaves the action log off under baseline. Took the spec-edit path: `baseline` now reads `no records`.
+- **C.5 (MSWM provenance).** `MSWM.self_knowledge` was a `dict[agent_id, set[item_id]]` which lost the introducing action; changed to `dict[agent_id, set[(item_id, action_id)]]` so Phase F attribution can trace self-known items.
+- **D.5 (Runtime contract).** Compose emitter now uses absolute `build.context`; `agent-entrypoint.sh` waits for gateway health; per-agent `allowed_tools` flow into persona manifests; validator checks services, env vars, personas, MCP manifests, and allowed-tools coverage.
+- **F.5 (Eval threading + episode graphs).** MSWM inferential policies now reach the offline scorers via `EvalRunner`; attribution keeps the pre-rewrite causal item under enforce; `EpisodeGraphEvalRunner` drives per-episode eval and feeds the cumulative module so episode-graph fixtures produce usable trajectories end-to-end.
+
+### Resume pointers
+
+- **Phase E:** README top-level "How to pick up Phase E" section (worktree root) walks through LLM-assisted instantiation, template copy pattern, vignette authoring, batch generation, and annotator validation.
+- **Phase G5-G7:** `docs/superpowers/plans/phase-G-deferred.md` is the canonical resume note (credentials + Docker + materialised grids + resumable runner).
+- **Phase H8:** `docs/superpowers/plans/phase-H-deferred.md` is the resume note (analysis one-liners + repro bundle + tag).
+
+---
+
 **Goal:** Refactor ClawSocialArena from the single-process Python runtime (v1) to an audit-first runtime around real OpenClaw containers in Docker Compose, with MSWM as the runtime centerpiece and an AgentSocialBench-extension benchmark of 150 scenarios.
 
 **Architecture:** A scenario is a `docker-compose.yml` bringing up N OpenClaw containers + one ClawSocialArena audit gateway. The gateway is the sole cross-container hop: it hosts the action log, MSWM, policy hooks, phase tracker, MCP tool servers, and cassette recorder. Each OpenClaw container preloads a ClawSocialArena TypeScript channel plugin that routes its outbound traffic through the gateway. Evaluation is an offline pure function of `(action_log, shadow_log, cassette, GT bundle)`.
