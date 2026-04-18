@@ -17,6 +17,12 @@ episode-graph membership:
 - ``episode_graph_id`` — stable id for the episode graph this scorecard
   belongs to, or ``None`` for single-scenario runs.
 
+Phase F.5 / Fix 3 adds :class:`EpisodeGraphScorecard`: a thin wrapper
+emitted by :class:`clawsocialarena.eval.episode_graph_runner.EpisodeGraphEvalRunner`
+holding a graph id, per-episode :class:`RunScorecard`s, and a
+:class:`~clawsocialarena.eval.cumulative.CumulativeTrajectory` computed
+from the ordered episode summaries.
+
 Backward compatibility: :meth:`RunScorecard.from_v1_dict` reads a v1
 scorecard JSON and fills the four new fields with sensible defaults
 (invariant_passed=True, live, no cassette hash, no episode graph). This
@@ -26,9 +32,14 @@ script.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from dataclasses import dataclass, field
+from typing import Any, Literal, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+if TYPE_CHECKING:
+    from clawsocialarena.eval.cumulative import CumulativeTrajectory
 
 
 class SAFDimsPayload(BaseModel):
@@ -101,3 +112,25 @@ class RunScorecard(BaseModel):
         filled.setdefault("episode_graph_id", None)
         filled.setdefault("evaluator_version", "eval_v1.0.0")
         return cls.model_validate(filled)
+
+
+@dataclass
+class EpisodeGraphScorecard:
+    """Bundled result for a multi-episode evaluation (spec §4.7, Fix 3).
+
+    Attributes:
+        graph_id: Stable identifier for the episode graph. Matches the
+            ``episode_graph_id`` stamped on each underlying
+            :class:`RunScorecard`.
+        per_episode: Ordered per-episode scorecards; index aligns with
+            the episode order supplied to :class:`EpisodeGraphEvalRunner`.
+        trajectory: Cumulative trajectory (Social Recall / Precision /
+            TLR / CPR) indexed by episode. Same length as ``per_episode``.
+        meta: Free-form provenance (model, condition, seed) shared
+            across episodes in this graph.
+    """
+
+    graph_id: str
+    per_episode: list[RunScorecard] = field(default_factory=list)
+    trajectory: "CumulativeTrajectory | None" = None
+    meta: dict[str, Any] = field(default_factory=dict)
