@@ -1,0 +1,64 @@
+# Auto-generated docker-compose for scenario cu-scheduling-999-000.
+# Do not edit by hand -- regenerate via the scenario generator CLI.
+#
+# One OpenClaw container per agent + one gateway container on a private
+# `clawnet` bridge. The gateway exposes :8080 on the host so the runner can
+# poll /healthz; agent containers reach the gateway by service name.
+
+services:
+  gateway:
+    image: clawsocialarena/gateway:dev
+    build:
+      context: ../..
+      dockerfile: docker/gateway.Dockerfile
+    environment:
+      - CLAWSOCIAL_GATEWAY_PORT=8080
+      - CLAWSOCIAL_SCENARIO_ID=cu-scheduling-999-000
+    ports:
+      - "8080:8080"
+    networks: [clawnet]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"
+      interval: 2s
+      retries: 20
+
+  alice:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../..
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=alice
+      - CLAWSOCIAL_USER_ID=user-a
+    networks: [clawnet]
+    entrypoint: ["sh", "-c"]
+    command: ["sleep infinity"]
+
+  bob:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../..
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=bob
+      - CLAWSOCIAL_USER_ID=user-b
+    networks: [clawnet]
+    entrypoint: ["sh", "-c"]
+    command: ["sleep infinity"]
+
+networks:
+  clawnet:
+    driver: bridge
+    internal: false
