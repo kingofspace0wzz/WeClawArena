@@ -1,0 +1,63 @@
+# Main-table grid for the ClawSocialArena v2 headline results (spec §5.4).
+#
+# Full compute budget (committed):
+#   Main table -- live cells:     50 scenarios x 3 conditions x 4 models = 600 runs
+#   Main table -- replay cells:  100 scenarios x 3 conditions x 4 models = 1,200 runs
+#   Seed-variance spot-check:     20 scenarios x 3 seeds x 3 conditions x 4 models (live) = 720 runs
+#   Episode-graph stratum:        20 scenarios x 3 conditions x 4 models (live) = 240 runs
+#   Total main-table bucket:                                                     ~2,760 runs
+#
+# Live vs replay split (spec §2.11):
+#   Live: 50 scenarios running on real OpenClaw + real LLM providers.
+#   Replay: 100 scenarios replayed from cassettes recorded on
+#           Claude Sonnet 4.6 / passive. Used for ablations and sensitivity.
+#
+# The rows below are a four-row smoke sample so local tests and dry runs
+# exercise the full machinery without burning budget. The full grid is
+# materialized by scripts/materialize_grid.py (not yet written) at phase-G5
+# pilot time.
+#
+# Row schema: scenario_id, condition, model, privacy_level, seed,
+# live_or_replay, optional cassette_path (required for replay), optional
+# tags dict for analysis provenance.
+
+- scenario_id: cu-scheduling-mvp
+  condition: baseline
+  model: claude-sonnet-4-6
+  privacy_level: L2
+  seed: 0
+  live_or_replay: live
+  tags:
+    bucket: main_table
+    stratum: headline
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: claude-sonnet-4-6
+  privacy_level: L2
+  seed: 0
+  live_or_replay: live
+  tags:
+    bucket: main_table
+    stratum: headline
+
+- scenario_id: cu-scheduling-mvp
+  condition: enforce
+  model: claude-sonnet-4-6
+  privacy_level: L2
+  seed: 0
+  live_or_replay: live
+  tags:
+    bucket: main_table
+    stratum: headline
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: gpt-5-mini
+  privacy_level: L2
+  seed: 0
+  live_or_replay: replay
+  cassette_path: ../fixtures/scenarios/cu_scheduling_mvp/sample_cassette.jsonl
+  tags:
+    bucket: main_table
+    stratum: headline_replay

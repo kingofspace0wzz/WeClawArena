@@ -1,0 +1,60 @@
+# Ablation grid for the ClawSocialArena v2 (spec §5.4).
+#
+# Full compute budget (committed):
+#   Privacy-ladder ablation:       50 scenarios x 2 privacy x 3 conditions x 4 models = 1,200 runs
+#   External-baseline comparison:  40 scenarios x 3 baselines x 4 models            = 480 runs
+#   Total ablation bucket:                                                           1,680 runs
+#
+# Live vs replay split (spec §2.11):
+#   Every ablation row is a replay of a cassette recorded in the
+#   Claude Sonnet 4.6 / passive main-table live run. No live LLM calls
+#   happen from this file; cost per row is $0.
+#
+# The rows below are a four-row smoke sample: two privacy-ladder cells
+# covering the L0/L4 extremes of the 5-level ladder, plus two external
+# baseline cells covering the prompt-ladder and vanilla-AA auditors.
+# The full grid is materialized from this template at phase-G7 time.
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: claude-sonnet-4-6
+  privacy_level: L0
+  seed: 0
+  live_or_replay: replay
+  cassette_path: ../fixtures/scenarios/cu_scheduling_mvp/sample_cassette.jsonl
+  tags:
+    bucket: ablation
+    stratum: privacy_ladder
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: claude-sonnet-4-6
+  privacy_level: L4
+  seed: 0
+  live_or_replay: replay
+  cassette_path: ../fixtures/scenarios/cu_scheduling_mvp/sample_cassette.jsonl
+  tags:
+    bucket: ablation
+    stratum: privacy_ladder
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: claude-sonnet-4-6
+  privacy_level: L2
+  seed: 1
+  live_or_replay: replay
+  cassette_path: ../fixtures/scenarios/cu_scheduling_mvp/sample_cassette.jsonl
+  tags:
+    bucket: ablation
+    stratum: external_baseline_prompt_ladder
+
+- scenario_id: cu-scheduling-mvp
+  condition: passive
+  model: claude-sonnet-4-6
+  privacy_level: L2
+  seed: 2
+  live_or_replay: replay
+  cassette_path: ../fixtures/scenarios/cu_scheduling_mvp/sample_cassette.jsonl
+  tags:
+    bucket: ablation
+    stratum: external_baseline_vanilla_aa
