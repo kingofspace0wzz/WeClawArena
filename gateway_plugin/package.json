@@ -3,12 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
-  "clawsocialNote": "Depends on `openclaw` from the public npm registry to match the Dockerfile in Task A10 (which runs `npm install -g openclaw`). Do not switch to `file:` links to `knowledge/openclaw` without updating the Docker image plan.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "clawsocialNote": "Depends on `openclaw` from the public npm registry to match the Dockerfile in Task A10 (which runs `npm install -g openclaw`). Do not switch to `file:` links to `knowledge/openclaw` without updating the Docker image plan. The `build` script emits `dist/` via `tsc -p tsconfig.build.json`; `npm pack` picks up just `dist` + manifest so the tarball is what A10's Docker image installs via `openclaw plugin install`.",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p ."
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "tsc -p tsconfig.build.json"
   },
   "peerDependencies": {
     "openclaw": "^2026.4.15"

@@ -1,0 +1,67 @@
+# Minimize the build context for docker/openclaw-with-plugin.Dockerfile.
+# The Dockerfile only needs `gateway_plugin/` (sources + lockfile) so that
+# Stage 1 can build the npm tarball. Everything else is excluded to keep
+# `docker build .` from shipping the whole repo to the daemon.
+
+# Node/TypeScript build artifacts.
+**/node_modules
+**/dist
+**/.turbo
+**/.next
+
+# Python virtualenvs, caches, build output.
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+**/build
+**/htmlcov
+**/.coverage
+**/test_output
+
+# Version control and worktree scaffolding.
+.git
+.gitattributes
+.worktrees
+worktree
+
+# Arena docs, paper drafts, and external knowledge drops.
+docs
+neurips
+knowledge
+benchmark
+results
+fixtures
+
+# Python-only pieces this image does not need.
+clawsocialarena
+tests
+scripts
+pyproject.toml
+*.py
+*.sqlite
+*.db
+
+# Editor / local state.
+.vscode
+.idea
+.DS_Store
+.env*
+!.env.example
+
+# Skill / agent config scaffolding.
+.agent-config
+.claude
+agents
+knowledge
+CLAUDE.md
+AGENTS.md
+AGENTS.local.md
+
+# Docker auxiliary files (the Dockerfile is selected with -f; we do not
+# need the full `docker/` tree inside the image context).
+docker/*
+!docker/openclaw-with-plugin.Dockerfile
