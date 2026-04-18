@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from clawsocialarena.action_log import ActionLog
+from clawsocialarena.audit.mswm import MSWM
 from clawsocialarena.audit.phase_tracker import PhaseTracker
 from clawsocialarena.audit.shadow_log import ShadowLog
 from clawsocialarena.gateway.cassette import CassetteRecorder
@@ -113,6 +114,12 @@ class Session:
     hooks: list[PolicyHook] = field(default_factory=list)
     inboxes: dict[str, asyncio.Queue[tuple[str, str]]] = field(default_factory=dict)
     mcp_host: McpHost = field(default_factory=McpHost)
+    # MSWM is cheap in-memory state and is always present, even under
+    # BASELINE. Under BASELINE the gateway never calls ``_record_action``
+    # (early-return on the baseline gate), so MSWM naturally stays empty;
+    # keeping the field always-present makes it safe for the gateway HTTP
+    # handlers and the MSWM-aware hook to reference unconditionally.
+    mswm: MSWM = field(default_factory=MSWM)
 
     @classmethod
     def build(
@@ -417,6 +424,27 @@ class Session:
         current_content = hook_target_content
         blocked = False
 
+        # Build a provisional representing the current action so MSWM can
+        # update immediately and so hooks can see the fresh state (spec §2.6
+        # explicitly says MSWM is updated before policy hooks run). We
+        # rebuild the provisional inside the hook loop when a rewrite
+        # composes, but the MSWM update uses the ORIGINAL provisional only
+        # once — MSWM models what the agent intends, not the rewriter's
+        # edits.
+        initial_provisional = ActionRecord(
+            action_id=action_id,
+            prev_hash=self.action_log.head_hash(agent_id),
+            agent_id=agent_id,
+            action_type=action_type,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=social_phase,
+            payload=dict(payload),
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+            source_action_ids=sources,
+        )
+        self.mswm.on_action(initial_provisional)
+
         if hook_kind is not None and self.hooks:
             for hook in self.hooks:
                 if getattr(hook, "hook_kind", "message") != hook_kind:
@@ -445,7 +473,7 @@ class Session:
                     source_action_ids=sources,
                 )
                 decision: PolicyDecision = hook.evaluate(
-                    action=provisional, context={}
+                    action=provisional, context={"mswm": self.mswm}
                 )
 
                 post_content = (
@@ -474,7 +502,10 @@ class Session:
 
         if blocked:
             # No primary record, no cassette line for the action itself;
-            # the POLICY_DECISION rows above preserve the evidence.
+            # the POLICY_DECISION rows above preserve the evidence. Revert
+            # the MSWM update we did pre-hook so the state reflects "action
+            # never happened" from the peer's perspective.
+            self.mswm.revert_action(initial_provisional)
             return RecordOutcome(action_id=None, blocked=True)
 
         # Build the final payload: under ENFORCE with a rewrite, the

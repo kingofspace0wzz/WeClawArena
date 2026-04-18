@@ -163,6 +163,40 @@ class MSWM:
         sender_model.phase_of_last_interaction = action.social_phase
         recipient_model.phase_of_last_interaction = action.social_phase
 
+    def revert_action(self, action: ActionRecord) -> None:
+        """Undo any MSWM update previously applied for ``action``.
+
+        Used by :class:`clawsocialarena.gateway.session.Session` when an
+        ENFORCE-mode hook BLOCKs an action after MSWM has already updated
+        to reflect it. The revert is surgical: it removes tuples keyed by
+        ``(item_id, action.action_id)`` rather than clearing entire sets.
+
+        Self-knowledge reverts are best-effort: retrieval and memory reads
+        are not atomically undoable (the agent *did* observe the content),
+        so for now we only undo peer-facing state. Memory writes that were
+        blocked after MSWM processed them keep their self-knowledge bag
+        unchanged, which is the safe conservative choice.
+        """
+
+        if action.action_type != ActionType.OUTBOUND_MESSAGE:
+            return
+        payload = action.payload
+        recipient_id = payload.get("recipient_id")
+        mentioned = payload.get("mentioned_items") or []
+        if not recipient_id or not isinstance(recipient_id, str) or not mentioned:
+            return
+        sender_id = action.agent_id
+        action_id = action.action_id
+        sender_model = self.state.get(sender_id, {}).get(recipient_id)
+        recipient_model = self.state.get(recipient_id, {}).get(sender_id)
+        for item_id in mentioned:
+            if not isinstance(item_id, str):
+                continue
+            if sender_model is not None:
+                sender_model.items_told_to_j.discard((item_id, action_id))
+            if recipient_model is not None:
+                recipient_model.items_learned_from_j.discard((item_id, action_id))
+
     def _on_self_knowledge(self, action: ActionRecord, *, key: str) -> None:
         """Mark ``action.agent_id`` as knowing each item in ``payload[key]``.
 
