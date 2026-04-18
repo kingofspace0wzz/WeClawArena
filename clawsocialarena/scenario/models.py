@@ -45,8 +45,13 @@ with warnings.catch_warnings():
     class McpToolSpec(BaseModel):
         """Per-tool entry in the GT bundle's `mcp_tool_manifest` (spec §4.6).
 
-        - `schema`: JSON Schema describing the tool's input payload. The
-          gateway MCP host validates outgoing tool calls against this schema.
+        - `schema`: **advisory** JSON Schema describing the tool's input
+          payload. The gateway's :class:`McpHost` does *not* validate
+          incoming tool calls against it today; the field documents the
+          intended contract so downstream tooling (analysis pipelines,
+          attacker-model generators) can still lean on it. Phase F may
+          add gateway-side JSON-Schema validation, at which point this
+          field becomes enforced rather than advisory.
         - `audit_class`: one of the ActionRecord action classes
           (`outbound_message`, `side_channel`, ...). Tells the gateway which
           integrity-level requirement applies when this tool is invoked.

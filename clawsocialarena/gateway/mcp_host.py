@@ -57,6 +57,12 @@ class McpHost:
         directly. Either way the return value must be a ``dict``. Raises
         ``KeyError`` when no handler is registered for ``tool_name`` so
         the HTTP layer can translate that into a 404 response.
+
+        TODO(F): ``McpToolSpec.schema`` on the scenario's GT bundle is
+        currently advisory -- this method does not validate ``arguments``
+        against it. Phase F's evaluation pipeline will decide whether to
+        enforce the schema here or leave it to the attacker-model harness.
+        Until then, callers must treat the schema as documentation only.
         """
 
         if tool_name not in self._handlers:
