@@ -1,8 +1,10 @@
-# ClawSocialArena — Design Specification
+# ClawSocialArena — Design Specification (v1, SUPERSEDED)
+
+> **SUPERSEDED 2026-04-17 by `docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md`.** The v2 spec replaces the in-process Python runtime with real OpenClaw containers in Docker Compose behind a central audit gateway, renames SEM to Multi-Party Social World Modeling (MSWM), restructures the benchmark as an extension of AgentSocialBench with τ²-style verifiable task families and a 3-axis attacker taxonomy, and cuts the scenario count to 150. This v1 document is preserved only as historical context and should not be used for architecture decisions.
 
 **Date**: 2026-04-15 (brainstorming); updated 2026-04-15 post-implementation
-**Status**: Phases 1–6 infrastructure implemented (149/149 tests). Remaining: data generation + experiment runs.
-**Working title**: *ClawSocialArena: An Auditable Runtime System for Benchmarking Agentic Social Networks*
+**Status (v1, no longer current)**: Phases 1–6 infrastructure implemented (149/149 tests). Remaining in v1: data generation + experiment runs. v2 rebuild landed between 2026-04-17 and 2026-04-18.
+**Working title (v1)**: *ClawSocialArena: An Auditable Runtime System for Benchmarking Agentic Social Networks*
 
 ---
 

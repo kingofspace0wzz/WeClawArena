@@ -32,7 +32,7 @@ python -m clawsocialarena.analysis --help
 | Component | Module | Notes |
 |---|---|---|
 | Core runtime | `clawsocialarena/{action_log,bus,runtime,agents,scenario,tasks,types,hashing}.py` | Hash-chained `ActionLog`, `AuditedMessageBus` / `RawMessageBus`, `AuditableAIAgent`, `ScenarioRunner`, scheduling terminal predicate |
-| Audit substrate | `clawsocialarena/audit/` | `ShadowLog`, `PhaseTracker`, `PolicyRegistry`, `PolicyCatalog`, `AttributionGraphBuilder` (causal + proximity), `SEMStore` (stub), vendored `error_chains` |
+| Audit substrate | `clawsocialarena/audit/` | `ShadowLog`, `PhaseTracker`, `PolicyRegistry`, `PolicyCatalog`, `AttributionGraphBuilder` (causal + proximity), vendored `error_chains` (MSWM online state machine lands in Phase C) |
 | SAF scorers | `clawsocialarena/saf/` | 5 dimensions + `SAFScorer` geometric-mean orchestrator |
 | Evaluation pipeline | `clawsocialarena/eval/` | `EvalRunner` 5-stage + `RunScorecard` JSON schema |
 | 3-condition ablation | `bus/audited.py` + `bus/raw.py` | `baseline` uses `RawMessageBus` (no audit infra); `passive` logs + evaluates without blocking; `enforce` rewrites or blocks |
