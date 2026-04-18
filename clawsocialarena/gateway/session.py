@@ -147,19 +147,144 @@ class Session:
         subsequent tasks (A4 side channels, A5 cassette, C5 MSWM wiring).
         """
 
+        return self._record_action(
+            agent_id=sender_id,
+            action_type=ActionType.OUTBOUND_MESSAGE,
+            payload={"recipient_id": recipient_id, "content": content},
+            id_prefix="act",
+        )
+
+    def record_tool_call(
+        self,
+        *,
+        agent_id: str,
+        tool_name: str,
+        arguments: dict,
+    ) -> str | None:
+        """Append a ``TOOL_CALL`` ActionRecord if the session is audited.
+
+        Under BASELINE returns ``None`` with no log append, matching the
+        semantics of :meth:`record_outbound`. Under PASSIVE or ENFORCE the
+        record is appended and its assigned ``action_id`` is returned so
+        the caller (and any later ``record_tool_observation``) can link to
+        it. Policy hooks, phase tagging, shadow double-write, and cassette
+        recording are deliberately omitted at this stage.
+        """
+
+        return self._record_action(
+            agent_id=agent_id,
+            action_type=ActionType.TOOL_CALL,
+            payload={"tool_name": tool_name, "arguments": arguments},
+            id_prefix="tc",
+        )
+
+    def record_tool_observation(
+        self,
+        *,
+        agent_id: str,
+        tool_call_action_id: str,
+        tool_name: str,
+        observation: str,
+    ) -> str | None:
+        """Append a ``TOOL_OBSERVATION_RETURN`` ActionRecord, if audited.
+
+        Payload mirrors v1's ``AuditedMessageBus.record_tool_observation``:
+        ``{tool_call_action_id, tool_name, observation}``. Baseline returns
+        ``None``; passive/enforce append and return the new ``action_id``.
+        """
+
+        return self._record_action(
+            agent_id=agent_id,
+            action_type=ActionType.TOOL_OBSERVATION_RETURN,
+            payload={
+                "tool_call_action_id": tool_call_action_id,
+                "tool_name": tool_name,
+                "observation": observation,
+            },
+            id_prefix="tr",
+        )
+
+    def record_memory_write(
+        self,
+        *,
+        agent_id: str,
+        content: str,
+        tags: list[str] | None = None,
+    ) -> str | None:
+        """Append a ``MEMORY_WRITE`` ActionRecord, if audited.
+
+        ``tags`` is normalized to an empty list when absent so downstream
+        consumers always see a list. Baseline returns ``None``.
+        """
+
+        return self._record_action(
+            agent_id=agent_id,
+            action_type=ActionType.MEMORY_WRITE,
+            payload={"content": content, "tags": list(tags) if tags else []},
+            id_prefix="mem",
+        )
+
+    def record_llm_call(
+        self,
+        *,
+        agent_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+        model: str,
+        cached_tokens: int = 0,
+    ) -> str | None:
+        """Append an ``LLM_CALL`` ActionRecord with token accounting, if audited.
+
+        The payload carries all six accounting fields (``input_tokens``,
+        ``output_tokens``, ``cached_tokens``, ``latency_ms``, ``model``).
+        ``cached_tokens`` defaults to 0 when the caller omits it. Baseline
+        returns ``None`` and writes nothing.
+        """
+
+        return self._record_action(
+            agent_id=agent_id,
+            action_type=ActionType.LLM_CALL,
+            payload={
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cached_tokens": cached_tokens,
+                "latency_ms": latency_ms,
+                "model": model,
+            },
+            id_prefix="llm",
+        )
+
+    def _record_action(
+        self,
+        *,
+        agent_id: str,
+        action_type: ActionType,
+        payload: dict,
+        id_prefix: str,
+    ) -> str | None:
+        """Shared helper: append an ActionRecord under PASSIVE or ENFORCE.
+
+        Returns the generated ``action_id`` on append, or ``None`` under
+        BASELINE (no-op). Uses the same construction shape as the v1
+        ``AuditedMessageBus`` (hash-chained integrity, NOMINAL execution
+        phase, DISCOVERY social phase placeholder until Task A6 wires the
+        ``PhaseTracker`` through).
+        """
+
         if self.condition == AuditCondition.BASELINE or self.action_log is None:
             return None
 
-        action_id = f"act-{uuid.uuid4().hex[:12]}"
+        action_id = f"{id_prefix}-{uuid.uuid4().hex[:12]}"
         record = ActionRecord(
             action_id=action_id,
-            prev_hash=self.action_log.head_hash(sender_id),
-            agent_id=sender_id,
-            action_type=ActionType.OUTBOUND_MESSAGE,
+            prev_hash=self.action_log.head_hash(agent_id),
+            agent_id=agent_id,
+            action_type=action_type,
             timestamp=datetime.now(timezone.utc).isoformat(),
             execution_phase=ExecutionPhase.NOMINAL,
             social_phase=SocialPhase.DISCOVERY,  # TODO(A6): phase_tracker.current_phase(turn_index)
-            payload={"recipient_id": recipient_id, "content": content},
+            payload=payload,
             integrity_level=IntegrityLevel.HASH_CHAINED,
         )
         self.action_log.append(record)

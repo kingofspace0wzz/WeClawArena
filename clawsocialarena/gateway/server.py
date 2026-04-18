@@ -38,6 +38,10 @@ def build_app(session: Session) -> web.Application:
     app.router.add_get("/healthz", routes.healthz)
     app.router.add_post("/send", routes.send)
     app.router.add_post("/recv", routes.recv)
+    app.router.add_post("/tool_call", routes.tool_call)
+    app.router.add_post("/tool_observation_return", routes.tool_observation_return)
+    app.router.add_post("/memory_write", routes.memory_write)
+    app.router.add_post("/llm_call", routes.llm_call)
     return app
 
 
