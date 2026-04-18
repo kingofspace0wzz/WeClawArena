@@ -1,16 +1,22 @@
-"""Scenario generator CLI.
+"""Scenario generator CLI (v2; Task D7).
 
 Usage:
     python -m clawsocialarena.generator.cli \\
-        --category CU --family scheduling --n 10 --seed 42 \\
-        --out /tmp/generated
+        --category CU --family scheduling --n 1 --seed 42 \\
+        --out /tmp/gen_test
 
-Emits, for each scenario, a directory at <out>/<scenario_id>/ containing
-scenario.json + scenario.gt.json.
+For each scenario, emits a full v2 bundle under ``<out>/<scenario_id>/``:
 
-Phase 4 scope: deterministic instantiation only (no LLM calls). LLM-assisted
-profile expansion will land in Phase 4.2 via --instantiation-mode=llm once the
-LLMClient plumbing is wired.
+    scenario.json
+    scenario.gt.json
+    docker-compose.yml
+    personas/<agent_id>.system.md
+    personas/<agent_id>.tools.json
+    mcp/<tool>.json
+
+``--instantiation-mode llm`` is accepted as a forward-compatibility flag but
+currently silently falls back to deterministic instantiation until the
+LLMClient plumbing lands (Phase 4.2).
 """
 
 from __future__ import annotations
@@ -21,32 +27,40 @@ import sys
 from pathlib import Path
 
 from clawsocialarena.generator.attack_injection import AttackType, inject_attack
+from clawsocialarena.generator.compose_emitter import emit_compose_yaml
 from clawsocialarena.generator.gt_assembly import (
     assemble_gt_bundle,
     assemble_scenario_json,
 )
 from clawsocialarena.generator.instantiation import instantiate
+from clawsocialarena.generator.mcp_emitter import emit_mcp_configs
+from clawsocialarena.generator.persona_emitter import emit_persona_files
 from clawsocialarena.generator.registry import get_template, list_registered
 from clawsocialarena.generator.template import CategoryCode, TaskFamily
+from clawsocialarena.scenario.models import Scenario
+
+
+INSTANTIATION_MODES = ("deterministic", "llm")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="clawsocialarena.generator",
-        description="Generate ClawSocialArena scenarios (scenario.json + scenario.gt.json).",
+        description=(
+            "Generate ClawSocialArena scenarios (scenario.json + "
+            "scenario.gt.json + compose + personas + mcp)."
+        ),
     )
     p.add_argument(
         "--category",
         type=CategoryCode,
         choices=list(CategoryCode),
-        required=True,
         help="Scenario category code (CD/MC/CU/MG/HS/CM/AM).",
     )
     p.add_argument(
         "--family",
         type=TaskFamily,
         choices=list(TaskFamily),
-        required=True,
         help="Verifiable task family.",
     )
     p.add_argument("--n", type=int, default=1, help="Number of scenarios to generate.")
@@ -66,8 +80,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--out",
         type=Path,
-        required=True,
         help="Output directory. Creates <out>/<scenario_id>/ per scenario.",
+    )
+    p.add_argument(
+        "--instantiation-mode",
+        choices=INSTANTIATION_MODES,
+        default="deterministic",
+        help=(
+            "Instantiation mode. 'llm' is a forward-compat flag and currently "
+            "falls back to 'deterministic' until the LLMClient lands."
+        ),
     )
     p.add_argument(
         "--list-templates",
@@ -85,9 +107,34 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{cat.value} × {fam.value}")
         return 0
 
+    # For a normal generation run, category/family/out are required.
+    missing = [
+        name for name, val in (
+            ("--category", args.category),
+            ("--family", args.family),
+            ("--out", args.out),
+        )
+        if val is None
+    ]
+    if missing:
+        print(
+            "missing required argument(s): " + ", ".join(missing),
+            file=sys.stderr,
+        )
+        return 2
+
     if args.attack is not None and not args.attacker_agent:
         print("--attacker-agent is required when --attack is set", file=sys.stderr)
         return 2
+
+    if args.instantiation_mode == "llm":
+        # Forward-compat stub. Announce the fallback so callers know their
+        # LLM-mode run was actually deterministic.
+        print(
+            "note: --instantiation-mode=llm is stubbed; "
+            "falling back to deterministic.",
+            file=sys.stderr,
+        )
 
     try:
         template = get_template(args.category, args.family)
@@ -99,7 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     for i in range(args.n):
-        scenario_id = f"{args.category.value.lower()}-{args.family.value}-{args.seed}-{i:03d}"
+        scenario_id = (
+            f"{args.category.value.lower()}-{args.family.value}-"
+            f"{args.seed}-{i:03d}"
+        )
         shape = instantiate(
             template, seed=args.seed + i, scenario_id=scenario_id
         )
@@ -110,17 +160,51 @@ def main(argv: list[str] | None = None) -> int:
                 attacker_agent_id=args.attacker_agent,
             )
 
-        out_dir = out_root / scenario_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "scenario.json").write_text(
-            json.dumps(assemble_scenario_json(shape), indent=2, ensure_ascii=False)
-        )
-        (out_dir / "scenario.gt.json").write_text(
-            json.dumps(assemble_gt_bundle(shape), indent=2, ensure_ascii=False)
-        )
-        print(f"wrote {out_dir}")
+        _write_bundle(shape, out_root / scenario_id)
+        print(f"wrote {out_root / scenario_id}")
 
     return 0
+
+
+def _write_bundle(shape, out_dir: Path) -> None:
+    """Write a complete v2 bundle to ``out_dir``."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    scenario_dict = assemble_scenario_json(shape)
+    gt_dict = assemble_gt_bundle(shape)
+
+    (out_dir / "scenario.json").write_text(
+        json.dumps(scenario_dict, indent=2, ensure_ascii=False)
+    )
+    (out_dir / "scenario.gt.json").write_text(
+        json.dumps(gt_dict, indent=2, ensure_ascii=False)
+    )
+
+    # Build the Scenario pydantic model for the emitters that want typed input.
+    scenario = Scenario.model_validate(scenario_dict)
+
+    # docker-compose.yml
+    (out_dir / "docker-compose.yml").write_text(emit_compose_yaml(scenario))
+
+    # personas/
+    personas_dir = out_dir / "personas"
+    personas_dir.mkdir(parents=True, exist_ok=True)
+    tool_allowlist_by_agent = {
+        agent.agent_id: list(gt_dict.get("mcp_tool_manifest", {}).keys())
+        for agent in scenario.agents
+    }
+    for filename, contents in emit_persona_files(
+        scenario, tool_allowlist_by_agent=tool_allowlist_by_agent
+    ).items():
+        (personas_dir / filename).write_text(contents)
+
+    # mcp/
+    mcp_dir = out_dir / "mcp"
+    mcp_dir.mkdir(parents=True, exist_ok=True)
+    for filename, contents in emit_mcp_configs(
+        gt_dict.get("mcp_tool_manifest", {})
+    ).items():
+        (mcp_dir / filename).write_text(contents)
 
 
 if __name__ == "__main__":
