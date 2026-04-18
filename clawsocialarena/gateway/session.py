@@ -31,6 +31,7 @@ from pathlib import Path
 from clawsocialarena.action_log import ActionLog
 from clawsocialarena.audit.phase_tracker import PhaseTracker
 from clawsocialarena.audit.shadow_log import ShadowLog
+from clawsocialarena.gateway.cassette import CassetteRecorder
 from clawsocialarena.protocols.policy_hook import PolicyHook
 from clawsocialarena.types import (
     ActionRecord,
@@ -63,7 +64,7 @@ class Session:
     action_log: ActionLog | None = None
     shadow_log: ShadowLog | None = None
     phase_tracker: PhaseTracker | None = None
-    cassette: object | None = None
+    cassette: CassetteRecorder | None = None
     hooks: list[PolicyHook] = field(default_factory=list)
     inboxes: dict[str, asyncio.Queue[tuple[str, str]]] = field(default_factory=dict)
 
@@ -75,13 +76,17 @@ class Session:
         *,
         db_path: str | Path,
         phase_schedule: list[dict] | None = None,
+        work_dir: Path | str | None = None,
     ) -> "Session":
         """Construct a Session with substrate wired per ``condition``.
 
         Under BASELINE every substrate field stays ``None`` and ``db_path`` is
         ignored; under PASSIVE or ENFORCE the full audit stack is created,
         with the shadow log persisted alongside the primary log as
-        ``{db_path.stem}.shadow.db`` in the same directory.
+        ``{db_path.stem}.shadow.db`` in the same directory. When ``work_dir``
+        is supplied under a non-baseline condition, a
+        :class:`CassetteRecorder` is attached that writes a
+        ``cassette.jsonl`` file inside that directory.
 
         Args:
             scenario_id: Stable identifier for the scenario.
@@ -91,6 +96,9 @@ class Session:
             phase_schedule: Optional phase schedule (as used by
                 ``PhaseTracker.from_schedule``). When absent a plain
                 :class:`PhaseTracker` is created.
+            work_dir: Optional filesystem directory for session artifacts
+                such as the cassette. When omitted, no cassette is attached.
+                Under BASELINE this argument is ignored.
         """
 
         if condition == AuditCondition.BASELINE:
@@ -105,13 +113,27 @@ class Session:
             if phase_schedule
             else PhaseTracker()
         )
+        cassette: CassetteRecorder | None = None
+        if work_dir is not None:
+            cassette = CassetteRecorder(Path(work_dir) / "cassette.jsonl")
         return cls(
             scenario_id=scenario_id,
             condition=condition,
             action_log=action_log,
             shadow_log=shadow_log,
             phase_tracker=phase_tracker,
+            cassette=cassette,
         )
+
+    def close(self) -> None:
+        """Release per-session resources. Idempotent.
+
+        Currently closes the cassette recorder if one is attached. Future
+        resources (open DB handles, MCP hosts) should hook in here too.
+        """
+
+        if self.cassette is not None:
+            self.cassette.close()
 
     def ensure_inbox(self, recipient_id: str) -> asyncio.Queue[tuple[str, str]]:
         """Return the inbox queue for ``recipient_id``, creating it on first use.
@@ -293,4 +315,6 @@ class Session:
             integrity_level=IntegrityLevel.HASH_CHAINED,
         )
         self.action_log.append(record)
+        if self.cassette is not None:
+            self.cassette.record(kind=action_type.value, payload=payload)
         return action_id
