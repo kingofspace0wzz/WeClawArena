@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from clawsocialarena.types import SocialPhase
+from clawsocialarena.types import ActionRecord, ActionType, SocialPhase
 
 
 @dataclass
@@ -102,3 +102,48 @@ class MSWM:
         for i, peers in self.state.items():
             for j in peers.keys():
                 yield (i, j)
+
+    def on_action(self, action: ActionRecord) -> None:
+        """Apply ``action`` to MSWM state.
+
+        Dispatches on ``action.action_type``. Unknown types are ignored so
+        the gateway can thread every record through MSWM without a type
+        allowlist upstream.
+
+        For OUTBOUND_MESSAGE, ``payload.mentioned_items`` (optional list of
+        item_id strings) drives the disclosure update:
+
+        - ``state[sender][recipient].items_told_to_j`` gains each
+          ``(item_id, action_id)`` tuple.
+        - ``state[recipient][sender].items_learned_from_j`` gains the
+          symmetric tuple, so the recipient's peer model reflects what it
+          now knows came from the sender.
+
+        If ``mentioned_items`` is absent (v1 payload convention), no MSWM
+        update is performed. This keeps MSWM backward-compatible with the
+        existing outbound payload that carries only ``recipient_id`` and
+        ``content``.
+        """
+
+        if action.action_type == ActionType.OUTBOUND_MESSAGE:
+            self._on_outbound_message(action)
+
+    def _on_outbound_message(self, action: ActionRecord) -> None:
+        payload = action.payload
+        recipient_id = payload.get("recipient_id")
+        mentioned = payload.get("mentioned_items") or []
+        if not recipient_id or not isinstance(recipient_id, str):
+            return
+        if not mentioned:
+            return
+        sender_id = action.agent_id
+        action_id = action.action_id
+        sender_model = self.get(sender_id, recipient_id)
+        recipient_model = self.get(recipient_id, sender_id)
+        for item_id in mentioned:
+            if not isinstance(item_id, str):
+                continue
+            sender_model.items_told_to_j.add((item_id, action_id))
+            recipient_model.items_learned_from_j.add((item_id, action_id))
+        sender_model.phase_of_last_interaction = action.social_phase
+        recipient_model.phase_of_last_interaction = action.social_phase
