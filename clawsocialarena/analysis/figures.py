@@ -194,29 +194,38 @@ def sensitivity_figure(
     threshold_deltas: Sequence[float] = (-0.05, 0.0, 0.05),
     threshold_base: float = 0.80,
 ) -> Figure:
-    """Binary SAF pass-rate as the overall-score threshold is swept ±δ.
+    """Binary SAF pass rate swept across ``threshold_base ± δ``, per condition.
 
-    For each δ, the pass rate is computed as
-    ``fraction_of_scorecards_with(saf_overall ≥ threshold_base + δ)``.
-    Draws one line per condition.
+    Delegates the binary-pass-rate computation to
+    :func:`clawsocialarena.analysis.stats.saf_threshold_sensitivity` so
+    the figure and the H6 statistics agree on every number.
     """
 
+    # Import locally to avoid a stats -> figures circular dependency risk.
+    from clawsocialarena.analysis.stats import saf_threshold_sensitivity
+
+    table = saf_threshold_sensitivity(
+        df,
+        deltas=threshold_deltas,
+        base_threshold=threshold_base,
+        by=("condition",),
+    )
+
     fig, ax = plt.subplots(figsize=(8, 4))
-    conditions = [c for c in _CONDITION_ORDER if c in set(df["condition"].dropna())]
+    conditions = [c for c in _CONDITION_ORDER if c in set(table["condition"].dropna())]
     deltas = list(threshold_deltas)
     for cond in conditions:
-        sub = df[df["condition"] == cond]
-        rates = [
-            float((sub["saf_overall"] >= threshold_base + d).mean()) if not sub.empty else 0.0
-            for d in deltas
-        ]
-        ax.plot(deltas, rates, marker="o", label=cond)
+        sub = table[table["condition"] == cond].sort_values("delta")
+        ax.plot(sub["delta"], sub["pass_rate"], marker="o", label=cond)
     ax.set_xlabel("Threshold shift δ (applied to SAF pass bar)")
     ax.set_ylabel("Binary SAF pass rate")
     ax.set_title("SAF threshold sensitivity sweep")
     if conditions:
         ax.legend(title="Condition")
     ax.grid(True, alpha=0.3)
+    # Keep the y-range deterministic so tests can assert on it.
+    ax.set_ylim(-0.02, 1.05)
+    _ = deltas  # deltas passed via ``table`` — retained for signature parity.
     fig.tight_layout()
     return fig
 
