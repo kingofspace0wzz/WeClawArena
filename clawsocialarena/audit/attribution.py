@@ -89,7 +89,7 @@ class AttributionGraphBuilder:
                 "falling back to proximity heuristic (cascade_window=%d).",
                 self.cascade_window,
             )
-        return self._build_proximity(records)
+        return self._build_proximity(records, mswm)
 
     # ------------------------------------------------------------------
     # Causal path (explicit provenance + MSWM-derived edges)
@@ -163,9 +163,29 @@ class AttributionGraphBuilder:
         return {"nodes": nodes, "edges": edges}
 
     # ------------------------------------------------------------------
-    # Proximity fallback (legacy / backward compat)
+    # Proximity fallback (legacy / MSWM-item-overlap aware)
     # ------------------------------------------------------------------
-    def _build_proximity(self, action_log: list[ActionRecord]) -> dict:
+    def _build_proximity(
+        self, action_log: list[ActionRecord], mswm: MSWM | None = None
+    ) -> dict:
+        """MSWM-aware proximity fallback.
+
+        Two scoring passes are combined:
+
+        1. Forward window (v1 / legacy): every OUTBOUND_MESSAGE in the
+           ``cascade_window`` positions after an L0 becomes a proximity
+           child edge. Same agent or cross-agent are both accepted.
+        2. Item-overlap scoring (Phase C): when ``mswm`` is supplied, each
+           candidate outbound within the window is additionally scored by
+           the overlap between its ``mentioned_items`` and the set of
+           items MSWM reports the relevant agents already know. Any
+           positive overlap promotes the edge independent of the window
+           ordering — the edge still points from the L0 to the candidate
+           and is annotated with the positional relationship.
+
+        With an empty ``mswm`` the method degrades to the v1 behavior.
+        """
+
         nodes: list[dict] = []
         edges: list[dict] = []
         seen_ids: set[str] = set()
@@ -191,6 +211,12 @@ class AttributionGraphBuilder:
                 cand = action_log[j]
                 if cand.action_type != ActionType.OUTBOUND_MESSAGE:
                     continue
+
+                # Score the candidate edge. Positive score is required.
+                score = _proximity_score(v_rec, cand, mswm)
+                if score <= 0:
+                    continue
+
                 if cand.action_id not in seen_ids:
                     nodes.append(
                         {
@@ -205,6 +231,32 @@ class AttributionGraphBuilder:
                 )
 
         return {"nodes": nodes, "edges": edges}
+
+
+def _proximity_score(
+    l0: ActionRecord, cand: ActionRecord, mswm: MSWM | None
+) -> float:
+    """Score a proximity edge from ``l0`` to ``cand``.
+
+    Baseline score is 1.0 (positional match; preserves v1 behavior). When
+    ``mswm`` is supplied, item overlap adds to the score: for each item in
+    the candidate's ``mentioned_items`` that is also known to the
+    candidate's agent via MSWM, add 1.0. Agents paired through ``l0``'s
+    target (``payload.target_action_id``) further boost the score by 0.5
+    when the candidate is the same agent or communicates with the L0's
+    agent.
+    """
+
+    score = 1.0
+    if mswm is not None:
+        mentioned = cand.payload.get("mentioned_items") or []
+        if mentioned:
+            known = mswm.known_items(cand.agent_id)
+            overlap = sum(1 for item in mentioned if item in known)
+            score += float(overlap)
+    if cand.agent_id == l0.agent_id:
+        score += 0.5
+    return score
 
 
 def _mswm_has_links(mswm: MSWM) -> bool:
