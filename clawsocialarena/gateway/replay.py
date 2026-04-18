@@ -1,24 +1,24 @@
 """Cassette replay driver for offline evaluation.
 
-The :class:`CassetteRecorder` persists every action as a JSONL line of
-``{timestamp, kind, payload}``. For replay we need a bit more than the
-bare v1 format carries — specifically the sending ``agent_id``, a stable
-``action_id``, and any ``source_action_ids`` that the original live run
-would have stamped on the record. Two input formats are supported:
+:class:`CassetteRecorder` persists every action as an enriched JSONL line:
 
-1. **Enriched cassette** — each line is
-   ``{timestamp, kind, payload, agent_id, action_id[, source_action_ids]}``.
-   This is the format v2 cassettes should carry going forward; the
-   gateway will start recording it when Phase H wires the final batch
-   runner. For Phase F the fixture-level tests hand-craft it directly.
-2. **Bare cassette** — legacy ``{timestamp, kind, payload}`` lines. The
-   caller supplies an ``agent_resolver`` callable that returns the
-   agent_id for a given ``(kind, payload)`` pair. ``action_id`` is
-   generated as ``repl-{index:04d}`` for deterministic ordering.
+``{timestamp, kind, action_id, agent_id, prev_hash, source_action_ids,
+execution_phase, social_phase, integrity_level, payload}``
+
+Because the recorder now carries the full :class:`ActionRecord` envelope,
+replay is a pure rehydration step: no ``agent_resolver`` callback is
+needed and the original ``action_id`` is reused verbatim so attribution
+and hash-chain verification line up across live/replay boundaries.
+
+A thin legacy code path still handles hand-authored bare cassettes (just
+``{timestamp, kind, payload}``) for test fixtures that pre-date the
+enrichment. Those require an ``agent_resolver`` callable to supply the
+``agent_id`` and generate a deterministic ``repl-{index:04d}`` action_id.
 
 The driver is pure: it never touches the network, an LLM, or a live
-gateway. Output is an in-memory :class:`~clawsocialarena.action_log.ActionLog`
-persisted under a caller-supplied directory plus an
+gateway. Output is an in-memory
+:class:`~clawsocialarena.action_log.ActionLog` persisted under a
+caller-supplied directory plus an
 :class:`~clawsocialarena.audit.mswm.MSWM` rebuilt from the stream.
 """
 
@@ -66,7 +66,7 @@ class ReplayResult:
 class ReplayDriver:
     """Deterministic cassette replay without any LLM or gateway involvement.
 
-    Usage:
+    Usage::
 
         driver = ReplayDriver(cassette_path, gt_bundle)
         result = driver.run(db_path=workdir / "primary.db")
@@ -89,6 +89,8 @@ class ReplayDriver:
     ) -> None:
         self._cassette_path = Path(cassette_path)
         self._gt = gt_bundle
+        # The resolver is used only for legacy hand-authored bare cassettes
+        # that omit ``agent_id``. Enriched cassettes ignore it.
         self._agent_resolver = agent_resolver
 
     def run(self, *, db_path: Path | str) -> ReplayResult:
@@ -99,11 +101,11 @@ class ReplayDriver:
         run work directory. Parent directories are created if absent.
 
         The method reads the cassette line by line, decodes the JSON,
-        resolves the ``agent_id`` (via the enriched field or the
-        ``agent_resolver`` callback), stamps ``action_id`` deterministically
-        when absent, and appends an :class:`ActionRecord` to the log.
-        MSWM is updated after each append via
-        :meth:`MSWM.on_action`, exactly as the live session does.
+        rehydrates an :class:`ActionRecord` from the enriched fields
+        (or resolves ``agent_id`` via the legacy resolver for bare
+        cassettes), and appends to the log. MSWM is updated after each
+        append via :meth:`MSWM.on_action`, exactly as the live session
+        does.
         """
 
         log = ActionLog(db_path)
@@ -168,10 +170,11 @@ class ReplayDriver:
     ) -> str:
         """Return the agent_id for a cassette entry.
 
-        Enriched-format cassettes carry ``agent_id`` directly. Bare
-        cassettes rely on a user-supplied resolver. When neither is
-        available we raise ``ValueError`` — this is a programmer error,
-        not a data error.
+        Enriched cassettes always carry ``agent_id`` directly. Bare
+        cassettes (legacy test fixtures) fall back to the optional
+        resolver; when neither is available we raise ``ValueError`` so
+        the caller sees the data-format gap instead of silently
+        misattributing records.
         """
 
         explicit = entry.get("agent_id")

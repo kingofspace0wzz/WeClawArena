@@ -599,7 +599,7 @@ class Session:
             self.shadow_log.append(shadow_rec)
 
         if self.cassette is not None:
-            self.cassette.record(kind=action_type.value, payload=final_payload)
+            self.cassette.record(record)
 
         rewritten = current_content if content_changed else None
         return RecordOutcome(
@@ -688,9 +688,7 @@ class Session:
             )
             self.shadow_log.append(shadow_rec)
         if self.cassette is not None:
-            self.cassette.record(
-                kind=ActionType.POLICY_DECISION.value, payload=pd_payload
-            )
+            self.cassette.record(rec)
 
 
 def _content_key_for_action(action_type: ActionType) -> str | None:
