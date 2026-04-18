@@ -238,6 +238,49 @@ class MSWM:
             known.update(item for item, _ in peer_model.items_told_to_j)
         return known
 
+    def _has_any_entry(self, agent_id: str) -> bool:
+        """Return True if MSWM has ANY record of ``agent_id``.
+
+        Record means either at least one self-knowledge entry or at least
+        one peer model (even if its contents are empty). If the agent has
+        never appeared on either side of an action, decidability is
+        undecidable because the model carries no evidence about the agent
+        at all.
+        """
+
+        if self.self_knowledge.get(agent_id):
+            return True
+        if self.state.get(agent_id):
+            return True
+        # The agent may appear only as a peer of some other agent (i.e.
+        # someone's told_to/learned_from points at agent_id). Walk the
+        # state to check.
+        for peers in self.state.values():
+            if agent_id in peers:
+                return True
+        return False
+
+    def _item_observed_anywhere(self, item_id: str) -> bool:
+        """Return True if ``item_id`` appears anywhere in MSWM.
+
+        "Anywhere" means any self_knowledge bag, any ``items_told_to_j``
+        set, or any ``items_learned_from_j`` set across all agents. Used to
+        distinguish "definitely unknown" (item seen in some channel, just
+        not by ``for_agent``) from "never observed" (no evidence anywhere;
+        the model cannot rule for or against the inference).
+        """
+
+        for bag in self.self_knowledge.values():
+            if item_id in bag:
+                return True
+        for peers in self.state.values():
+            for peer_model in peers.values():
+                if any(item == item_id for item, _ in peer_model.items_told_to_j):
+                    return True
+                if any(item == item_id for item, _ in peer_model.items_learned_from_j):
+                    return True
+        return False
+
     def joint_decidability(
         self, agent_id: str, predicate: dict[str, Any]
     ) -> Literal["decidable", "undecidable", "violated"]:
@@ -257,18 +300,18 @@ class MSWM:
 
           - ``violated`` — ``for_agent`` already knows EVERY item in the
             forbidden set (it can make the inference now).
-          - ``decidable`` — ``for_agent`` is strictly missing at least one
-            item, and there is no uncertainty (MSWM has processed every
-            referenced item for this agent, so the status of "known" vs
-            "not known" is definite).
-          - ``undecidable`` — not applicable to ``must_not_decide`` under
-            the current model: every item either is or is not in
-            ``for_agent``'s knowledge bag, so the verdict is always
-            determinate. Kept in the signature for forward compatibility
-            with richer predicate types.
+          - ``decidable`` — every referenced item has a definite
+            known/unknown answer for ``for_agent`` and at least one is
+            unknown. The forbidden inference cannot be formed.
+          - ``undecidable`` — the model carries no evidence about
+            ``for_agent`` (the agent has no MSWM entry at all) OR at least
+            one referenced item has never been observed in any channel, so
+            the status of "known" vs "not known" is not pinned down.
 
-        - ``must_decide``: symmetric flip. ``violated`` if ``for_agent``
-          lacks any item; ``decidable`` if ``for_agent`` knows all of them.
+        - ``must_decide``: symmetric flip. ``violated`` if the predicate is
+          decidable and ``for_agent`` lacks any item; ``decidable`` if
+          ``for_agent`` knows all of them; ``undecidable`` under the same
+          conditions as above.
 
         ``agent_id`` is the SUBJECT of the query (the policy's point of
         view). For the vignette scenarios the subject and ``for_agent``
@@ -287,6 +330,15 @@ class MSWM:
             # polarity. Treat as decidable: no items to combine means the
             # inference cannot be formed.
             return "decidable" if ptype == "must_not_decide" else "violated"
+
+        # Undecidability path: the target agent has no MSWM footprint at
+        # all, OR at least one referenced item has never been seen in any
+        # channel. In both cases we lack sufficient evidence to rule.
+        if not self._has_any_entry(target_agent):
+            return "undecidable"
+        for item in forbidden:
+            if not self._item_observed_anywhere(item):
+                return "undecidable"
 
         known = self.known_items(target_agent)
         can_derive = all(item in known for item in forbidden)

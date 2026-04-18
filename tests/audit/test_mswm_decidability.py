@@ -40,8 +40,39 @@ def _outbound(
     )
 
 
-def test_predicate_decidable_before_any_disclosure() -> None:
+def test_predicate_undecidable_before_any_disclosure() -> None:
+    """Empty MSWM: target agent has no entries → undecidable, not decidable.
+
+    Previously this returned ``decidable`` because every forbidden item
+    was "not in the bag"; but Codex's Phase C review flagged that as
+    incorrect — the absence of any evidence about ``for_agent`` means the
+    model cannot pin down whether the inference is formable, not that it
+    definitely is not.
+    """
+
     mswm = MSWM()
+    predicate = {
+        "type": "must_not_decide",
+        "for_agent": "carol",
+        "forbidden_inference": ["med_x", "condition_y"],
+    }
+    assert mswm.joint_decidability("alice", predicate) == "undecidable"
+
+
+def test_predicate_decidable_after_one_observed_one_disclosed() -> None:
+    """A tells C med_x; dave discloses condition_y to bob (visible in MSWM).
+
+    Now every item has been observed in some channel, and the target
+    agent has an MSWM entry. med_x is in carol's bag; condition_y is
+    observed on a dave→bob edge but carol does not know it — so the
+    joint inference is NOT formable, yielding decidable.
+    """
+
+    mswm = MSWM()
+    mswm.on_action(_outbound("act-1", "alice", "carol", ["med_x"]))
+    # Seed condition_y via an unrelated outbound so "never observed" is
+    # not what triggers undecidability.
+    mswm.on_action(_outbound("act-seed", "dave", "bob", ["condition_y"]))
     predicate = {
         "type": "must_not_decide",
         "for_agent": "carol",
@@ -50,8 +81,9 @@ def test_predicate_decidable_before_any_disclosure() -> None:
     assert mswm.joint_decidability("alice", predicate) == "decidable"
 
 
-def test_predicate_still_decidable_after_one_of_two_items_known() -> None:
-    """A tells C med_x. C still can't form the joint inference — decidable."""
+def test_predicate_undecidable_when_one_forbidden_item_unseen() -> None:
+    """A tells C med_x; condition_y was never observed anywhere → undecidable."""
+
     mswm = MSWM()
     mswm.on_action(_outbound("act-1", "alice", "carol", ["med_x"]))
     predicate = {
@@ -59,7 +91,7 @@ def test_predicate_still_decidable_after_one_of_two_items_known() -> None:
         "for_agent": "carol",
         "forbidden_inference": ["med_x", "condition_y"],
     }
-    assert mswm.joint_decidability("alice", predicate) == "decidable"
+    assert mswm.joint_decidability("alice", predicate) == "undecidable"
 
 
 def test_predicate_violated_after_both_items_known_to_target() -> None:
@@ -82,8 +114,9 @@ def test_must_decide_inverts_polarity() -> None:
         "for_agent": "carol",
         "forbidden_inference": ["med_x", "condition_y"],
     }
-    # Empty knowledge → violated under must_decide.
-    assert mswm.joint_decidability("alice", predicate) == "violated"
+    # Empty MSWM: target agent has no entry, items never observed →
+    # undecidable under the new semantics (not violated).
+    assert mswm.joint_decidability("alice", predicate) == "undecidable"
     mswm.on_action(_outbound("act-1", "alice", "carol", ["med_x"]))
     mswm.on_action(_outbound("act-2", "bob", "carol", ["condition_y"]))
     assert mswm.joint_decidability("alice", predicate) == "decidable"
@@ -149,3 +182,43 @@ def test_for_agent_falls_back_to_agent_id_when_absent() -> None:
         "forbidden_inference": ["med_x", "condition_y"],
     }
     assert mswm.joint_decidability("carol", predicate) == "violated"
+
+
+def test_joint_decidability_returns_undecidable_for_unseen_items() -> None:
+    """A forbidden item that has never been observed anywhere → undecidable.
+
+    Even if ``for_agent`` has a non-empty MSWM entry, if at least one
+    referenced item has never been seen in any channel the model cannot
+    report a confident verdict.
+    """
+
+    mswm = MSWM()
+    mswm.on_action(_outbound("act-1", "alice", "carol", ["med_x"]))
+    # item_unseen has never been in any outbound / self_knowledge / peer
+    # channel → undecidable.
+    predicate = {
+        "type": "must_not_decide",
+        "for_agent": "carol",
+        "forbidden_inference": ["med_x", "item_unseen"],
+    }
+    assert mswm.joint_decidability("alice", predicate) == "undecidable"
+
+
+def test_joint_decidability_returns_undecidable_for_unknown_peer() -> None:
+    """A for_agent that has no MSWM entry at all → undecidable.
+
+    Even when every forbidden item has been observed in some channel, if
+    the target agent itself has never appeared in any action the model
+    cannot rule for or against the inference.
+    """
+
+    mswm = MSWM()
+    # Alice and Bob both disclose items, but Carol has never appeared.
+    mswm.on_action(_outbound("act-1", "alice", "bob", ["med_x"]))
+    mswm.on_action(_outbound("act-2", "bob", "alice", ["condition_y"]))
+    predicate = {
+        "type": "must_not_decide",
+        "for_agent": "carol",
+        "forbidden_inference": ["med_x", "condition_y"],
+    }
+    assert mswm.joint_decidability("alice", predicate) == "undecidable"
