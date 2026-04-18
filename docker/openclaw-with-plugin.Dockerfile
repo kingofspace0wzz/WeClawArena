@@ -67,8 +67,22 @@ RUN openclaw plugin install /tmp/clawsocial-plugin.tgz \
 ENV OPENCLAW_HOME=/home/node/.openclaw
 WORKDIR /workspace
 
+# The scenario bundle compose file invokes this script as the agent
+# container's `command`; it waits for the gateway's `/healthz` and then
+# hands off to the OpenClaw CLI with the `clawsocial` channel active.
+# Shipping the script in the image keeps the bundle small -- compose
+# only has to reference the in-image path.
+#
+# Python is needed for the `/healthz` poll in the entrypoint. The rest
+# of the arena wiring already assumes Python is on PATH.
+RUN apk add --no-cache python3 py3-pip \
+ && ln -sf /usr/bin/python3 /usr/local/bin/python
+COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh
+
 # The `--version` smoke that `scripts/build_openclaw_image.sh` runs
 # after build relies on this entrypoint so `docker run <image> --version`
-# reaches the CLI directly.
+# reaches the CLI directly. The scenario compose file overrides
+# `command` with `agent-entrypoint.sh` to run the full agent loop.
 ENTRYPOINT ["openclaw"]
 CMD ["--help"]

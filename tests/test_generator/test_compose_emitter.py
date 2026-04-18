@@ -142,15 +142,28 @@ def test_emit_compose_yaml_declares_persona_and_mcp_volume_mounts():
         assert "./mcp:/workspace/mcp:ro" in joined
 
 
+def _svc_command_text(svc: dict) -> str:
+    """Join a compose service's entrypoint + command into one string."""
+    parts: list[str] = []
+    for key in ("entrypoint", "command"):
+        val = svc.get(key)
+        if val is None:
+            continue
+        if isinstance(val, list):
+            parts.extend(str(v) for v in val)
+        else:
+            parts.append(str(val))
+    return " ".join(parts)
+
+
 def test_emit_compose_yaml_agent_command_is_not_sleep_infinity():
     """Fix 1: agents must launch the entrypoint script, not idle forever."""
     scenario = _scenario(2)
     doc = yaml.safe_load(emit_compose_yaml(scenario))
     for agent in scenario.agents:
         svc = doc["services"][agent.agent_id]
-        cmd = svc.get("command")
-        assert cmd is not None
-        joined = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+        joined = _svc_command_text(svc)
+        assert joined, f"agent {agent.agent_id} has no entrypoint or command"
         assert "sleep infinity" not in joined
-        # Positive check: command points at the arena's entrypoint script.
+        # Positive check: entrypoint/command points at the arena's script.
         assert "agent-entrypoint.sh" in joined

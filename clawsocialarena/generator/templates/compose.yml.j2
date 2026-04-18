@@ -48,7 +48,11 @@ services:
       - ./personas/{{ agent.agent_id }}.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
-    command: ["/usr/local/bin/agent-entrypoint.sh"]
+    # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
+    # Override both entrypoint + command here so the scenario bundle
+    # launches the arena agent loop via the in-image entrypoint script.
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
 {% endfor %}
 networks:
   clawnet:
