@@ -408,3 +408,70 @@ async def test_passive_rewrite_leaves_mswm_reflecting_original(
     learned_items = {item for item, _ in recipient_model.items_learned_from_j}
     # Under PASSIVE the original payload stands — forbidden_item leaked.
     assert learned_items == {"ok_item", "forbidden_item"}
+
+
+@pytest.mark.asyncio
+async def test_policy_decision_payload_carries_block_context(
+    tmp_path: Path,
+) -> None:
+    """Blocked outbounds record recipient / mentioned_items / sources on the
+    policy_decision row — there is no OUTBOUND_MESSAGE row to read from.
+    """
+
+    class BlockOnForbidden:
+        hook_kind = "message"
+
+        def evaluate(self, *, action: ActionRecord, context: dict) -> PolicyDecision:
+            mentioned = action.payload.get("mentioned_items") or []
+            if "forbidden_item" in mentioned:
+                return PolicyDecision(
+                    verdict=PolicyVerdict.BLOCK,
+                    policy_id="bl",
+                    reason="forbidden",
+                )
+            return PolicyDecision(verdict=PolicyVerdict.ALLOW)
+
+    session = _enforce_session(tmp_path, [BlockOnForbidden()])
+    outcome = await session.record_outbound(
+        sender_id="alice",
+        recipient_id="bob",
+        content="hello",
+        mentioned_items=["ok_item", "forbidden_item"],
+        source_action_ids=["src-1", "src-2"],
+    )
+    assert outcome.blocked is True
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    pol = next(r for r in rows if r.action_type == ActionType.POLICY_DECISION)
+    assert pol.payload["verdict"] == "block"
+    assert pol.payload["recipient_id"] == "bob"
+    assert pol.payload["mentioned_items"] == ["ok_item", "forbidden_item"]
+    assert pol.payload["source_action_ids"] == ["src-1", "src-2"]
+    # Block does not carry a rewrite; field is explicit None.
+    assert pol.payload["rewritten_mentioned_items"] is None
+
+
+@pytest.mark.asyncio
+async def test_policy_decision_payload_carries_rewrite_context(
+    tmp_path: Path,
+) -> None:
+    """Rewrite verdicts record the rewritten_mentioned_items list."""
+
+    session = _enforce_session(
+        tmp_path, [MswmAwareRedactHook("forbidden_item")]
+    )
+    await session.record_outbound(
+        sender_id="alice",
+        recipient_id="bob",
+        content="hello",
+        mentioned_items=["ok_item", "forbidden_item"],
+        source_action_ids=["src-1"],
+    )
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    pol = next(r for r in rows if r.action_type == ActionType.POLICY_DECISION)
+    assert pol.payload["verdict"] == "rewrite"
+    assert pol.payload["recipient_id"] == "bob"
+    assert pol.payload["mentioned_items"] == ["ok_item", "forbidden_item"]
+    assert pol.payload["rewritten_mentioned_items"] == ["ok_item"]
+    assert pol.payload["source_action_ids"] == ["src-1"]

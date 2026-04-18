@@ -443,6 +443,7 @@ class Session:
             list(original_mentioned) if "mentioned_items" in payload else None
         )
         blocked = False
+        block_decision: PolicyDecision | None = None
         rewrite_decision: PolicyDecision | None = None
 
         # Build a provisional representing the current action so MSWM can
@@ -513,14 +514,18 @@ class Session:
                     agent_id=agent_id,
                     decision=decision,
                     target_action_id=action_id,
+                    action_type=action_type,
+                    original_payload=payload,
                     social_phase=social_phase,
                     original_content=original_content,
                     post_content=post_content,
+                    source_action_ids=sources,
                 )
 
                 if self.condition == AuditCondition.ENFORCE:
                     if decision.verdict == PolicyVerdict.BLOCK:
                         blocked = True
+                        block_decision = decision
                         break
                     if decision.verdict == PolicyVerdict.REWRITE:
                         rewrite_decision = decision
@@ -537,6 +542,7 @@ class Session:
             # the MSWM update we did pre-hook so the state reflects "action
             # never happened" from the peer's perspective.
             self.mswm.revert_action(initial_provisional)
+            _ = block_decision  # retained for future attribution passes
             return RecordOutcome(action_id=None, blocked=True)
 
         # Build the final payload. Under ENFORCE a rewrite may have changed
@@ -608,16 +614,27 @@ class Session:
         agent_id: str,
         decision: PolicyDecision,
         target_action_id: str,
+        action_type: ActionType,
+        original_payload: dict,
         social_phase: SocialPhase,
         original_content: str | None,
         post_content: str | None,
+        source_action_ids: list[str] | None = None,
     ) -> None:
         """Append a POLICY_DECISION row to primary + shadow logs + cassette.
 
-        Payload shape matches the v1 ``AuditedMessageBus`` for continuity
-        with downstream analysis code (see ``clawsocialarena/audit`` and
-        Phase E/F scorers): ``verdict``, ``policy_id``, ``reason``,
-        ``target_action_id``, ``original_content``, ``post_content``.
+        Payload shape extends the v1 ``AuditedMessageBus`` schema with
+        block/rewrite context for replay-time attribution: ``verdict``,
+        ``policy_id``, ``reason``, ``target_action_id``, ``original_content``,
+        ``post_content``, plus ``recipient_id`` (for outbound messages),
+        ``mentioned_items`` (original pre-rewrite list) and
+        ``rewritten_mentioned_items`` (post-rewrite list; ``None`` on block),
+        and ``source_action_ids`` (the target action's provenance chain).
+
+        The enrichment does not change the gateway HTTP API; it only lets
+        downstream consumers reconstruct blocked or rewritten actions
+        without reading another row (blocked actions have no ActionRecord
+        at all, so the policy_decision is the only surviving evidence).
         """
 
         if self.action_log is None:
@@ -629,7 +646,30 @@ class Session:
             "target_action_id": target_action_id,
             "original_content": original_content,
             "post_content": post_content,
+            "source_action_ids": list(source_action_ids or []),
         }
+        # Enrichment by action type: outbound messages carry a recipient_id
+        # and (optionally) mentioned_items; tool/memory actions carry
+        # neither, so we only populate fields that make sense.
+        if action_type == ActionType.OUTBOUND_MESSAGE:
+            recipient = original_payload.get("recipient_id")
+            if recipient is not None:
+                pd_payload["recipient_id"] = recipient
+        original_mentioned = original_payload.get("mentioned_items")
+        if original_mentioned is not None:
+            pd_payload["mentioned_items"] = list(original_mentioned)
+        # rewritten_mentioned_items: populated on rewrite verdicts that
+        # carry the field; explicitly None on block so downstream consumers
+        # can distinguish "block dropped all items" from "rewrite dropped
+        # a subset".
+        if decision.verdict == PolicyVerdict.REWRITE:
+            rewritten_items = decision.rewritten_mentioned_items
+            if rewritten_items is not None:
+                pd_payload["rewritten_mentioned_items"] = list(rewritten_items)
+            else:
+                pd_payload["rewritten_mentioned_items"] = None
+        else:
+            pd_payload["rewritten_mentioned_items"] = None
         rec = ActionRecord(
             action_id=f"pol-{uuid.uuid4().hex[:12]}",
             prev_hash=self.action_log.head_hash(agent_id),
