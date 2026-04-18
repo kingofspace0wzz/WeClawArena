@@ -13,7 +13,7 @@ from clawsocialarena.analysis.tables import load_long_csv
 
 def test_paired_wilcoxon_detects_shift(tmp_path, synthetic_results_root):
     out = tmp_path / "long.csv"
-    aggregate_to_csv(synthetic_results_root, out)
+    aggregate_to_csv(synthetic_results_root, out, wide=False)
     df = load_long_csv(out)
     # Privacy leak_rate: baseline=0.5, enforce=0.05 -> clearly different.
     result = paired_wilcoxon(
@@ -29,7 +29,7 @@ def test_paired_wilcoxon_detects_shift(tmp_path, synthetic_results_root):
 
 def test_paired_wilcoxon_handles_identical_values(tmp_path, synthetic_results_root):
     out = tmp_path / "long.csv"
-    aggregate_to_csv(synthetic_results_root, out)
+    aggregate_to_csv(synthetic_results_root, out, wide=False)
     df = load_long_csv(out)
     # Task TSR is constant (1.0) across all conditions in the fixture;
     # all differences are 0 -> guard path returns p=1.0.
@@ -62,7 +62,7 @@ def test_bonferroni_clips_at_one():
 
 def test_kruskal_on_saf_overall(tmp_path, synthetic_results_root):
     out = tmp_path / "long.csv"
-    aggregate_to_csv(synthetic_results_root, out)
+    aggregate_to_csv(synthetic_results_root, out, wide=False)
     df = load_long_csv(out)
     result = kruskal_categories(
         df,
@@ -80,7 +80,7 @@ def test_kruskal_on_saf_overall(tmp_path, synthetic_results_root):
 
 def test_kruskal_returns_nan_with_single_group(tmp_path, synthetic_results_root):
     out = tmp_path / "long.csv"
-    aggregate_to_csv(synthetic_results_root, out)
+    aggregate_to_csv(synthetic_results_root, out, wide=False)
     df = load_long_csv(out)
     # Filter to a single model so only one group remains.
     df = df[df["model"] == "claude"]

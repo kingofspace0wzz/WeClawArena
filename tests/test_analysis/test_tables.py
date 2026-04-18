@@ -11,7 +11,7 @@ from clawsocialarena.analysis.tables import (
 
 def _prep(tmp_path, synthetic_results_root):
     out = tmp_path / "long.csv"
-    aggregate_to_csv(synthetic_results_root, out)
+    aggregate_to_csv(synthetic_results_root, out, wide=False)
     return load_long_csv(out)
 
 

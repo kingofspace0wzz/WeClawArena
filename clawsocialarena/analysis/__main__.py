@@ -27,9 +27,16 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="clawsocialarena.analysis")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    a = sub.add_parser("aggregate", help="Aggregate scorecard JSONs to long-format CSV.")
+    a = sub.add_parser("aggregate", help="Aggregate scorecard JSONs to CSV.")
     a.add_argument("--root", type=Path, required=True)
     a.add_argument("--out", type=Path, required=True)
+    a.add_argument(
+        "--format",
+        choices=["wide", "long"],
+        default="wide",
+        help="wide (default, Phase H): one row per scorecard. "
+        "long (legacy): one row per (family, name, value) triple.",
+    )
 
     t = sub.add_parser("table", help="Emit a markdown or LaTeX summary table.")
     t.add_argument("--csv", type=Path, required=True)
@@ -49,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     if args.cmd == "aggregate":
-        n = aggregate_to_csv(args.root, args.out)
+        n = aggregate_to_csv(args.root, args.out, wide=(args.format == "wide"))
         print(f"Wrote {n} rows to {args.out}")
         return 0
 
