@@ -23,8 +23,10 @@ from clawsocialarena.generator.template import TemplateShape
 
 def assemble_gt_bundle(shape: TemplateShape) -> dict:
     """Return a dict matching scenario.gt.json schema (spec §4.5, §4.6)."""
-    # Canonical action stream: empty for now (LLM-assisted scenarios may populate later).
-    canonical: list[dict] = []
+    # Canonical action stream: threaded from the shape's ``injected_actions``
+    # (Task D6). Attacker-injected outbound actions carry ``mentioned_items``
+    # so MSWM replay updates peer beliefs.
+    canonical: list[dict] = [dict(a) for a in shape.injected_actions]
     # Attribution DAG from planted disclosures
     nodes: list[dict] = []
     edges: list[dict] = []

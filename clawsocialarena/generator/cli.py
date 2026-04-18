@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from clawsocialarena.generator.attacks import AttackType, inject_attack
+from clawsocialarena.generator.attack_injection import AttackType, inject_attack
 from clawsocialarena.generator.gt_assembly import (
     assemble_gt_bundle,
     assemble_scenario_json,

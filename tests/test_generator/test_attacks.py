@@ -1,4 +1,4 @@
-from clawsocialarena.generator.attacks import (
+from clawsocialarena.generator.attack_injection import (
     AttackFamily,
     AttackType,
     ATTACK_FAMILY,

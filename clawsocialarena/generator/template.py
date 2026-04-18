@@ -58,6 +58,10 @@ class TemplateShape(BaseModel):
     # bindings. Default empty so v1 templates keep working.
     mcp_tool_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
     persona_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Task D6: scripted attacker actions threaded into canonical_action_stream
+    # by ``gt_assembly``. Each entry is an ActionRecord-shaped dict; the
+    # critical payload key for MSWM updates is ``mentioned_items``.
+    injected_actions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @runtime_checkable
