@@ -12,9 +12,9 @@ the protocol; individual templates live under templates/.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CategoryCode(StrEnum):
@@ -53,6 +53,11 @@ class TemplateShape(BaseModel):
     integrity_requirements: dict[str, int]
     # Planted provenance (used to construct GT attribution DAG)
     planted_disclosures: list[dict]  # [{"turn", "agent_id", "item", "parent_action_id"?, "label"}]
+    # v2 additions (spec §4.6). Templates populate these for scenarios that
+    # ship scenario-specific MCP tools and/or AgentSocialBench profile
+    # bindings. Default empty so v1 templates keep working.
+    mcp_tool_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    persona_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 @runtime_checkable
