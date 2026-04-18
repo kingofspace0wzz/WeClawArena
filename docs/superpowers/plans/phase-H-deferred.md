@@ -80,3 +80,23 @@ depend on budget approval and Docker availability on the target runner.
 Resuming H8 is the natural step after the last real run completes
 and the full paper is ready; no code redesign is required at that
 point.
+
+## End of autonomous execution
+
+``phase-H-infrastructure-complete`` is the last tag that can land
+without external resources. Everything beyond this line requires
+human-in-the-loop input:
+
+- **Phase E** requires LLM API credentials (any one of Bedrock, OpenAI,
+  DeepSeek, Qwen) for instantiation, plus manual authoring of the five
+  disagreement vignettes, plus three independent annotators for the
+  40-scenario validation sample (target Cohen's κ ≥ 0.80).
+- **Phase G5-G7** requires LLM API credentials for all four providers,
+  a Docker host, and a $4K-$10K compute budget.
+- **Phase H8** requires the Phase E and G outputs on disk before
+  tagging ``v1.0.0``.
+
+The project lead (Prince) is the intended operator for these three
+phases. The top-level ``README.md`` gives step-by-step resume guides
+for each; this file and ``phase-G-deferred.md`` carry the finer detail.
+No further work is planned under the autonomous execution track.
