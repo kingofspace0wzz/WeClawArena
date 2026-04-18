@@ -144,6 +144,44 @@ def test_cli_list_templates_does_not_require_category_or_out(capsys):
     assert "scheduling" in out
 
 
+def test_cli_privacy_level_injects_prompt_ladder_prefix(tmp_path: Path):
+    """Phase F / Task F9: --privacy-level appends the prompt-ladder prefix
+    to every agent's system prompt in the emitted scenario.json."""
+
+    rc = cli_main([
+        "--category", "CU", "--family", "scheduling",
+        "--n", "1", "--seed", "17",
+        "--privacy-level", "4",
+        "--out", str(tmp_path),
+    ])
+    assert rc == 0
+    sd = next(tmp_path.iterdir())
+    scenario = Scenario.model_validate(
+        json.loads((sd / "scenario.json").read_text())
+    )
+    # L4's prefix is the Zero-Disclosure-by-Default block.
+    for agent in scenario.agents:
+        assert "Zero-Disclosure-by-Default" in agent.system_prompt_template
+
+
+def test_cli_without_privacy_level_does_not_inject(tmp_path: Path):
+    """Baseline (no flag): scenario.json has no prompt-ladder suffix."""
+
+    rc = cli_main([
+        "--category", "CU", "--family", "scheduling",
+        "--n", "1", "--seed", "18",
+        "--out", str(tmp_path),
+    ])
+    assert rc == 0
+    sd = next(tmp_path.iterdir())
+    scenario = Scenario.model_validate(
+        json.loads((sd / "scenario.json").read_text())
+    )
+    for agent in scenario.agents:
+        assert "Zero-Disclosure-by-Default" not in agent.system_prompt_template
+        assert "Minimum Necessary" not in agent.system_prompt_template
+
+
 def test_cli_subprocess_smoke_runs_end_to_end(tmp_path: Path):
     """Out-of-process smoke: ``python -m clawsocialarena.generator.cli``."""
     out_dir = tmp_path / "gen_test"

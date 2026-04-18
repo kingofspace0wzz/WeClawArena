@@ -12,16 +12,28 @@ measured in the main experiments:
    attribution, no phase-scoped policies).
 """
 
+from clawsocialarena.baselines.dlp_external import (
+    DlpRule,
+    RuleBasedDLP,
+    build_dlp_session,
+)
 from clawsocialarena.baselines.prompt_ladder import (
     PrivacyLevel,
+    apply_ladder_to_prompts,
     level_prefix,
+    scenario_variation_bundle,
     system_prompt_with_level,
 )
 from clawsocialarena.baselines.vanilla_aa import VanillaAAEvalRunner
 
 __all__ = [
+    "DlpRule",
     "PrivacyLevel",
-    "level_prefix",
-    "system_prompt_with_level",
+    "RuleBasedDLP",
     "VanillaAAEvalRunner",
+    "apply_ladder_to_prompts",
+    "build_dlp_session",
+    "level_prefix",
+    "scenario_variation_bundle",
+    "system_prompt_with_level",
 ]

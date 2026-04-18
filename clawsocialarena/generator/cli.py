@@ -26,6 +26,10 @@ import json
 import sys
 from pathlib import Path
 
+from clawsocialarena.baselines.prompt_ladder import (
+    PrivacyLevel,
+    system_prompt_with_level,
+)
 from clawsocialarena.generator.attack_injection import AttackType, inject_attack
 from clawsocialarena.generator.compose_emitter import emit_compose_yaml
 from clawsocialarena.generator.gt_assembly import (
@@ -98,6 +102,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--privacy-level",
+        type=int,
+        choices=[0, 1, 2, 3, 4],
+        default=None,
+        help=(
+            "AgentSocialBench L0-L4 prompt privacy level. When set, the "
+            "prompt-ladder baseline's level prefix is appended to every "
+            "agent's system prompt before persona files are emitted. "
+            "Omit this flag to emit the base scenario unchanged."
+        ),
+    )
+    p.add_argument(
         "--list-templates",
         action="store_true",
         help="List registered (category, family) pairs and exit.",
@@ -166,18 +182,46 @@ def main(argv: list[str] | None = None) -> int:
                 attacker_agent_id=args.attacker_agent,
             )
 
-        _write_bundle(shape, out_root / scenario_id)
+        _write_bundle(
+            shape,
+            out_root / scenario_id,
+            privacy_level=(
+                PrivacyLevel(args.privacy_level)
+                if args.privacy_level is not None
+                else None
+            ),
+        )
         print(f"wrote {out_root / scenario_id}")
 
     return 0
 
 
-def _write_bundle(shape, out_dir: Path) -> None:
-    """Write a complete v2 bundle to ``out_dir``."""
+def _write_bundle(
+    shape, out_dir: Path, *, privacy_level: PrivacyLevel | None = None
+) -> None:
+    """Write a complete v2 bundle to ``out_dir``.
+
+    When ``privacy_level`` is supplied, every agent's
+    ``system_prompt_template`` gets the corresponding prompt-ladder
+    prefix appended. This is the data-producing side of the Phase F
+    prompt-ladder baseline (spec §5.2 item 1): agents run with
+    progressively stronger privacy instructions while the gateway
+    stack stays untouched. The injection lands on both
+    ``scenario.json`` and the persona files so every downstream
+    consumer sees the adjusted prompt uniformly.
+    """
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     scenario_dict = assemble_scenario_json(shape)
     gt_dict = assemble_gt_bundle(shape)
+
+    if privacy_level is not None:
+        for agent_entry in scenario_dict.get("agents", []):
+            base = agent_entry.get("system_prompt_template", "")
+            agent_entry["system_prompt_template"] = system_prompt_with_level(
+                base, privacy_level
+            )
 
     (out_dir / "scenario.json").write_text(
         json.dumps(scenario_dict, indent=2, ensure_ascii=False)
