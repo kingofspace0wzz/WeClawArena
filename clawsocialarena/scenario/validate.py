@@ -1,6 +1,7 @@
-"""Scenario validator (Task D9; spec §4.9 static scan).
+"""Scenario validator (Task D9 + Phase D.5; spec §4.9 static scan).
 
-Validates that a v2 scenario bundle on disk is internally consistent:
+Validates that a v2 scenario bundle on disk is internally consistent. The
+checks come in two waves. The D9 wave confirms the bundle's skeleton:
 
 1. ``scenario.json`` validates as ``Scenario``.
 2. ``scenario.gt.json`` validates as ``GTBundle``.
@@ -10,6 +11,26 @@ Validates that a v2 scenario bundle on disk is internally consistent:
 5. Every entry in ``gt.mcp_tool_manifest`` has a matching mcporter config
    under ``mcp/`` whose declared ``url`` points at the gateway's
    ``/mcp/<tool>`` route.
+
+The Phase D.5 wave enforces the runtime contract that compose bring-up
+will honor:
+
+6. compose has a ``gateway`` service plus one service per scenario agent,
+   and nothing else (fail on missing agent services or unknown extras).
+7. Each agent service sets ``CLAWSOCIAL_GATEWAY_URL`` and
+   ``CLAWSOCIAL_AGENT_ID`` in its ``environment`` block (the entrypoint
+   script aborts without them).
+8. ``gt.persona_manifest`` lists every scenario agent id and nothing
+   else (no orphans in either direction).
+9. Each ``persona.tools.json`` only references tools that are declared
+   in ``gt.mcp_tool_manifest``.
+10. Each compose service's ``build.context`` either resolves to an
+    absolute path that exists on disk or is the literal ``.`` (which
+    docker compose resolves against the compose file's own directory);
+    any other relative path that cannot be resolved against the bundle
+    dir is flagged.
+11. Each agent service declares the expected persona + mcp volume
+    mounts so the in-container OpenClaw CLI can read them.
 
 Callers use :class:`ValidationReport` to interpret the result. CLI entry
 point: ``python -m clawsocialarena.scenario.validate <bundle_dir>``.
@@ -21,6 +42,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Iterable
 
 import yaml
 from pydantic import ValidationError
@@ -55,12 +77,24 @@ def validate_bundle(bundle_dir: str | Path) -> ValidationReport:
 
     scenario = _validate_scenario_json(bundle_dir, report)
     gt = _validate_gt_json(bundle_dir, report)
-    _validate_compose_yaml(bundle_dir, report)
+    compose = _validate_compose_yaml(bundle_dir, report)
 
     if scenario is not None:
         _validate_personas(bundle_dir, scenario, report)
     if gt is not None:
         _validate_mcp_consistency(bundle_dir, gt, report)
+
+    # Phase D.5 runtime-contract checks. Every one of these needs the
+    # scenario + compose doc, so run only when both parsed cleanly.
+    if scenario is not None and compose is not None:
+        _validate_compose_service_shape(scenario, compose, report)
+        _validate_compose_env_vars(scenario, compose, report)
+        _validate_compose_build_contexts(bundle_dir, compose, report)
+        _validate_compose_volume_mounts(scenario, compose, report)
+
+    if scenario is not None and gt is not None:
+        _validate_persona_manifest_agents(scenario, gt, report)
+        _validate_persona_tools_subset(bundle_dir, scenario, gt, report)
 
     return report
 
@@ -93,25 +127,30 @@ def _validate_gt_json(
         return None
 
 
-def _validate_compose_yaml(bundle_dir: Path, report: ValidationReport) -> None:
+def _validate_compose_yaml(
+    bundle_dir: Path, report: ValidationReport
+) -> dict | None:
+    """Parse docker-compose.yml and surface its dict form on success."""
     path = bundle_dir / "docker-compose.yml"
     if not path.exists():
         report.errors.append("missing docker-compose.yml")
-        return
+        return None
     try:
         doc = yaml.safe_load(path.read_text())
     except yaml.YAMLError as exc:
         report.errors.append(f"docker-compose.yml: unparseable YAML: {exc}")
-        return
+        return None
     if not isinstance(doc, dict) or "services" not in doc:
         report.errors.append(
             "docker-compose.yml: missing top-level 'services' mapping"
         )
-        return
+        return None
     if not isinstance(doc["services"], dict) or not doc["services"]:
         report.errors.append(
             "docker-compose.yml: 'services' must be a non-empty mapping"
         )
+        return None
+    return doc
 
 
 def _validate_personas(
@@ -175,6 +214,248 @@ def _validate_mcp_consistency(
                 f"mcp/{tool_name}.json: type must be 'http' "
                 f"(got {parsed.get('type')!r})"
             )
+
+
+# --- Phase D.5 runtime-contract checks ---------------------------------------
+
+
+def _env_map(env_block: Any) -> dict[str, str]:
+    """Normalize a compose `environment:` block into a `{K: V}` dict.
+
+    Compose accepts both the list form (``["K=V", "K2=V2"]``) and the
+    mapping form (``{K: V, K2: V2}``). The validator treats them as
+    equivalent.
+    """
+    result: dict[str, str] = {}
+    if env_block is None:
+        return result
+    if isinstance(env_block, dict):
+        for k, v in env_block.items():
+            result[str(k)] = "" if v is None else str(v)
+        return result
+    if isinstance(env_block, list):
+        for item in env_block:
+            if not isinstance(item, str):
+                continue
+            k, _, v = item.partition("=")
+            result[k] = v
+    return result
+
+
+def _volume_entries(volume_block: Any) -> list[str]:
+    """Return compose `volumes:` entries as a flat list of strings.
+
+    Only the short syntax (``"host:container[:mode]"``) is normalized. The
+    long-form mapping is rare in arena bundles and surfaces as ``""`` so
+    downstream checks flag it as not matching the expected mount.
+    """
+    out: list[str] = []
+    if volume_block is None:
+        return out
+    if isinstance(volume_block, list):
+        for item in volume_block:
+            if isinstance(item, str):
+                out.append(item)
+            elif isinstance(item, dict):
+                src = str(item.get("source", ""))
+                dst = str(item.get("target", ""))
+                mode = "ro" if item.get("read_only") else "rw"
+                out.append(f"{src}:{dst}:{mode}")
+    return out
+
+
+def _validate_compose_service_shape(
+    scenario: Scenario, compose: dict, report: ValidationReport
+) -> None:
+    """Fix 3.1: exactly one gateway + one service per scenario agent."""
+    services = compose.get("services", {})
+    if not isinstance(services, dict):
+        return  # Already reported in _validate_compose_yaml.
+    service_names = set(services.keys())
+    if "gateway" not in service_names:
+        report.errors.append(
+            "docker-compose.yml: missing required 'gateway' service"
+        )
+    expected_agents = {a.agent_id for a in scenario.agents}
+    missing_agents = expected_agents - service_names
+    for agent_id in sorted(missing_agents):
+        report.errors.append(
+            f"docker-compose.yml: missing service for agent {agent_id!r}"
+        )
+    # Anything that isn't `gateway` or an agent id is an unknown extra.
+    extras = service_names - expected_agents - {"gateway"}
+    for name in sorted(extras):
+        report.errors.append(
+            f"docker-compose.yml: unexpected service {name!r} "
+            f"(not in scenario.agents and not 'gateway')"
+        )
+
+
+def _validate_compose_env_vars(
+    scenario: Scenario, compose: dict, report: ValidationReport
+) -> None:
+    """Fix 3.2: each agent service sets the two required env vars."""
+    services = compose.get("services", {})
+    if not isinstance(services, dict):
+        return
+    for agent in scenario.agents:
+        svc = services.get(agent.agent_id)
+        if not isinstance(svc, dict):
+            continue  # Already flagged by the shape check.
+        env = _env_map(svc.get("environment"))
+        if "CLAWSOCIAL_GATEWAY_URL" not in env:
+            report.errors.append(
+                f"docker-compose.yml: service {agent.agent_id!r} is "
+                f"missing CLAWSOCIAL_GATEWAY_URL env var"
+            )
+        if env.get("CLAWSOCIAL_AGENT_ID") != agent.agent_id:
+            report.errors.append(
+                f"docker-compose.yml: service {agent.agent_id!r} must set "
+                f"CLAWSOCIAL_AGENT_ID={agent.agent_id!r} "
+                f"(got {env.get('CLAWSOCIAL_AGENT_ID')!r})"
+            )
+
+
+def _validate_compose_build_contexts(
+    bundle_dir: Path, compose: dict, report: ValidationReport
+) -> None:
+    """Fix 3.5: build.context must be absolute + existing, or literal `.`.
+
+    Any other relative path that cannot be resolved against the bundle
+    directory is flagged because ``docker compose`` would fail to build
+    the image at that path.
+    """
+    services = compose.get("services", {})
+    if not isinstance(services, dict):
+        return
+    for name, svc in services.items():
+        if not isinstance(svc, dict):
+            continue
+        build = svc.get("build")
+        if build is None:
+            # image-only services don't carry a build stanza.
+            continue
+        context: str | None
+        if isinstance(build, str):
+            context = build
+        elif isinstance(build, dict):
+            context = build.get("context")
+        else:
+            context = None
+        if context is None:
+            report.errors.append(
+                f"docker-compose.yml: service {name!r} has a build stanza "
+                f"without a context"
+            )
+            continue
+        if not isinstance(context, str):
+            report.errors.append(
+                f"docker-compose.yml: service {name!r} build.context must "
+                f"be a string (got {type(context).__name__})"
+            )
+            continue
+        ctx_path = Path(context)
+        if ctx_path.is_absolute():
+            if not ctx_path.exists():
+                report.errors.append(
+                    f"docker-compose.yml: service {name!r} build.context "
+                    f"is an absolute path that does not exist: {context}"
+                )
+            continue
+        # `.` is explicitly allowed -- compose resolves it relative to the
+        # compose file's own directory, which every bundle owns.
+        if context == ".":
+            continue
+        # Any other relative path must resolve against the bundle dir.
+        resolved = (bundle_dir / ctx_path).resolve()
+        if not resolved.exists():
+            report.errors.append(
+                f"docker-compose.yml: service {name!r} build.context "
+                f"{context!r} does not resolve from bundle dir "
+                f"(tried {resolved})"
+            )
+
+
+def _validate_compose_volume_mounts(
+    scenario: Scenario, compose: dict, report: ValidationReport
+) -> None:
+    """Fix 3.6: each agent has the expected persona + mcp mounts."""
+    services = compose.get("services", {})
+    if not isinstance(services, dict):
+        return
+    for agent in scenario.agents:
+        svc = services.get(agent.agent_id)
+        if not isinstance(svc, dict):
+            continue
+        volumes = _volume_entries(svc.get("volumes"))
+        expected: Iterable[str] = (
+            f"./personas/{agent.agent_id}.system.md:/workspace/persona.system.md:ro",
+            f"./personas/{agent.agent_id}.tools.json:/workspace/persona.tools.json:ro",
+            "./mcp:/workspace/mcp:ro",
+        )
+        for want in expected:
+            if want not in volumes:
+                report.errors.append(
+                    f"docker-compose.yml: service {agent.agent_id!r} is "
+                    f"missing expected volume mount {want!r}"
+                )
+
+
+def _validate_persona_manifest_agents(
+    scenario: Scenario, gt: GTBundle, report: ValidationReport
+) -> None:
+    """Fix 3.3: persona_manifest keys match scenario.agents exactly."""
+    manifest_ids = set(gt.persona_manifest.keys())
+    scenario_ids = {a.agent_id for a in scenario.agents}
+    missing = scenario_ids - manifest_ids
+    for agent_id in sorted(missing):
+        report.errors.append(
+            f"scenario.gt.json: persona_manifest missing entry for "
+            f"agent {agent_id!r}"
+        )
+    extras = manifest_ids - scenario_ids
+    for agent_id in sorted(extras):
+        report.errors.append(
+            f"scenario.gt.json: persona_manifest has entry for "
+            f"{agent_id!r} which is not in scenario.agents"
+        )
+    # Internal consistency: each entry's own agent_id matches the key.
+    for key, ref in gt.persona_manifest.items():
+        if ref.agent_id != key:
+            report.errors.append(
+                f"scenario.gt.json: persona_manifest[{key!r}].agent_id "
+                f"is {ref.agent_id!r} (must equal the key)"
+            )
+
+
+def _validate_persona_tools_subset(
+    bundle_dir: Path,
+    scenario: Scenario,
+    gt: GTBundle,
+    report: ValidationReport,
+) -> None:
+    """Fix 3.4: .tools.json only references declared MCP tool names."""
+    allowed = set(gt.mcp_tool_manifest.keys())
+    personas_dir = bundle_dir / "personas"
+    if not personas_dir.is_dir():
+        return  # Already reported by _validate_personas.
+    for agent in scenario.agents:
+        tools_json = personas_dir / f"{agent.agent_id}.tools.json"
+        if not tools_json.exists():
+            continue  # Already flagged.
+        try:
+            parsed = json.loads(tools_json.read_text())
+        except json.JSONDecodeError:
+            continue  # Already flagged.
+        if not isinstance(parsed, list):
+            continue
+        for tool_name in parsed:
+            if tool_name not in allowed:
+                report.errors.append(
+                    f"personas/{agent.agent_id}.tools.json: references "
+                    f"tool {tool_name!r} not declared in "
+                    f"gt.mcp_tool_manifest"
+                )
 
 
 def main(argv: list[str] | None = None) -> int:

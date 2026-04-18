@@ -1,15 +1,17 @@
 # Auto-generated docker-compose for scenario cu-scheduling-999-000.
 # Do not edit by hand -- regenerate via the scenario generator CLI.
 #
-# One OpenClaw container per agent + one gateway container on a private
-# `clawnet` bridge. The gateway exposes :8080 on the host so the runner can
-# poll /healthz; agent containers reach the gateway by service name.
+# This fixture uses `build.context: .` because the absolute path chosen
+# by the generator depends on the machine it runs on; the compose README
+# (for real bundles) documents the absolute-path form. The validator
+# accepts `.` explicitly so this fixture remains portable across CI
+# machines.
 
 services:
   gateway:
     image: clawsocialarena/gateway:dev
     build:
-      context: ../..
+      context: .
       dockerfile: docker/gateway.Dockerfile
     environment:
       - CLAWSOCIAL_GATEWAY_PORT=8080
@@ -29,7 +31,7 @@ services:
   alice:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: ../..
+      context: .
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:
@@ -38,14 +40,18 @@ services:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
       - CLAWSOCIAL_AGENT_ID=alice
       - CLAWSOCIAL_USER_ID=user-a
+    volumes:
+      - ./personas/alice.system.md:/workspace/persona.system.md:ro
+      - ./personas/alice.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
-    entrypoint: ["sh", "-c"]
-    command: ["sleep infinity"]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
 
   bob:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: ../..
+      context: .
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:
@@ -54,9 +60,13 @@ services:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
       - CLAWSOCIAL_AGENT_ID=bob
       - CLAWSOCIAL_USER_ID=user-b
+    volumes:
+      - ./personas/bob.system.md:/workspace/persona.system.md:ro
+      - ./personas/bob.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
-    entrypoint: ["sh", "-c"]
-    command: ["sleep infinity"]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
 
 networks:
   clawnet:
