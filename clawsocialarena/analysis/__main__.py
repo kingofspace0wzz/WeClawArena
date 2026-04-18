@@ -12,6 +12,7 @@ import argparse
 from pathlib import Path
 
 from clawsocialarena.analysis.aggregator import aggregate_to_csv
+from clawsocialarena.analysis.figures import write_all_figures
 from clawsocialarena.analysis.prereg_check import reconcile, render_report
 from clawsocialarena.analysis.tables import (
     headline_table,
@@ -51,6 +52,15 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--csv", type=Path, required=True)
     pr.add_argument("--out", type=Path, required=True)
 
+    fg = sub.add_parser("figures", help="Write all paper figures as PDFs.")
+    fg.add_argument("--csv", type=Path, required=True)
+    fg.add_argument(
+        "--out",
+        type=Path,
+        default=Path("paper/figures"),
+        help="Output directory (defaults to paper/figures/).",
+    )
+
     args = p.parse_args(argv)
 
     if args.cmd == "aggregate":
@@ -81,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(report)
         print(f"Wrote {args.out}")
+        return 0
+
+    if args.cmd == "figures":
+        df = load_long_csv(args.csv)
+        written = write_all_figures(df, args.out)
+        for path in written:
+            print(f"Wrote {path}")
         return 0
 
     return 2
