@@ -1649,6 +1649,75 @@ def test_run_naturalization_sanitizes_database_relative_dates() -> None:
     assert "April 2026" in note
 
 
+def test_run_naturalization_anchors_database_relative_dates_to_row_date() -> None:
+    class RowDateDatabaseClient:
+        def create_json(
+            self,
+            *,
+            model: str,
+            system_prompt: str,
+            payload: dict,
+            schema: dict | None = None,
+            cache_key: str | None = None,
+        ) -> OpenAIJsonResult:
+            return OpenAIJsonResult(
+                data={
+                    "scenario_id": payload["scenario_id"],
+                    "world_patch": {
+                        "files": {},
+                        "databases": {
+                            "db-camila-personal": {
+                                "tables": {
+                                    "health_notes": [
+                                        {
+                                            "note_id": "camila-health-5",
+                                            "date": "2026-05-19",
+                                            "note": (
+                                                "Mediation stress anticipated for "
+                                                "2026-05-20; plan early walk tomorrow."
+                                            ),
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    },
+                    "scenario_patch": {
+                        "opening_message": "Please complete the task.",
+                        "persona_notes": {},
+                    },
+                    "construction_metadata": {},
+                },
+                usage=TokenUsage(
+                    model=model,
+                    input_tokens=100,
+                    cached_input_tokens=0,
+                    output_tokens=50,
+                ),
+            )
+
+    patch = run_naturalization(
+        client=RowDateDatabaseClient(),
+        scenario_id="hs-coalition-task-01311",
+        skeleton_payload={
+            "resource_payloads": {
+                "db-camila-personal": {
+                    "type": "sqlite_db",
+                    "path": "db/camila-personal.sqlite",
+                    "tables": {"health_notes": []},
+                },
+            },
+        },
+        model="gpt-5",
+    )
+
+    note = patch.world_patch.databases["db-camila-personal"].tables["health_notes"][
+        0
+    ]["note"]
+    assert "tomorrow" not in note.lower()
+    assert "2026-05-20" in note
+
+
 def test_run_naturalization_sanitizes_persona_notes_without_slot_examples() -> None:
     class PersonaNoteClient:
         def create_json(

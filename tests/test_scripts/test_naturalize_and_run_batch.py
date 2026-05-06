@@ -956,6 +956,258 @@ def test_batch_cli_naturalizes_once_per_matched_base_task(
     assert report["usage"]["construction"]["input_tokens"] == 200
 
 
+def test_batch_cli_resume_seeds_matched_base_cache_from_existing_patch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(naturalize_and_run_batch, "docker_available", lambda: True)
+    base_task_id = "base-task-0001"
+    batch_dir = tmp_path / "batches" / "batch-0001"
+    existing_patch = NaturalizationPatch.model_validate(
+        {
+            "scenario_id": f"{base_task_id}-no_attacker",
+            "world_patch": {"files": {}, "databases": {}},
+            "scenario_patch": {
+                "opening_message": "Naturalized base-task opening.",
+                "persona_notes": {},
+            },
+            "construction_metadata": {
+                "naturalization_mode": "llm",
+                "naturalization_model": "gpt-5",
+                "prompt_hash": "sha256:prompt",
+                "cache_key": "sha256:cache",
+            },
+            "usage": {
+                "model": "gpt-5",
+                "input_tokens": 100,
+                "cached_input_tokens": 0,
+                "output_tokens": 25,
+            },
+        }
+    )
+    existing_dir = batch_dir / "scenarios" / f"{base_task_id}-no_attacker"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "naturalization_patch.json").write_text(
+        existing_patch.model_dump_json(),
+        encoding="utf-8",
+    )
+
+    inputs = [
+        BatchScenarioInput(
+            scenario_id=f"{base_task_id}-no_attacker",
+            bundle_dir=tmp_path / f"{base_task_id}-no_attacker",
+            skeleton_payload={
+                "index_row": {
+                    "scenario_id": f"{base_task_id}-no_attacker",
+                    "base_task_id": base_task_id,
+                    "attack_mode": "no_attacker",
+                },
+                "scenario": {"scenario_id": f"{base_task_id}-no_attacker"},
+            },
+        ),
+        BatchScenarioInput(
+            scenario_id=f"{base_task_id}-security",
+            bundle_dir=tmp_path / f"{base_task_id}-security",
+            skeleton_payload={
+                "index_row": {
+                    "scenario_id": f"{base_task_id}-security",
+                    "base_task_id": base_task_id,
+                    "attack_mode": "security",
+                },
+                "scenario": {"scenario_id": f"{base_task_id}-security"},
+            },
+        ),
+    ]
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "load_batch_inputs",
+        lambda *, scenario_root, batch_size, start_index=0: inputs,
+    )
+
+    def fail_if_llm_called(**kwargs) -> NaturalizationPatch:
+        raise AssertionError("resume should reuse the existing base patch")
+
+    observed: list[NaturalizationPatch] = []
+
+    def fake_runner(**kwargs):
+        observed.append(kwargs["naturalizer"](inputs[1]))
+        return naturalize_and_run_batch.build_batch_report(
+            batch_id=kwargs["batch_id"],
+            scenario_ids=[item.scenario_id for item in kwargs["inputs"]],
+            accepted_scenario_ids=[],
+            failed_scenarios=[],
+            usage=naturalize_and_run_batch.BatchUsage(
+                construction=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["construction_model"]
+                ),
+                simulation=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["agent_model"]
+                ),
+            ),
+            stop_for_review=True,
+        )
+
+    monkeypatch.setattr(naturalize_and_run_batch, "run_naturalization", fail_if_llm_called)
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "run_naturalization_simulation_batch",
+        fake_runner,
+    )
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--batch-id",
+            "batch-0001",
+            "--batch-size",
+            "2",
+            "--out",
+            str(tmp_path / "batches"),
+            "--resume-existing",
+        ]
+    )
+
+    assert rc == 0
+    assert observed[0].scenario_id == f"{base_task_id}-security"
+    assert observed[0].usage.input_tokens == 0
+
+
+def test_batch_cli_resume_seeds_matched_base_cache_from_existing_raw_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(naturalize_and_run_batch, "docker_available", lambda: True)
+    base_task_id = "base-task-0001"
+    batch_dir = tmp_path / "batches" / "batch-0001"
+    existing_dir = batch_dir / "scenarios" / f"{base_task_id}-no_attacker"
+    existing_dir.mkdir(parents=True)
+    (existing_dir / "naturalization_raw_error.json").write_text(
+        json.dumps(
+            {
+                "error": "world_patch contains a relative date",
+                "usage": {
+                    "model": "gpt-5",
+                    "input_tokens": 100,
+                    "cached_input_tokens": 0,
+                    "output_tokens": 25,
+                },
+                "raw_data": {
+                    "scenario_id": f"{base_task_id}-no_attacker",
+                    "world_patch": {
+                        "files": {},
+                        "databases": {
+                            "db-camila-personal": {
+                                "tables": {
+                                    "health_notes": [
+                                        {
+                                            "note_id": "camila-health-5",
+                                            "date": "2026-05-19",
+                                            "note": "Plan early walk tomorrow.",
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    },
+                    "scenario_patch": {
+                        "opening_message": "Naturalized opening.",
+                        "persona_notes": {},
+                    },
+                    "construction_metadata": {
+                        "naturalization_mode": "llm",
+                        "naturalization_model": "gpt-5",
+                        "prompt_hash": "sha256:prompt",
+                        "cache_key": "sha256:cache",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    inputs = []
+    for attack_mode in ["no_attacker", "security"]:
+        scenario_id = f"{base_task_id}-{attack_mode}"
+        inputs.append(
+            BatchScenarioInput(
+                scenario_id=scenario_id,
+                bundle_dir=tmp_path / scenario_id,
+                skeleton_payload={
+                    "index_row": {
+                        "scenario_id": scenario_id,
+                        "base_task_id": base_task_id,
+                        "attack_mode": attack_mode,
+                    },
+                    "scenario": {"scenario_id": scenario_id},
+                    "resource_payloads": {
+                        "db-camila-personal": {
+                            "type": "sqlite_db",
+                            "path": "db/camila-personal.sqlite",
+                            "tables": {"health_notes": []},
+                        },
+                    },
+                },
+            )
+        )
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "load_batch_inputs",
+        lambda *, scenario_root, batch_size, start_index=0: inputs,
+    )
+
+    def fail_if_llm_called(**kwargs) -> NaturalizationPatch:
+        raise AssertionError("resume should reuse the recovered raw-error patch")
+
+    observed: list[NaturalizationPatch] = []
+
+    def fake_runner(**kwargs):
+        observed.append(kwargs["naturalizer"](inputs[1]))
+        return naturalize_and_run_batch.build_batch_report(
+            batch_id=kwargs["batch_id"],
+            scenario_ids=[item.scenario_id for item in kwargs["inputs"]],
+            accepted_scenario_ids=[],
+            failed_scenarios=[],
+            usage=naturalize_and_run_batch.BatchUsage(
+                construction=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["construction_model"]
+                ),
+                simulation=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["agent_model"]
+                ),
+            ),
+            stop_for_review=True,
+        )
+
+    monkeypatch.setattr(naturalize_and_run_batch, "run_naturalization", fail_if_llm_called)
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "run_naturalization_simulation_batch",
+        fake_runner,
+    )
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--batch-id",
+            "batch-0001",
+            "--batch-size",
+            "2",
+            "--out",
+            str(tmp_path / "batches"),
+            "--resume-existing",
+        ]
+    )
+
+    assert rc == 0
+    note = observed[0].world_patch.databases["db-camila-personal"].tables[
+        "health_notes"
+    ][0]["note"]
+    assert observed[0].scenario_id == f"{base_task_id}-security"
+    assert observed[0].usage.input_tokens == 0
+    assert "tomorrow" not in note.lower()
+    assert "2026-05-20" in note
+
+
 def test_variant_patch_from_base_rewrites_opening_labels_for_concrete_skeleton() -> None:
     base_patch = NaturalizationPatch.model_validate(
         {

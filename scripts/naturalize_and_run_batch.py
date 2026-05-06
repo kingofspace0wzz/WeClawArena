@@ -28,6 +28,7 @@ from clawsocialarena.llm.retry import is_transient_llm_error
 from clawsocialarena.simulation.batch_runner import (
     BatchScenarioInput,
     BatchUsage,
+    _load_existing_naturalization_patch,
     _naturalization_resource_coverage_errors,
     build_task_distribution,
     build_batch_report,
@@ -120,7 +121,14 @@ def main(argv: list[str] | None = None) -> int:
         client = OpenAIResponsesJsonClient()
         base_task_groups = _base_task_input_groups(inputs)
         base_task_payloads = _base_task_payloads(inputs)
-        naturalization_cache: dict[str, NaturalizationPatch] = {}
+        naturalization_cache: dict[str, NaturalizationPatch] = (
+            _load_resume_base_naturalization_cache(
+                batch_dir=batch_dir,
+                inputs=inputs,
+            )
+            if args.resume_existing and _has_matched_base_tasks(inputs)
+            else {}
+        )
 
         def naturalizer(batch_input: BatchScenarioInput):
             base_task_id = _base_task_id(batch_input)
@@ -640,6 +648,38 @@ def _base_task_input_groups(
     for batch_input in inputs:
         grouped.setdefault(_base_task_id(batch_input), []).append(batch_input)
     return grouped
+
+
+def _load_resume_base_naturalization_cache(
+    *,
+    batch_dir: Path,
+    inputs: list[BatchScenarioInput],
+) -> dict[str, NaturalizationPatch]:
+    cache: dict[str, NaturalizationPatch] = {}
+    for base_task_id, group in _base_task_input_groups(inputs).items():
+        fallback_patch: NaturalizationPatch | None = None
+        coverage_payloads = [item.skeleton_payload for item in group]
+        for batch_input in group:
+            patch = _load_existing_naturalization_patch(
+                batch_dir / "scenarios" / batch_input.scenario_id,
+                batch_input.skeleton_payload,
+            )
+            if patch is None:
+                continue
+            if _naturalization_coverage_errors_for_payloads(
+                coverage_payloads=coverage_payloads,
+                patch=patch,
+            ):
+                continue
+            if patch.usage.input_tokens or patch.usage.output_tokens:
+                cache[base_task_id] = patch
+                break
+            if fallback_patch is None:
+                fallback_patch = patch
+        else:
+            if fallback_patch is not None:
+                cache[base_task_id] = fallback_patch
+    return cache
 
 
 def _base_task_payload(

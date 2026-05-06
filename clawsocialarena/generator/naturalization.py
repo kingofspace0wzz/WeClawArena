@@ -404,8 +404,6 @@ def _sanitize_resource_relative_dates(
     skeleton_payload: dict[str, Any],
 ) -> dict[str, Any]:
     anchor = valid_window_start_date(skeleton_payload)
-    if anchor is None:
-        return data
     world_patch = data.get("world_patch")
     if not isinstance(world_patch, dict):
         return data
@@ -440,17 +438,30 @@ def _valid_window_start_date(skeleton_payload: dict[str, Any]) -> date | None:
     return valid_window_start_date(skeleton_payload)
 
 
-def sanitize_relative_date_phrases_in_value(value: Any, anchor: date) -> Any:
+def sanitize_relative_date_phrases_in_value(value: Any, anchor: date | None) -> Any:
     if isinstance(value, str):
+        if anchor is None:
+            return _remove_out_of_world_meta_text(value)
         return _remove_out_of_world_meta_text(_replace_relative_date_phrases(value, anchor))
     if isinstance(value, list):
         return [sanitize_relative_date_phrases_in_value(item, anchor) for item in value]
     if isinstance(value, dict):
+        local_anchor = _dict_row_date_anchor(value) or anchor
         return {
-            key: sanitize_relative_date_phrases_in_value(item, anchor)
+            key: sanitize_relative_date_phrases_in_value(item, local_anchor)
             for key, item in value.items()
         }
     return value
+
+
+def _dict_row_date_anchor(value: dict[Any, Any]) -> date | None:
+    raw = value.get("date")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
 
 
 def _replace_relative_date_phrases(content: str, anchor: date) -> str:
