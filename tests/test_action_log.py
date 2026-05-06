@@ -8,6 +8,7 @@ from clawsocialarena.action_log import ActionLog, HashChainBroken
 from clawsocialarena.types import (
     ActionRecord,
     ActionType,
+    GovernanceRecord,
     IntegrityLevel,
     ExecutionPhase,
     SocialPhase,
@@ -188,6 +189,39 @@ def test_tamper_source_action_ids_detected(tmp_path: Path):
         conn.execute(
             "UPDATE actions SET source_action_ids = ? WHERE action_id = ?",
             ('["evil"]', "alice-a"),
+        )
+        conn.commit()
+    assert log.verify_chain("alice") is False
+
+
+def test_governance_round_trips_and_is_hash_bound(tmp_path: Path):
+    """Tampering with governance_json breaks verify_chain."""
+    log = ActionLog(db_path=tmp_path / "run.db")
+    rec = _record("alice", GENESIS_HASH, {"i": 1}).model_copy(
+        update={
+            "governance": GovernanceRecord(
+                owner_id="owner-alice",
+                active_identity_id="identity-alice",
+                authorization_scope_id="scope-calendar",
+                approval_mandate_id="mandate-owner",
+                escalation_state="approved",
+            )
+        }
+    )
+
+    log.append(rec)
+    rows = log.read_all()
+    assert rows[0].governance == rec.governance
+
+    with log.connect() as conn:
+        conn.execute(
+            "UPDATE actions SET governance_json = ? WHERE action_id = ?",
+            (
+                '{"active_identity_id":"identity-bob","approval_mandate_id":"mandate-owner",'
+                '"authorization_scope_id":"scope-calendar","escalation_state":"approved",'
+                '"owner_id":"owner-alice"}',
+                rec.action_id,
+            ),
         )
         conn.commit()
     assert log.verify_chain("alice") is False

@@ -48,6 +48,18 @@ class SocialPhase(StrEnum):
     REPAIR = "repair"
 
 
+class GovernanceRecord(BaseModel):
+    """Per-action governance context bound into the action hash."""
+
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
+
+    owner_id: str = Field(min_length=1)
+    active_identity_id: str = Field(min_length=1)
+    authorization_scope_id: str = Field(min_length=1)
+    approval_mandate_id: str = Field(min_length=1)
+    escalation_state: str = Field(min_length=1)
+
+
 class ActionRecord(BaseModel):
     """An immutable record of one action taken by an agent.
 
@@ -72,6 +84,7 @@ class ActionRecord(BaseModel):
     the source chain is known. Consumers (e.g. AttributionGraphBuilder) walk
     these links to derive causal attribution without positional heuristics.
     """
+    governance: GovernanceRecord | None = None
 
     @model_validator(mode="after")
     def _require_signature_above_hash_chained(self) -> "ActionRecord":

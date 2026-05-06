@@ -5,11 +5,11 @@ mental model of what ``i`` believes ``j`` knows, has committed to, and last
 interacted with. Spec §2.6 is the canonical source of truth; this module is
 the Python implementation.
 
-The MSWM is updated online by :class:`clawsocialarena.gateway.session.Session`
-immediately after each :class:`~clawsocialarena.types.ActionRecord` is appended
-to the primary log, BEFORE policy hooks fire. That ordering lets a hook query
-the freshly-updated MSWM and make a joint-decidability verdict against the
-current state (spec §2.6 "is updated online ... before policy hooks run").
+The MSWM is updated online by :class:`clawsocialarena.gateway.session.Session`.
+For a candidate action, pre-commit policy hooks evaluate against a tentative
+MSWM in transaction-local state. Committed MSWM is updated only after the
+action is accepted and appended, while preserving the spec §2.6 requirement
+that hooks see the action's MSWM effects before they decide.
 
 Two SAF dimensions are decidable only with MSWM state:
 
@@ -25,6 +25,7 @@ evaluation time.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal
 
@@ -89,6 +90,14 @@ class MSWM:
         # exact memory_write / retrieval_fetch / summary_write that introduced
         # it.
         self.self_knowledge: dict[str, set[tuple[str, str]]] = {}
+
+    def clone(self) -> MSWM:
+        """Return an independent point-in-time copy of this MSWM."""
+
+        cloned = MSWM()
+        cloned.state = deepcopy(self.state)
+        cloned.self_knowledge = deepcopy(self.self_knowledge)
+        return cloned
 
     def get(self, i: str, j: str) -> PeerModel:
         """Return ``MSWM[i][j]``, materializing a default on first access."""
@@ -170,10 +179,12 @@ class MSWM:
     def revert_action(self, action: ActionRecord) -> None:
         """Undo any MSWM update previously applied for ``action``.
 
-        Used by :class:`clawsocialarena.gateway.session.Session` when an
-        ENFORCE-mode hook BLOCKs an action after MSWM has already updated
-        to reflect it. The revert is surgical: it removes tuples keyed by
-        ``(item_id, action.action_id)`` rather than clearing entire sets.
+        Compatibility helper for offline diagnostic fixtures that apply and
+        undo actions on an isolated MSWM. Runtime enforcement uses
+        :class:`MswmTransaction` to discard or rebuild transaction-local
+        tentative MSWM without mutating committed MSWM. The revert is
+        surgical: it removes tuples keyed by ``(item_id, action.action_id)``
+        rather than clearing entire sets.
 
         Self-knowledge reverts are best-effort: retrieval and memory reads
         are not atomically undoable (the agent *did* observe the content),
@@ -371,3 +382,26 @@ class MSWM:
             return "violated" if can_derive else "decidable"
         # must_decide
         return "decidable" if can_derive else "violated"
+
+
+class MswmTransaction:
+    """Transaction-local committed and tentative MSWM views."""
+
+    def __init__(self, committed: MSWM) -> None:
+        self._base = committed.clone()
+        self.committed = self._base.clone()
+        self.tentative = self._base.clone()
+
+    def apply_candidate(self, action: ActionRecord) -> None:
+        self.tentative.on_action(action)
+
+    def rebuild(self, action: ActionRecord) -> None:
+        self.tentative = self._base.clone()
+        self.apply_candidate(action)
+
+    def commit(self) -> MSWM:
+        return self.tentative
+
+    def discard(self) -> None:
+        self.committed = self._base.clone()
+        self.tentative = self._base.clone()

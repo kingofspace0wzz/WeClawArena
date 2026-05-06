@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS actions (
     integrity_level INTEGER NOT NULL,
     signature    TEXT,
     source_action_ids TEXT NOT NULL DEFAULT '[]',
+    governance_json TEXT,
     UNIQUE(agent_id, prev_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_agent ON actions(agent_id, row_id);
@@ -55,7 +56,7 @@ def _canonical_envelope(rec: ActionRecord) -> dict:
     on any of them will break ``verify_chain``.
     """
 
-    return {
+    envelope = {
         "action_id": rec.action_id,
         "agent_id": rec.agent_id,
         "action_type": rec.action_type.value,
@@ -67,6 +68,9 @@ def _canonical_envelope(rec: ActionRecord) -> dict:
         "signature": rec.signature,
         "source_action_ids": list(rec.source_action_ids),
     }
+    if rec.governance is not None:
+        envelope["governance"] = rec.governance.model_dump(mode="json")
+    return envelope
 
 
 class ActionLog:
@@ -81,6 +85,11 @@ class ActionLog:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.executescript(_SCHEMA)
+            columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(actions)")
+            }
+            if "governance_json" not in columns:
+                conn.execute("ALTER TABLE actions ADD COLUMN governance_json TEXT")
 
     @contextlib.contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -117,6 +126,15 @@ class ActionLog:
         source_ids_json = json.dumps(
             list(rec.source_action_ids), sort_keys=False, separators=(",", ":")
         )
+        governance_json = (
+            json.dumps(
+                rec.governance.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if rec.governance is not None
+            else None
+        )
         with self.connect() as conn:
             # BEGIN IMMEDIATE acquires the RESERVED lock upfront so only ONE
             # writer proceeds; others block here and serialize behind it.
@@ -138,8 +156,8 @@ class ActionLog:
                     """INSERT INTO actions
                     (agent_id, action_id, prev_hash, record_hash, action_type, timestamp,
                      execution_phase, social_phase, payload_json, integrity_level, signature,
-                     source_action_ids)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     source_action_ids, governance_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         rec.agent_id,
                         rec.action_id,
@@ -153,6 +171,7 @@ class ActionLog:
                         int(rec.integrity_level),
                         rec.signature,
                         source_ids_json,
+                        governance_json,
                     ),
                 )
                 conn.commit()
@@ -179,6 +198,16 @@ class ActionLog:
                 source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
             except (TypeError, json.JSONDecodeError):
                 source_ids = []
+            governance_raw = (
+                r["governance_json"] if "governance_json" in r.keys() else None
+            )
+            if governance_raw is None:
+                governance = None
+            else:
+                try:
+                    governance = json.loads(governance_raw)
+                except (TypeError, json.JSONDecodeError):
+                    return False
             envelope = {
                 "action_id": r["action_id"],
                 "agent_id": r["agent_id"],
@@ -191,6 +220,8 @@ class ActionLog:
                 "signature": r["signature"],
                 "source_action_ids": list(source_ids),
             }
+            if governance is not None:
+                envelope["governance"] = governance
             expected = hash_action(prev_hash=prev, payload=envelope)
             if expected != r["record_hash"]:
                 return False
@@ -205,6 +236,15 @@ class ActionLog:
             source_ids = json.loads(source_ids_raw) if source_ids_raw is not None else []
         except (TypeError, json.JSONDecodeError):
             source_ids = []
+        governance_raw = (
+            r["governance_json"] if "governance_json" in r.keys() else None
+        )
+        try:
+            governance = (
+                json.loads(governance_raw) if governance_raw is not None else None
+            )
+        except (TypeError, json.JSONDecodeError):
+            governance = None
         return ActionRecord.model_validate(
             {
                 "action_id": r["action_id"],
@@ -218,5 +258,6 @@ class ActionLog:
                 "integrity_level": r["integrity_level"],
                 "signature": r["signature"],
                 "source_action_ids": list(source_ids),
+                "governance": governance,
             }
         )

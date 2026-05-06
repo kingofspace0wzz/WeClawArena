@@ -1,5 +1,9 @@
 # Phase H deferred task (H8)
 
+> **Status note as of 2026-05-06:** This is a historical Phase H resume note.
+> It still describes the analysis infrastructure, but branch and benchmark
+> status must be checked against `docs/project_status.md` before use.
+
 Phase H lands the analysis infrastructure needed to produce the v2
 paper's tables, figures, statistical tests, pre-registration
 reconciliation, and reproducibility bundle. The final tag
@@ -40,16 +44,17 @@ This note tracks Task H8 so the resume path is clear.
 
 ### H8 — Tag ``v1.0.0``
 
-Goal: tag the repo at v1.0.0 after the full 4,440-run grid has been
-materialised and the full paper is ready to hand off.
+Goal: tag the repo at v1.0.0 after the selected calibrated benchmark grid
+has been materialised and the full paper is ready to hand off.
 
 Pre-requisites (none of these exist yet):
 
-- Phase E content: 150 main-table scenarios + 4 ablation scenarios +
-  the five episode-graph scenarios on disk under ``benchmark/scenarios/v1.0.0/``.
-- Phase G5-G7 outputs: ~4,440 ``run_scorecard.json`` files under
-  ``results/v1.0.0/`` covering the full main table, ablations, seed-variance,
-  replay, and episode-graph strata.
+- Phase E content: the 680-variant balanced difficulty pilot on disk under
+  ``benchmark/scenarios/v1.0.0/``. If the pilot validates the tier rubric,
+  replace this with the 1100-variant release grid before tagging.
+- Phase G5-G7 outputs: complete ``run_scorecard.json`` files under
+  ``results/v1.0.0/`` covering the selected main table, ablations,
+  seed-variance, replay, hard, audit-challenge, and episode-graph strata.
 
 Resume steps:
 

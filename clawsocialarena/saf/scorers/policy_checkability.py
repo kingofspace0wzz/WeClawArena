@@ -14,7 +14,7 @@ Two surfaces live side by side:
    definite ``decidable`` or ``violated`` verdict. Callers drive this path
    via :func:`score_mswm` with pre-built MSWM snapshots, or
    :func:`snapshots_from_log` to rebuild them from an action log on the fly
-   without touching any live MSWM.
+   without touching any caller-owned MSWM.
 
 Both surfaces return ``|decidable| / |declared|``. They coexist so Phase F
 can score spec-style inferential invariants while the existing field-level
@@ -29,7 +29,6 @@ action") is obvious.
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -108,22 +107,11 @@ def snapshots_from_log(
 
     snaps: list[MSWM] = []
     m = MSWM()
-    snaps.append(_clone_mswm(m))
+    snaps.append(m.clone())
     for rec in action_log:
         m.on_action(rec)
-        snaps.append(_clone_mswm(m))
+        snaps.append(m.clone())
     return snaps
-
-
-def _clone_mswm(src: MSWM) -> MSWM:
-    """Return a deep-copied MSWM so a snapshot is immune to later mutation."""
-
-    dst = MSWM()
-    # PeerModel carries set fields; deepcopy handles both the nested dict
-    # ``state`` and the flat ``self_knowledge`` bag in one pass.
-    dst.state = deepcopy(src.state)
-    dst.self_knowledge = deepcopy(src.self_knowledge)
-    return dst
 
 
 def score_mswm(

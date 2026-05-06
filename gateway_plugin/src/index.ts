@@ -1,15 +1,8 @@
 // ClawSocialArena OpenClaw channel plugin.
 //
 // The `plugin` export satisfies OpenClaw's `ChannelPlugin` contract
-// (`openclaw/plugin-sdk/channel-core`). A9 wires the minimum surface
-// needed for agent-initiated sends to reach the Python audit gateway:
-// the SDK's `outbound.sendText` adapter is routed through a lazily
-// constructed per-agent `Channel` (see `./channel.ts`). Inbound polling
-// and tool-call reporting live on the channel instance itself, which
-// A10/A14 will start via the plugin's `start(...)` helper because
-// OpenClaw's external-plugin surface does not guarantee a single
-// account-lifecycle hook that fires before outbound sends for every
-// runtime shape.
+// (`openclaw/plugin-sdk/channel-core`). The default export is the
+// OpenClaw extension entry that registers that channel at runtime.
 //
 // The `config.resolveAccount` returns a minimal arena account record
 // so SDK code that expects `accountId` on the resolved account gets a
@@ -17,11 +10,12 @@
 // with the arena config schema in later phases.
 
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/channel-core';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 // Side-effect-free type-only import from the contract subpath to make sure
 // the SDK surface is reachable.
 import type {} from 'openclaw/plugin-sdk/channel-contract';
 
-import { createChannel, type Channel, type ChannelOptions } from './channel';
+import { createChannel, type Channel, type ChannelOptions } from './channel.js';
 
 // The SDK publishes `OutboundDeliveryResult` only through its internal
 // path `openclaw/dist/plugin-sdk/src/infra/outbound/deliver-types.d.ts`,
@@ -39,7 +33,7 @@ export {
   GatewayClient,
   GatewayClientError,
   UnknownToolError,
-} from './gateway-client';
+} from './gateway-client.js';
 export type {
   GatewayClientOptions,
   SendBody,
@@ -50,9 +44,9 @@ export type {
   LlmCallBody,
   McpCallBody,
   McpCallResponse,
-} from './gateway-client';
-export { createChannel } from './channel';
-export type { Channel, ChannelOptions } from './channel';
+} from './gateway-client.js';
+export { createChannel } from './channel.js';
+export type { Channel, ChannelOptions } from './channel.js';
 
 // Shape returned by `config.resolveAccount`. We keep it minimal — the
 // arena only needs the account id today — and widen it in later phases
@@ -156,7 +150,6 @@ const pluginObject: ChannelPlugin<ArenaAccount> = {
 };
 
 export const plugin = pluginObject;
-export default plugin;
 
 // Imperative helpers so A10/A14 orchestration code can register/teardown
 // per-agent channels without needing to touch SDK internals.
@@ -199,3 +192,32 @@ export function getChannel(accountId: string): Channel | undefined {
 attachNonEnumerable(plugin, 'start', startChannel);
 attachNonEnumerable(plugin, 'stop', stopChannel);
 attachNonEnumerable(plugin, 'getChannel', getChannel);
+
+interface ClawSocialEntry {
+  id: string;
+  name: string;
+  description: string;
+  configSchema: { schema: Record<string, unknown> };
+  register: (api: OpenClawPluginApi) => void;
+  channelPlugin: ChannelPlugin<ArenaAccount>;
+}
+
+export const entry: ClawSocialEntry = {
+  id: 'clawsocial',
+  name: 'ClawSocialArena',
+  description:
+    'ClawSocialArena research channel: routes OpenClaw outbound/inbound traffic through the Python audit gateway.',
+  configSchema: {
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  register(api) {
+    api.registerChannel({ plugin });
+  },
+  channelPlugin: plugin,
+};
+
+export default entry;

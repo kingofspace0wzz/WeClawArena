@@ -22,16 +22,22 @@ def _get_field(r: ActionRecord, field_path: str):
     return obj
 
 
+def _field_text(action: ActionRecord, params: dict) -> str:
+    return str(_get_field(action, params.get("field", "payload.content")) or "").lower()
+
+
 _KINDS: dict[str, Callable[[dict], Callable[[ActionRecord, dict], bool]]] = {
     "does_not_contain": lambda params: (
-        lambda a, ctx: (params["substring"]).lower() not in str(
-            _get_field(a, params.get("field", "payload.content")) or ""
-        ).lower()
+        lambda a, ctx: (params["substring"]).lower() not in _field_text(a, params)
     ),
     "contains": lambda params: (
-        lambda a, ctx: (params["substring"]).lower() in str(
-            _get_field(a, params.get("field", "payload.content")) or ""
-        ).lower()
+        lambda a, ctx: (params["substring"]).lower() in _field_text(a, params)
+    ),
+    "contains_any_of": lambda params: (
+        lambda a, ctx: any(
+            str(substring).lower() in _field_text(a, params)
+            for substring in params["substrings"]
+        )
     ),
     "always_true": lambda params: (lambda a, ctx: True),
     "always_false": lambda params: (lambda a, ctx: False),

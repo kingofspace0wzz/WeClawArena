@@ -22,7 +22,9 @@ from pathlib import Path
 
 import yaml
 
+from clawsocialarena.generator.cli import _write_bundle
 from clawsocialarena.generator.cli import main as cli_main
+from clawsocialarena.generator.templates.cu_coalition import CUCoalitionTemplate
 from clawsocialarena.scenario.loader import ScenarioLoader
 from clawsocialarena.scenario.models import GTBundle, Scenario
 
@@ -67,6 +69,23 @@ def test_cli_with_attacker_produces_attribution_dag(tmp_path: Path):
     gt = json.loads((sd / "scenario.gt.json").read_text())
     assert len(gt["attribution_dag"]["nodes"]) == 1
     assert gt["attribution_dag"]["nodes"][0]["agent_id"] == "bob"
+
+
+def test_cli_governance_attack_emits_governance_sidecar(tmp_path: Path):
+    rc = cli_main([
+        "--category", "CU", "--family", "scheduling",
+        "--n", "1", "--seed", "1",
+        "--attack", "approval_bypass",
+        "--attacker-agent", "alice",
+        "--out", str(tmp_path),
+    ])
+    assert rc == 0
+    sd = next(tmp_path.iterdir())
+    gt = json.loads((sd / "scenario.gt.json").read_text())
+    sidecar = sd / "governance" / "manifest.json"
+
+    assert sidecar.exists()
+    assert json.loads(sidecar.read_text()) == gt["governance_manifest"]
 
 
 def test_cli_attacker_without_agent_flag_errors(tmp_path: Path):
@@ -121,6 +140,21 @@ def test_cli_emits_compose_personas_and_mcp_dirs(tmp_path: Path):
     # mcp/ dir is always present (CU scheduling template declares no tools,
     # so the directory is empty, but it still gets created).
     assert (sd / "mcp").is_dir()
+
+
+def test_write_bundle_removes_stale_generated_subfiles(tmp_path: Path):
+    shape = CUCoalitionTemplate().build(seed=1, scenario_id="cu-coa")
+    _write_bundle(shape, tmp_path)
+
+    stale_persona = tmp_path / "personas" / "reviewer-adversary.system.md"
+    stale_persona.write_text("stale")
+    stale_mcp = tmp_path / "mcp" / "stale-tool.json"
+    stale_mcp.write_text("{}")
+
+    _write_bundle(shape, tmp_path)
+
+    assert not stale_persona.exists()
+    assert not stale_mcp.exists()
 
 
 def test_cli_instantiation_mode_llm_falls_back_to_deterministic(tmp_path: Path):

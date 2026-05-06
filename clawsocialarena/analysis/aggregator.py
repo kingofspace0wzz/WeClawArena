@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +43,27 @@ _LEGACY_LONG_FIELDS: tuple[str, ...] = (
     "value",
 )
 
-# Wide-format canonical row for Phase H (tables / figures / stats / prereg).
+GOVERNANCE_ATTACK_TYPES: tuple[str, ...] = (
+    "owner_binding_spoofing",
+    "identity_confusion",
+    "scope_creep",
+    "approval_bypass",
+    "mandate_laundering",
+    "audit_evasion",
+)
+
+GOVERNANCE_COMPONENT_FIELDS: tuple[str, ...] = tuple(
+    f"{attack_type}_rate" for attack_type in GOVERNANCE_ATTACK_TYPES
+)
+
+# Wide-format canonical row for Phase H / I (tables / figures / stats / prereg).
 WIDE_FIELDS: tuple[str, ...] = (
     # Keys
     "scenario_id",
     "category",
     "family",
+    "attack_axis",
+    "attack_type",
     "model",
     "condition",
     "privacy_level",
@@ -57,12 +72,19 @@ WIDE_FIELDS: tuple[str, ...] = (
     # SAF per-dim (greek-letter shorthand from spec §3).
     "s",  # SAF overall σ (kept as ``s`` to avoid clobbering ``sigma``).
     "saf_overall",
+    "recoverability",
+    "policy_checkability",
+    "attribution",
+    "evidence_integrity",
+    "phase_scoped_policy",
+    "identity_governance",
     "psi",  # policy_checkability
     "tau",  # attribution
     "sigma",  # recoverability (σ here is per-dim; SAF overall kept separate as ``s``).
     "phi",  # phase_scoped_policy
+    "gamma",  # identity_governance
     "vaa_overall",  # Vanilla-AA audit score when the evaluator emits one.
-    # Task / privacy / security
+    # Task / privacy / security / governance
     "tsr",
     "privacy_leak",  # Primary leak rate for the scenario's category (max of
                      # the per-category rates + flat ``leak_rate`` fallback).
@@ -72,6 +94,8 @@ WIDE_FIELDS: tuple[str, ...] = (
     "halr",
     "cslr",
     "asr",
+    "governance_violation_rate",
+    *GOVERNANCE_COMPONENT_FIELDS,
     # Provenance
     "evaluator_version",
     "cassette_hash",
@@ -111,6 +135,34 @@ def _primary_leak(leaks: dict) -> float:
     return float(leaks.get("leak_rate", 0.0) or 0.0)
 
 
+def _as_mapping(value: Any) -> Mapping[str, Any]:
+    """Return ``value`` as a mapping when possible, else an empty mapping."""
+
+    if isinstance(value, Mapping):
+        return value
+    return {}
+
+
+def _to_float(value: Any, *, default: float = 0.0) -> float:
+    """Best-effort scalar conversion used for permissive scorecard loading."""
+
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _first_float(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> float:
+    """Read the first present numeric field from ``mapping``."""
+
+    for key in keys:
+        if key in mapping:
+            return _to_float(mapping[key])
+    return 0.0
+
+
 def _tag(meta: dict, key: str, default: str = "") -> str:
     """Read ``meta.tags[key]`` with safe fallbacks for missing/flat metas."""
 
@@ -123,6 +175,69 @@ def _tag(meta: dict, key: str, default: str = "") -> str:
     return default
 
 
+def _attack_meta(scorecard: dict, meta: dict) -> tuple[str, str]:
+    """Return ``(attack_axis, attack_type)`` with legacy fallbacks."""
+
+    attack_plan = _as_mapping(scorecard.get("attack_plan") or meta.get("attack_plan"))
+
+    attack_axis = (
+        _tag(meta, "attack_axis")
+        or str(
+            attack_plan.get("attack_axis")
+            or attack_plan.get("axis")
+            or attack_plan.get("family")
+            or ""
+        )
+        or _tag(meta, "category")
+    )
+    attack_type = (
+        _tag(meta, "attack_type")
+        or str(attack_plan.get("attack_type") or "")
+    )
+    return attack_axis, attack_type
+
+
+def _governance_rates(scorecard: dict) -> dict[str, float]:
+    """Flatten top-level governance metrics, defaulting legacy rows to zero."""
+
+    governance = _as_mapping(scorecard.get("governance"))
+    component_rates = _as_mapping(
+        governance.get("component_rates")
+        or governance.get("attack_type_rates")
+        or governance.get("components")
+    )
+    rows = {
+        "governance_violation_rate": _first_float(
+            governance,
+            (
+                "governance_violation_rate",
+                "violation_rate",
+                "governance_failure_rate",
+            ),
+        )
+    }
+    for attack_type, field in zip(
+        GOVERNANCE_ATTACK_TYPES, GOVERNANCE_COMPONENT_FIELDS
+    ):
+        rows[field] = _first_float(
+            governance,
+            (
+                field,
+                f"{attack_type}_violation_rate",
+            ),
+        )
+        if rows[field] == 0.0:
+            rows[field] = _first_float(
+                component_rates,
+                (
+                    attack_type,
+                    field,
+                    f"{attack_type}_violation_rate",
+                ),
+            )
+    return rows
+
+
 def scorecard_to_wide_row(scorecard: dict) -> dict[str, Any]:
     """Flatten one v2 scorecard into a single wide row."""
 
@@ -133,13 +248,22 @@ def scorecard_to_wide_row(scorecard: dict) -> dict[str, Any]:
     privacy = scorecard.get("privacy") or {}
     leaks = privacy.get("leak_rates") or {}
     security = scorecard.get("security") or {}
+    attack_axis, attack_type = _attack_meta(scorecard, meta)
 
     saf_overall = float(saf.get("overall", 0.0) or 0.0)
+    recoverability = _to_float(saf_dims.get("recoverability"))
+    policy_checkability = _to_float(saf_dims.get("policy_checkability"))
+    attribution = _to_float(saf_dims.get("attribution"))
+    evidence_integrity = _to_float(saf_dims.get("evidence_integrity"))
+    phase_scoped_policy = _to_float(saf_dims.get("phase_scoped_policy"))
+    identity_governance = _to_float(saf_dims.get("identity_governance"))
 
     return {
         "scenario_id": scorecard.get("scenario_id", ""),
         "category": _tag(meta, "category"),
         "family": _tag(meta, "family"),
+        "attack_axis": attack_axis,
+        "attack_type": attack_type,
         "model": meta.get("model", "unknown"),
         "condition": meta.get("condition", "unknown"),
         "privacy_level": meta.get("privacy_level", ""),
@@ -152,10 +276,17 @@ def scorecard_to_wide_row(scorecard: dict) -> dict[str, Any]:
         # SAF: overall + per-dim (greek shorthand).
         "s": saf_overall,
         "saf_overall": saf_overall,
-        "psi": float(saf_dims.get("policy_checkability", 0.0) or 0.0),
-        "tau": float(saf_dims.get("attribution", 0.0) or 0.0),
-        "sigma": float(saf_dims.get("recoverability", 0.0) or 0.0),
-        "phi": float(saf_dims.get("phase_scoped_policy", 0.0) or 0.0),
+        "recoverability": recoverability,
+        "policy_checkability": policy_checkability,
+        "attribution": attribution,
+        "evidence_integrity": evidence_integrity,
+        "phase_scoped_policy": phase_scoped_policy,
+        "identity_governance": identity_governance,
+        "psi": policy_checkability,
+        "tau": attribution,
+        "sigma": recoverability,
+        "phi": phase_scoped_policy,
+        "gamma": identity_governance,
         "vaa_overall": float(saf_dims["vanilla_aa_overall"])
         if "vanilla_aa_overall" in saf_dims
         else float("nan"),
@@ -168,6 +299,7 @@ def scorecard_to_wide_row(scorecard: dict) -> dict[str, Any]:
         "halr": float(leaks.get("HALR", 0.0) or 0.0),
         "cslr": float(leaks.get("CSLR", 0.0) or 0.0),
         "asr": float(security.get("asr", 0.0) or 0.0),
+        **_governance_rates(scorecard),
         # Provenance.
         "evaluator_version": scorecard.get("evaluator_version", ""),
         "cassette_hash": scorecard.get("cassette_hash", ""),

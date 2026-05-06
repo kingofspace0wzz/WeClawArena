@@ -48,7 +48,18 @@ while time.time() < deadline:
 sys.exit(1)
 PY
 
-# Hand off to the OpenClaw CLI. `exec` replaces the shell so the
+# Keep the container available for the benchmark driver by default. The
+# current OpenClaw CLI validates delivery channels against a built-in
+# allowlist, so the arena-owned simulation driver invokes the installed
+# clawsocial plugin inside this container via `docker compose exec`.
+#
+# Set CLAWSOCIAL_AGENT_MODE=openclaw to exercise the experimental direct
+# OpenClaw handoff once the custom channel CLI surface supports it.
+if [ "${CLAWSOCIAL_AGENT_MODE:-driver}" != "openclaw" ]; then
+    exec tail -f /dev/null
+fi
+
+# Experimental direct handoff. `exec` replaces the shell so the
 # container's PID 1 is the agent process and signals propagate cleanly.
 exec openclaw agent \
     --channel clawsocial \

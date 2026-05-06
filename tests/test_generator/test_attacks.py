@@ -21,7 +21,11 @@ def test_inject_privacy_attack_plants_disclosure():
     )
     assert len(new_shape.planted_disclosures) == 1
     assert new_shape.planted_disclosures[0]["agent_id"] == "bob"
-    assert "[ATTACKER]" in [a for a in new_shape.agents if a["agent_id"] == "bob"][0]["system_prompt_template"]
+    prompt = [a for a in new_shape.agents if a["agent_id"] == "bob"][0][
+        "system_prompt_template"
+    ]
+    assert "[ATTACKER]" not in prompt
+    assert "Private objective:" in prompt
 
 
 def test_inject_integrity_attack_adds_security_invariant():

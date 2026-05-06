@@ -32,11 +32,13 @@ class ComposeSpec:
             bundle is a legacy (v1) directory that ships only JSON.
         personas_dir: path to ``personas/`` (may not exist for legacy bundles).
         mcp_dir: path to ``mcp/`` (may not exist for legacy bundles).
+        resources_dir: path to ``resources/`` (may not exist for legacy bundles).
     """
 
     compose_yaml: Path | None
     personas_dir: Path
     mcp_dir: Path
+    resources_dir: Path
 
 
 class ScenarioLoader:
@@ -56,5 +58,6 @@ class ScenarioLoader:
             compose_yaml=compose_yaml_path if compose_yaml_path.exists() else None,
             personas_dir=base / "personas",
             mcp_dir=base / "mcp",
+            resources_dir=base / "resources",
         )
         return scenario, gt, compose_spec

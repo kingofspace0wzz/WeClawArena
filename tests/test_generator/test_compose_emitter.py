@@ -142,6 +142,40 @@ def test_emit_compose_yaml_declares_persona_and_mcp_volume_mounts():
         assert "./mcp:/workspace/mcp:ro" in joined
 
 
+def test_emit_compose_yaml_mounts_resources_only_into_gateway():
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario, include_resources=True))
+
+    gateway_volumes = doc["services"]["gateway"]["volumes"]
+    assert "./resources:/workspace/resources:rw" in gateway_volumes
+
+    for agent in scenario.agents:
+        volumes = doc["services"][agent.agent_id]["volumes"]
+        assert not any("/workspace/resources" in item for item in volumes)
+
+
+def test_emit_compose_yaml_gateway_persists_run_artifacts():
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario))
+
+    gateway = doc["services"]["gateway"]
+    assert "./run:/workspace/run:rw" in gateway["volumes"]
+    assert "./scenario.gt.json:/workspace/scenario.gt.json:ro" in gateway["volumes"]
+    command = " ".join(str(part) for part in gateway["command"])
+    assert "--condition passive" in command
+    assert "--db-path /workspace/run/action_log.db" in command
+    assert "--work-dir /workspace/run" in command
+    assert "--gt-path /workspace/scenario.gt.json" in command
+
+
+def test_emit_compose_yaml_gateway_receives_resource_root_when_resources_mounted():
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario, include_resources=True))
+
+    command = " ".join(str(part) for part in doc["services"]["gateway"]["command"])
+    assert "--resource-root /workspace/resources" in command
+
+
 def _svc_command_text(svc: dict) -> str:
     """Join a compose service's entrypoint + command into one string."""
     parts: list[str] = []

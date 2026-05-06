@@ -14,11 +14,16 @@ sensible default so every bundle always ships with a complete manifest:
   agent_id, with ``profile_ref = asb://profiles/<agent_id>``. This keeps
   older templates valid while the new category x family templates in
   Phase E wire in explicit AgentSocialBench profile_refs.
+- ``resource_manifest`` defaults to ``None`` and is copied when a template
+  declares auditable filesystem or database resources.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from clawsocialarena.generator.template import TemplateShape
+from clawsocialarena.scenario.models import ResourceManifest
 
 
 def assemble_gt_bundle(shape: TemplateShape) -> dict:
@@ -45,10 +50,13 @@ def assemble_gt_bundle(shape: TemplateShape) -> dict:
         "integrity_requirements": shape.integrity_requirements,
         "terminal_predicate": shape.terminal_predicate,
         "invariants": shape.invariants,
-        "attack_plan": None,
+        "attack_plan": deepcopy(shape.attack_plan),
         # v2 additions (spec §4.6): filled mechanically from the template
         "mcp_tool_manifest": _assemble_mcp_manifest(shape),
         "persona_manifest": _assemble_persona_manifest(shape),
+        "governance_manifest": _assemble_governance_manifest(shape),
+        "resource_manifest": _assemble_resource_manifest(shape),
+        "construction_manifest": _assemble_construction_manifest(shape),
     }
 
 
@@ -71,7 +79,10 @@ def _assemble_mcp_manifest(shape: TemplateShape) -> dict:
     Each entry is ``{schema: {...}, audit_class: ...}``. Empty when the
     template declares no scenario-specific tools.
     """
-    return {name: dict(spec) for name, spec in shape.mcp_tool_manifest.items()}
+    manifest = {name: dict(spec) for name, spec in shape.mcp_tool_manifest.items()}
+    for tool_name, spec in _assemble_resource_tool_manifest(shape).items():
+        manifest.setdefault(tool_name, spec)
+    return manifest
 
 
 def _assemble_persona_manifest(shape: TemplateShape) -> dict:
@@ -92,4 +103,68 @@ def _assemble_persona_manifest(shape: TemplateShape) -> dict:
             "agent_id": agent["agent_id"],
         }
         for agent in shape.agents
+    }
+
+
+def _assemble_governance_manifest(shape: TemplateShape) -> dict | None:
+    """Copy the template's governance manifest, or leave legacy shapes unset."""
+    if not shape.governance_manifest:
+        return None
+    return deepcopy(shape.governance_manifest)
+
+
+def _assemble_resource_manifest(shape: TemplateShape) -> dict | None:
+    """Copy the template's resource manifest, or leave legacy shapes unset."""
+    if not shape.resource_manifest:
+        return None
+    return deepcopy(shape.resource_manifest)
+
+
+def _assemble_construction_manifest(shape: TemplateShape) -> dict | None:
+    """Copy world-pack construction metadata when the instantiator provides it."""
+    if not shape.construction_manifest:
+        return None
+    return deepcopy(shape.construction_manifest)
+
+
+def _assemble_resource_tool_manifest(shape: TemplateShape) -> dict[str, dict]:
+    """Derive MCP contracts for declared resource operations."""
+    if not shape.resource_manifest:
+        return {}
+    resource_manifest = ResourceManifest.model_validate(shape.resource_manifest)
+    operations = {
+        operation
+        for resource in resource_manifest.resources.values()
+        for rule in resource.allowed_operations
+        for operation in rule.operations
+    }
+    return {
+        operation: {
+            "schema": _resource_tool_schema(operation),
+            "audit_class": "tool_call",
+        }
+        for operation in sorted(operations)
+        if operation.startswith(("fs.", "db."))
+    }
+
+
+def _resource_tool_schema(operation: str) -> dict:
+    properties: dict[str, dict] = {
+        "resource_id": {"type": "string"},
+        "identity_id": {"type": "string"},
+        "scope_id": {"type": "string"},
+    }
+    if operation in {"fs.write"}:
+        properties["content"] = {"type": "string"}
+    if operation in {"db.query", "db.update", "db.delete"}:
+        properties["where"] = {"type": "object"}
+    if operation == "db.insert":
+        properties["values"] = {"type": "object"}
+    if operation == "db.update":
+        properties["values"] = {"type": "object"}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": ["resource_id"],
+        "additionalProperties": True,
     }

@@ -38,10 +38,16 @@ def load_long_csv(csv_path: Path) -> pd.DataFrame:
 
 # ---- Headline ---------------------------------------------------------------------
 
-# Metric families used in the headline table; the four entries cover the
-# SAF overall score, privacy leak (primary CDLR/MPLR etc. rates averaged),
-# security ASR, and task success rate.
-_HEADLINE_METRICS: tuple[str, ...] = ("saf_overall", "tsr", "asr", "cdlr", "mplr")
+# Metric families used in the headline table; entries cover SAF overall,
+# task success, privacy leak, security ASR, and governance violation rate.
+_HEADLINE_METRICS: tuple[str, ...] = (
+    "saf_overall",
+    "tsr",
+    "asr",
+    "cdlr",
+    "mplr",
+    "governance_violation_rate",
+)
 
 
 def _mean_ci(series: pd.Series, *, z: float = 1.96) -> dict[str, float]:
@@ -57,7 +63,7 @@ def _mean_ci(series: pd.Series, *, z: float = 1.96) -> dict[str, float]:
 
 
 def _ensure_wide(df: pd.DataFrame) -> pd.DataFrame:
-    """Raise if ``df`` is not the wide Phase-H shape; adds ``live_or_replay`` if absent."""
+    """Raise if ``df`` is not wide; add I6 fallback columns when absent."""
 
     missing = {"scenario_id", "condition", "model", "category"} - set(df.columns)
     if missing:
@@ -66,16 +72,20 @@ def _ensure_wide(df: pd.DataFrame) -> pd.DataFrame:
         )
     if "live_or_replay" not in df.columns:
         df = df.assign(live_or_replay="live")
+    if "attack_axis" not in df.columns:
+        df = df.assign(attack_axis=df["category"])
+    if "attack_type" not in df.columns:
+        df = df.assign(attack_type="")
     return df
 
 
 def headline_table_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Headline table as a DataFrame: condition × category × metric."""
+    """Headline table as a DataFrame: condition × attack axis × metric."""
 
     df = _ensure_wide(df)
     rows: list[dict] = []
-    for (cond, cat, lor), sub in df.groupby(
-        ["condition", "category", "live_or_replay"], dropna=False
+    for (cond, attack_axis, lor), sub in df.groupby(
+        ["condition", "attack_axis", "live_or_replay"], dropna=False
     ):
         for metric in _HEADLINE_METRICS:
             if metric not in sub.columns:
@@ -84,7 +94,7 @@ def headline_table_df(df: pd.DataFrame) -> pd.DataFrame:
             rows.append(
                 {
                     "condition": cond,
-                    "category": cat,
+                    "attack_axis": attack_axis,
                     "live_or_replay": lor,
                     "metric": metric,
                     **ci,
@@ -94,7 +104,7 @@ def headline_table_df(df: pd.DataFrame) -> pd.DataFrame:
     # Stable sort so markdown/LaTeX rendering is deterministic.
     if not out.empty:
         out = out.sort_values(
-            ["category", "metric", "condition", "live_or_replay"]
+            ["attack_axis", "metric", "condition", "live_or_replay"]
         ).reset_index(drop=True)
     return out
 
@@ -107,31 +117,45 @@ def headline_table(df: pd.DataFrame) -> tuple[str, str]:
 
 # ---- Model comparison -------------------------------------------------------------
 
-# SAF dimensions reported in the model table (overall + the four greek dims).
-_SAF_DIM_COLUMNS: tuple[str, ...] = ("saf_overall", "psi", "tau", "sigma", "phi")
+# SAF dimensions reported in the model table.
+_SAF_DIM_COLUMNS: tuple[str, ...] = (
+    "saf_overall",
+    "recoverability",
+    "policy_checkability",
+    "attribution",
+    "evidence_integrity",
+    "phase_scoped_policy",
+    "identity_governance",
+    "psi",
+    "tau",
+    "sigma",
+    "phi",
+    "gamma",
+)
 
 
 def model_comparison_table_df(
     df: pd.DataFrame, *, condition: str = "passive"
 ) -> pd.DataFrame:
-    """SAF (overall + per-dim) per model × category, single condition."""
+    """SAF (overall + per-dim) per model × attack axis, single condition."""
 
     df = _ensure_wide(df)
     sub = df[df["condition"] == condition]
     if sub.empty:
         return pd.DataFrame(
-            columns=["model", "category", "live_or_replay", *_SAF_DIM_COLUMNS]
+            columns=["model", "attack_axis", "live_or_replay", *_SAF_DIM_COLUMNS]
         )
+    present_dims = [col for col in _SAF_DIM_COLUMNS if col in sub.columns]
     grouped = (
-        sub.groupby(["model", "category", "live_or_replay"], dropna=False)[
-            list(_SAF_DIM_COLUMNS)
+        sub.groupby(["model", "attack_axis", "live_or_replay"], dropna=False)[
+            present_dims
         ]
         .mean()
         .reset_index()
     )
-    return grouped.sort_values(["category", "model", "live_or_replay"]).reset_index(
-        drop=True
-    )
+    return grouped.sort_values(
+        ["attack_axis", "model", "live_or_replay"]
+    ).reset_index(drop=True)
 
 
 def model_comparison_table(
@@ -145,13 +169,13 @@ def model_comparison_table(
 # ---- Rewrite quality --------------------------------------------------------------
 
 def rewrite_quality_table_df(df: pd.DataFrame) -> pd.DataFrame:
-    """``TSR(enforce) − TSR(passive)`` per category with 95% CI on the delta."""
+    """``TSR(enforce) − TSR(passive)`` per attack axis with 95% CI."""
 
     df = _ensure_wide(df)
     sub = df[df["condition"].isin(["passive", "enforce"])].copy()
-    # Pair by (category, model, scenario_id, live_or_replay) then diff on condition.
+    # Pair by (attack_axis, model, scenario_id, live_or_replay) then diff.
     pivot = sub.pivot_table(
-        index=["category", "model", "scenario_id", "live_or_replay"],
+        index=["attack_axis", "model", "scenario_id", "live_or_replay"],
         columns="condition",
         values="tsr",
         aggfunc="mean",
@@ -160,7 +184,7 @@ def rewrite_quality_table_df(df: pd.DataFrame) -> pd.DataFrame:
         # Not enough conditions present; return an empty but shaped frame.
         return pd.DataFrame(
             columns=[
-                "category",
+                "attack_axis",
                 "live_or_replay",
                 "delta_mean",
                 "ci_low",
@@ -171,13 +195,13 @@ def rewrite_quality_table_df(df: pd.DataFrame) -> pd.DataFrame:
     pivot["delta"] = pivot["enforce"] - pivot["passive"]
     pivot = pivot.reset_index()
     rows: list[dict] = []
-    for (cat, lor), bucket in pivot.groupby(
-        ["category", "live_or_replay"], dropna=False
+    for (attack_axis, lor), bucket in pivot.groupby(
+        ["attack_axis", "live_or_replay"], dropna=False
     ):
         ci = _mean_ci(bucket["delta"].astype(float))
         rows.append(
             {
-                "category": cat,
+                "attack_axis": attack_axis,
                 "live_or_replay": lor,
                 "delta_mean": ci["mean"],
                 "ci_low": ci["ci_low"],
@@ -186,7 +210,7 @@ def rewrite_quality_table_df(df: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows).sort_values(
-        ["category", "live_or_replay"]
+        ["attack_axis", "live_or_replay"]
     ).reset_index(drop=True)
 
 

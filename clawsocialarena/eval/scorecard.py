@@ -47,6 +47,7 @@ class SAFDimsPayload(BaseModel):
     dims: dict[str, float]
     passes: dict[str, bool]
     overall: float
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskScorecard(BaseModel):
@@ -56,12 +57,21 @@ class TaskScorecard(BaseModel):
 
 class PrivacyScorecard(BaseModel):
     leak_rates: dict[str, float] = Field(default_factory=dict)
+    privacy_attack_success: bool = False
+    attack_success: bool = False
+    resource_tool_violation_success: bool = False
 
 
 class SecurityScorecard(BaseModel):
     asr: float = 0.0
     prop_depth: float = 0.0
     tiua: float = 1.0
+    resource_tool_violation_success: bool = False
+
+
+class GovernanceScorecard(BaseModel):
+    governance_violation_rate: float = 0.0
+    component_rates: dict[str, float] = Field(default_factory=dict)
 
 
 class RunScorecard(BaseModel):
@@ -70,9 +80,11 @@ class RunScorecard(BaseModel):
     task: TaskScorecard = Field(default_factory=TaskScorecard)
     privacy: PrivacyScorecard = Field(default_factory=PrivacyScorecard)
     security: SecurityScorecard = Field(default_factory=SecurityScorecard)
+    governance: GovernanceScorecard = Field(default_factory=GovernanceScorecard)
     diagnostics: dict = Field(default_factory=dict)
     evaluator_version: str = "eval_v2.0.0"
     meta: dict = Field(default_factory=dict)
+    attack_plan: dict[str, Any] | None = None
 
     # v2 runtime-provenance fields (Phase F / Task F4).
     gateway_invariant_passed: bool = True
@@ -106,6 +118,24 @@ class RunScorecard(BaseModel):
         """
 
         filled = dict(data)
+        saf = dict(filled.get("saf") or {})
+        dims = dict(saf.get("dims") or {})
+        diagnostics = dict(saf.get("diagnostics") or {})
+        missing_dimensions = [
+            name
+            for name in ("identity_governance",)
+            if name not in dims
+        ]
+        diagnostics.setdefault(
+            "schema",
+            {
+                "dimension_count": len(dims),
+                "legacy": bool(missing_dimensions),
+                "missing_dimensions": missing_dimensions,
+            },
+        )
+        saf["diagnostics"] = diagnostics
+        filled["saf"] = saf
         filled.setdefault("gateway_invariant_passed", True)
         filled.setdefault("cassette_hash", "")
         filled.setdefault("live_or_replay", "live")

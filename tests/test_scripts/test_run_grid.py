@@ -189,7 +189,7 @@ def test_replay_row_writes_real_scorecard(
 
     data = json.loads(scorecard_path.read_text(encoding="utf-8"))
     # Real scorecard has no top-level "status" field (that only appears
-    # on pending stubs). It must carry the five SAF dims + the runtime
+    # on pending stubs). It must carry the six SAF dims + the runtime
     # provenance fields.
     assert "status" not in data
     assert data["scenario_id"] == "cu-scheduling-mvp"
@@ -201,6 +201,7 @@ def test_replay_row_writes_real_scorecard(
         "attribution",
         "evidence_integrity",
         "phase_scoped_policy",
+        "identity_governance",
     }
     # cassette_hash is non-empty — we hashed the fixture file.
     assert data["cassette_hash"]

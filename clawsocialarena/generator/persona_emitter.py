@@ -6,9 +6,9 @@ agent in each scenario bundle. The emitter is a pure function returning a
 the generator stays side-effect-free.
 
 Conventions:
-- `.system.md` starts with an H1 carrying the agent id, followed by the
-  persona prompt body. Downstream tooling can parse the H1 as the agent id
-  without relying on filenames.
+- `.system.md` starts with an H1 carrying the runtime agent id for tooling,
+  followed by the persona prompt body. It intentionally omits backing user ids
+  from agent-facing text; those ids remain in `scenario.json` and GT metadata.
 - `.tools.json` is a JSON array of tool names. Phase D.5 Fix 4 wires the
   per-agent allowlist: when the caller passes a per-agent list, only that
   subset lands in the file. Agents that are not in the mapping and do not
@@ -68,9 +68,6 @@ def _render_system_md(*, agent_id: str, user_id: str, body: str) -> str:
     body = body.rstrip("\n")
     return (
         f"# {agent_id}\n"
-        f"\n"
-        f"Scenario agent id: `{agent_id}`\n"
-        f"Backing user id: `{user_id}`\n"
         f"\n"
         f"## Persona prompt\n"
         f"\n"

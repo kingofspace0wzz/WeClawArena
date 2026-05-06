@@ -169,6 +169,86 @@ async def test_send_threads_source_action_ids_into_record(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_send_preserves_explicit_empty_mentioned_items(tmp_path: Path) -> None:
+    session = _make_passive_session(tmp_path)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/send",
+            json={
+                "sender_id": "alice",
+                "recipient_id": "bob",
+                "content": "checked clean",
+                "mentioned_items": [],
+            },
+        )
+        assert resp.status == 200
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    assert rows[0].payload["mentioned_items"] == []
+
+
+@pytest.mark.asyncio
+async def test_send_can_record_without_enqueueing(tmp_path: Path) -> None:
+    session = _make_passive_session(tmp_path)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/send",
+            json={
+                "sender_id": "alice",
+                "recipient_id": "bob",
+                "content": "audit only",
+                "mentioned_items": ["item-a"],
+                "enqueue": False,
+            },
+        )
+        assert resp.status == 200
+        assert (await resp.json())["action_id"]
+
+        empty = await client.post("/recv", json={"recipient_id": "bob"})
+        assert empty.status == 204
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    assert rows[0].payload == {
+        "recipient_id": "bob",
+        "content": "audit only",
+        "mentioned_items": ["item-a"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_turn_index_advances_scheduled_social_phase(tmp_path: Path) -> None:
+    session = Session.build(
+        scenario_id="a3-phase-turn",
+        condition=AuditCondition.PASSIVE,
+        db_path=tmp_path / "a3-phase-turn.db",
+        phase_schedule=[
+            {"phase": "discovery", "start_turn": 0, "end_turn": 2},
+            {"phase": "negotiation", "start_turn": 2, "end_turn": 5},
+        ],
+    )
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/send",
+            json={
+                "sender_id": "alice",
+                "recipient_id": "bob",
+                "content": "negotiating now",
+                "turn_index": 2,
+            },
+        )
+        assert resp.status == 200
+
+    rows = session.action_log.read_all()  # type: ignore[union-attr]
+    assert rows[0].social_phase.value == "negotiation"
+
+
+@pytest.mark.asyncio
 async def test_send_rejects_malformed_source_action_ids(tmp_path: Path) -> None:
     """Non-array source_action_ids yields a uniform HTTP 400."""
 

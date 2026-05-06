@@ -31,7 +31,7 @@ def emit_mcp_configs(
     for tool_name in sorted(mcp_tool_manifest.keys()):
         spec = mcp_tool_manifest[tool_name]
         if isinstance(spec, McpToolSpec):
-            schema = spec.schema
+            schema = spec.input_schema
             audit_class = spec.audit_class
         else:
             schema = dict(spec.get("schema", {}))

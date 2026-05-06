@@ -29,13 +29,17 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from clawsocialarena.action_log import ActionLog
-from clawsocialarena.audit.mswm import MSWM
+from clawsocialarena.audit.mswm import MSWM, MswmTransaction
 from clawsocialarena.audit.phase_tracker import PhaseTracker
+from clawsocialarena.audit.policies.governance import GovernancePolicyHook
 from clawsocialarena.audit.shadow_log import ShadowLog
 from clawsocialarena.gateway.cassette import CassetteRecorder
-from clawsocialarena.gateway.mcp_host import McpHost
+from clawsocialarena.gateway.mcp_host import McpHost, ToolHandler
+from clawsocialarena.mcp_tools.filesystem import FilesystemResourceTool
+from clawsocialarena.mcp_tools.personal_db import PersonalDatabaseTool
 from clawsocialarena.protocols.policy_hook import (
     PolicyDecision,
     PolicyHook,
@@ -46,9 +50,11 @@ from clawsocialarena.types import (
     ActionType,
     AuditCondition,
     ExecutionPhase,
+    GovernanceRecord,
     IntegrityLevel,
     SocialPhase,
 )
+from clawsocialarena.scenario.models import GovernanceManifest, ResourceManifest
 
 
 # Map action types to the ``hook_kind`` buckets v1 used to scope hook
@@ -114,6 +120,7 @@ class Session:
     hooks: list[PolicyHook] = field(default_factory=list)
     inboxes: dict[str, asyncio.Queue[tuple[str, str]]] = field(default_factory=dict)
     mcp_host: McpHost = field(default_factory=McpHost)
+    audit_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # MSWM is cheap in-memory state and is always present, even under
     # BASELINE. Under BASELINE the gateway never calls ``_record_action``
     # (early-return on the baseline gate), so MSWM naturally stays empty;
@@ -131,6 +138,9 @@ class Session:
         phase_schedule: list[dict] | None = None,
         work_dir: Path | str | None = None,
         hooks: list[PolicyHook] | None = None,
+        governance_manifest: GovernanceManifest | dict[str, Any] | None = None,
+        resource_root: Path | str | None = None,
+        resource_manifest: ResourceManifest | dict[str, Any] | None = None,
     ) -> "Session":
         """Construct a Session with substrate wired per ``condition``.
 
@@ -157,10 +167,15 @@ class Session:
                 Under BASELINE this argument is ignored.
             hooks: Ordered list of ``PolicyHook`` instances. Ignored under
                 BASELINE.
+            governance_manifest: Optional manifest used to wire a
+                governance hook outside BASELINE.
         """
 
         if condition == AuditCondition.BASELINE:
-            return cls(scenario_id=scenario_id, condition=condition)
+            session = cls(scenario_id=scenario_id, condition=condition)
+            if resource_root is not None and resource_manifest is not None:
+                session.register_resource_tools(resource_root, resource_manifest)
+            return session
 
         primary_path = Path(db_path)
         action_log = ActionLog(db_path=primary_path)
@@ -174,15 +189,62 @@ class Session:
         cassette: CassetteRecorder | None = None
         if work_dir is not None:
             cassette = CassetteRecorder(Path(work_dir) / "cassette.jsonl")
-        return cls(
+        wired_hooks = list(hooks) if hooks else []
+        if governance_manifest is not None:
+            wired_hooks.insert(
+                0,
+                GovernancePolicyHook(
+                    governance_manifest,
+                    resource_manifest=resource_manifest,
+                ),
+            )
+        session = cls(
             scenario_id=scenario_id,
             condition=condition,
             action_log=action_log,
             shadow_log=shadow_log,
             phase_tracker=phase_tracker,
             cassette=cassette,
-            hooks=list(hooks) if hooks else [],
+            hooks=wired_hooks,
         )
+        if resource_root is not None and resource_manifest is not None:
+            session.register_resource_tools(resource_root, resource_manifest)
+        return session
+
+    def register_resource_tools(
+        self,
+        resource_root: Path | str,
+        resource_manifest: ResourceManifest | dict[str, Any],
+    ) -> None:
+        """Register gateway-hosted ``fs.*`` and ``db.*`` resource tools."""
+
+        manifest = ResourceManifest.model_validate(resource_manifest)
+        operations = {
+            operation
+            for resource in manifest.resources.values()
+            for rule in resource.allowed_operations
+            for operation in rule.operations
+        }
+        fs_tool = FilesystemResourceTool(resource_root, manifest)
+        db_tool = PersonalDatabaseTool(resource_root, manifest)
+
+        def fs_handler(operation: str) -> ToolHandler:
+            def _handler(arguments: dict) -> dict:
+                return fs_tool.dispatch(operation, arguments)
+
+            return _handler
+
+        def db_handler(operation: str) -> ToolHandler:
+            def _handler(arguments: dict) -> dict:
+                return db_tool.dispatch(operation, arguments)
+
+            return _handler
+
+        for operation in sorted(operations):
+            if operation.startswith("fs."):
+                self.mcp_host.register(operation, fs_handler(operation))
+            elif operation.startswith("db."):
+                self.mcp_host.register(operation, db_handler(operation))
 
     def close(self) -> None:
         """Release per-session resources. Idempotent.
@@ -208,6 +270,59 @@ class Session:
             self.inboxes[recipient_id] = queue
         return queue
 
+    async def send_outbound(
+        self,
+        *,
+        sender_id: str,
+        recipient_id: str,
+        content: str,
+        source_action_ids: list[str] | None = None,
+        mentioned_items: list[str] | None = None,
+        declared_action_id: str | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
+    ) -> RecordOutcome:
+        """Record and enqueue an outbound message as one audited operation.
+
+        ``record_outbound`` remains a record-only primitive. This helper
+        owns the delivery side effect so record/rewrite/block decisions and
+        recipient inbox mutation are serialized by the per-session audit
+        lock.
+        """
+
+        async with self.audit_lock:
+            if self.condition == AuditCondition.BASELINE or self.action_log is None:
+                inbox = self.ensure_inbox(recipient_id)
+                await inbox.put((sender_id, content))
+                return RecordOutcome()
+
+            payload: dict = {"recipient_id": recipient_id, "content": content}
+            if mentioned_items is not None:
+                payload["mentioned_items"] = list(mentioned_items)
+            if declared_action_id is not None:
+                payload["declared_action_id"] = declared_action_id
+            outcome = await self._record_action_unlocked(
+                agent_id=sender_id,
+                action_type=ActionType.OUTBOUND_MESSAGE,
+                payload=payload,
+                id_prefix="act",
+                hook_target_content=content,
+                source_action_ids=source_action_ids,
+                governance=governance,
+                turn_index=turn_index,
+            )
+            if outcome.blocked:
+                return outcome
+
+            delivered = (
+                outcome.rewritten_content
+                if outcome.rewritten_content is not None
+                else content
+            )
+            inbox = self.ensure_inbox(recipient_id)
+            await inbox.put((sender_id, delivered))
+            return outcome
+
     async def record_outbound(
         self,
         *,
@@ -216,6 +331,9 @@ class Session:
         content: str,
         source_action_ids: list[str] | None = None,
         mentioned_items: list[str] | None = None,
+        declared_action_id: str | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Append an ``OUTBOUND_MESSAGE`` ActionRecord for a send, if audited.
 
@@ -242,8 +360,10 @@ class Session:
         """
 
         payload: dict = {"recipient_id": recipient_id, "content": content}
-        if mentioned_items:
+        if mentioned_items is not None:
             payload["mentioned_items"] = list(mentioned_items)
+        if declared_action_id is not None:
+            payload["declared_action_id"] = declared_action_id
         return await self._record_action(
             agent_id=sender_id,
             action_type=ActionType.OUTBOUND_MESSAGE,
@@ -251,6 +371,8 @@ class Session:
             id_prefix="act",
             hook_target_content=content,
             source_action_ids=source_action_ids,
+            governance=governance,
+            turn_index=turn_index,
         )
 
     async def record_tool_call(
@@ -260,6 +382,8 @@ class Session:
         tool_name: str,
         arguments: dict,
         source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Append a ``TOOL_CALL`` ActionRecord if the session is audited.
 
@@ -280,6 +404,8 @@ class Session:
             id_prefix="tc",
             hook_target_content=hook_target,
             source_action_ids=source_action_ids,
+            governance=governance,
+            turn_index=turn_index,
         )
 
     async def record_tool_observation(
@@ -290,6 +416,8 @@ class Session:
         tool_name: str,
         observation: str,
         source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Append a ``TOOL_OBSERVATION_RETURN`` ActionRecord, if audited.
 
@@ -318,6 +446,8 @@ class Session:
             id_prefix="tr",
             hook_target_content=observation,
             source_action_ids=source_action_ids,
+            governance=governance,
+            turn_index=turn_index,
         )
 
     async def record_memory_write(
@@ -327,6 +457,8 @@ class Session:
         content: str,
         tags: list[str] | None = None,
         source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Append a ``MEMORY_WRITE`` ActionRecord, if audited.
 
@@ -343,6 +475,8 @@ class Session:
             id_prefix="mem",
             hook_target_content=content,
             source_action_ids=source_action_ids,
+            governance=governance,
+            turn_index=turn_index,
         )
 
     async def record_llm_call(
@@ -355,6 +489,8 @@ class Session:
         model: str,
         cached_tokens: int = 0,
         source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Append an ``LLM_CALL`` ActionRecord with token accounting, if audited.
 
@@ -377,6 +513,8 @@ class Session:
             id_prefix="llm",
             hook_target_content=None,
             source_action_ids=source_action_ids,
+            governance=governance,
+            turn_index=turn_index,
         )
 
     async def _record_action(
@@ -388,6 +526,34 @@ class Session:
         id_prefix: str,
         hook_target_content: str | None,
         source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
+    ) -> RecordOutcome:
+        """Serialize audit mutation and delegate to the unlocked recorder."""
+
+        async with self.audit_lock:
+            return await self._record_action_unlocked(
+                agent_id=agent_id,
+                action_type=action_type,
+                payload=payload,
+                id_prefix=id_prefix,
+                hook_target_content=hook_target_content,
+                source_action_ids=source_action_ids,
+                governance=governance,
+                turn_index=turn_index,
+            )
+
+    async def _record_action_unlocked(
+        self,
+        *,
+        agent_id: str,
+        action_type: ActionType,
+        payload: dict,
+        id_prefix: str,
+        hook_target_content: str | None,
+        source_action_ids: list[str] | None = None,
+        governance: GovernanceRecord | None = None,
+        turn_index: int | None = None,
     ) -> RecordOutcome:
         """Shared helper: append an ActionRecord under PASSIVE or ENFORCE.
 
@@ -397,24 +563,26 @@ class Session:
         2. Mint a stable ``action_id`` up front so every POLICY_DECISION
            emitted here can reference the target action even when that
            target is ultimately blocked (no row written).
-        3. Apply a provisional MSWM update so hooks see the fresh state
-           (spec §2.6 "MSWM is updated before policy hooks run").
+        3. Apply the candidate action to a tentative MSWM in transaction-local
+           state so hooks see fresh state without mutating committed MSWM.
         4. For each hook matching ``_HOOK_KIND_FOR_ACTION[action_type]``,
-           evaluate against a provisional ActionRecord and emit a
+           evaluate against a candidate ActionRecord and emit a
            POLICY_DECISION row per verdict.
-        5. If blocked under ENFORCE, revert the provisional MSWM update
-           and return early — no primary record is appended.
-        6. Under ENFORCE, if a rewrite modified ``mentioned_items`` the
-           provisional MSWM update no longer matches the persisted
-           payload — revert the provisional and re-apply MSWM from the
-           rewritten payload so MSWM, action log, and cassette agree.
-        7. Append the final record to primary log, shadow log, and cassette.
+        5. If blocked under ENFORCE, discard the tentative MSWM update and
+           return early — no primary record is appended.
+        6. Under ENFORCE, rewrites rebuild the tentative MSWM candidate so
+           later hooks and the eventual commit see the rewritten payload.
+        7. Append the final record to primary log, shadow log, and cassette,
+           then commit the tentative MSWM view.
 
         Under BASELINE this always returns an empty :class:`RecordOutcome`.
         """
 
         if self.condition == AuditCondition.BASELINE or self.action_log is None:
             return RecordOutcome()
+
+        if turn_index is not None and self.phase_tracker is not None:
+            self.phase_tracker.advance_to_turn(turn_index)
 
         # Phase tracker is always present under passive/enforce because
         # Session.build wires one; but be defensive and fall back so a
@@ -424,11 +592,6 @@ class Session:
             if self.phase_tracker is not None
             else SocialPhase.DISCOVERY
         )
-        # TODO(runtime-turn): once the gateway runtime exposes a per-scenario
-        # turn counter, call ``self.phase_tracker.advance_to_turn(turn)`` from
-        # the runtime loop before record_* so the schedule-driven phase
-        # changes land. The tracker exposes ``advance_to_turn`` already; this
-        # is purely a plumbing gap.
 
         action_id = f"{id_prefix}-{uuid.uuid4().hex[:12]}"
         hook_kind = _HOOK_KIND_FOR_ACTION.get(action_type)
@@ -444,18 +607,12 @@ class Session:
         )
         blocked = False
         block_decision: PolicyDecision | None = None
-        rewrite_decision: PolicyDecision | None = None
 
-        # Build a provisional representing the current action so MSWM can
-        # update immediately and so hooks can see the fresh state (spec §2.6
-        # explicitly says MSWM is updated before policy hooks run). We
-        # rebuild the provisional inside the hook loop when a rewrite
-        # composes, but the MSWM update uses the ORIGINAL provisional once
-        # — MSWM models what the agent intends. After the hook loop, if a
-        # rewrite MODIFIED mentioned_items under ENFORCE, we revert the
-        # provisional update and re-apply MSWM from the rewritten payload
-        # so the persisted record and MSWM agree.
-        initial_provisional = ActionRecord(
+        # Build a candidate action so MSWM can update transaction-local
+        # tentative state immediately and pre-commit policy hooks can see
+        # the action's effects. Committed MSWM is not mutated until the
+        # action has been accepted and appended.
+        initial_candidate = ActionRecord(
             action_id=action_id,
             prev_hash=self.action_log.head_hash(agent_id),
             agent_id=agent_id,
@@ -466,30 +623,35 @@ class Session:
             payload=dict(payload),
             integrity_level=IntegrityLevel.HASH_CHAINED,
             source_action_ids=sources,
+            governance=governance,
         )
-        self.mswm.on_action(initial_provisional)
+        tx = MswmTransaction(self.mswm)
+        tx.apply_candidate(initial_candidate)
 
-        if hook_kind is not None and self.hooks:
+        if self.hooks:
             for hook in self.hooks:
-                if getattr(hook, "hook_kind", "message") != hook_kind:
+                hook_scope = getattr(hook, "hook_kind", "message")
+                if hook_scope != "governance" and (
+                    hook_kind is None or hook_scope != hook_kind
+                ):
                     continue
-                # Build the provisional the hook sees. Under PASSIVE the
-                # provisional carries the ORIGINAL content (rewrites do not
-                # compose because they do not propagate); under ENFORCE
-                # it carries the CURRENT (post-previous-rewrite) content
-                # so a rewrite chain composes.
-                provisional_payload = dict(payload)
+                # Build the candidate action the hook sees. Under PASSIVE it
+                # carries the ORIGINAL content (rewrites do not compose
+                # because they do not propagate); under ENFORCE it carries
+                # the CURRENT (post-previous-rewrite) content so a rewrite
+                # chain composes.
+                candidate_payload = dict(payload)
                 if hook_target_content is not None:
                     content_key = _content_key_for_action(action_type)
                     if content_key is not None:
-                        provisional_payload[content_key] = current_content
+                        candidate_payload[content_key] = current_content
                 if (
                     self.condition == AuditCondition.ENFORCE
                     and current_mentioned is not None
                 ):
-                    provisional_payload["mentioned_items"] = list(current_mentioned)
+                    candidate_payload["mentioned_items"] = list(current_mentioned)
 
-                provisional = ActionRecord(
+                candidate = ActionRecord(
                     action_id=action_id,
                     prev_hash=self.action_log.head_hash(agent_id),
                     agent_id=agent_id,
@@ -497,12 +659,19 @@ class Session:
                     timestamp=datetime.now(timezone.utc).isoformat(),
                     execution_phase=ExecutionPhase.NOMINAL,
                     social_phase=social_phase,
-                    payload=provisional_payload,
+                    payload=candidate_payload,
                     integrity_level=IntegrityLevel.HASH_CHAINED,
                     source_action_ids=sources,
+                    governance=governance,
                 )
                 decision: PolicyDecision = hook.evaluate(
-                    action=provisional, context={"mswm": self.mswm}
+                    action=candidate,
+                    context={
+                        "mswm": tx.tentative,
+                        "mswm_tentative": tx.tentative,
+                        "mswm_committed": tx.committed,
+                        "candidate_action_id": action_id,
+                    },
                 )
 
                 post_content = (
@@ -528,20 +697,53 @@ class Session:
                         block_decision = decision
                         break
                     if decision.verdict == PolicyVerdict.REWRITE:
-                        rewrite_decision = decision
+                        previous_content = current_content
+                        previous_mentioned = (
+                            list(current_mentioned)
+                            if current_mentioned is not None
+                            else None
+                        )
                         if decision.rewritten_content is not None:
                             current_content = decision.rewritten_content
                         if decision.rewritten_mentioned_items is not None:
                             current_mentioned = list(
                                 decision.rewritten_mentioned_items
                             )
+                        rewrite_changed = (
+                            current_content != previous_content
+                            or current_mentioned != previous_mentioned
+                        )
+                        if rewrite_changed:
+                            rewritten_payload = dict(payload)
+                            if hook_target_content is not None:
+                                content_key = _content_key_for_action(action_type)
+                                if content_key is not None:
+                                    rewritten_payload[content_key] = current_content
+                            if current_mentioned is not None:
+                                rewritten_payload["mentioned_items"] = list(
+                                    current_mentioned
+                                )
+                            rewritten_candidate = ActionRecord(
+                                action_id=action_id,
+                                prev_hash=self.action_log.head_hash(agent_id),
+                                agent_id=agent_id,
+                                action_type=action_type,
+                                timestamp=datetime.now(timezone.utc).isoformat(),
+                                execution_phase=ExecutionPhase.NOMINAL,
+                                social_phase=social_phase,
+                                payload=rewritten_payload,
+                                integrity_level=IntegrityLevel.HASH_CHAINED,
+                                source_action_ids=sources,
+                                governance=governance,
+                            )
+                            tx.rebuild(rewritten_candidate)
 
         if blocked:
             # No primary record, no cassette line for the action itself;
-            # the POLICY_DECISION rows above preserve the evidence. Revert
-            # the MSWM update we did pre-hook so the state reflects "action
-            # never happened" from the peer's perspective.
-            self.mswm.revert_action(initial_provisional)
+            # the POLICY_DECISION rows above preserve the evidence. Discard
+            # tentative MSWM so committed state still reflects "action never
+            # happened" from the peer's perspective.
+            tx.discard()
             _ = block_decision  # retained for future attribution passes
             return RecordOutcome(action_id=None, blocked=True)
 
@@ -578,17 +780,8 @@ class Session:
             payload=final_payload,
             integrity_level=IntegrityLevel.HASH_CHAINED,
             source_action_ids=sources,
+            governance=governance,
         )
-
-        # MSWM reconciliation: if the rewrite altered ``mentioned_items``
-        # under ENFORCE, the provisional MSWM update (keyed on the ORIGINAL
-        # mentioned set) is now inconsistent with the persisted payload.
-        # Revert the provisional and re-apply MSWM from the final record
-        # so MSWM, action log, and cassette agree on what the recipient
-        # actually learned.
-        if mentioned_changed and rewrite_decision is not None:
-            self.mswm.revert_action(initial_provisional)
-            self.mswm.on_action(record)
 
         self.action_log.append(record)
 
@@ -600,6 +793,8 @@ class Session:
 
         if self.cassette is not None:
             self.cassette.record(record)
+
+        self.mswm = tx.commit()
 
         rewritten = current_content if content_changed else None
         return RecordOutcome(
@@ -643,6 +838,10 @@ class Session:
             "verdict": decision.verdict.value,
             "policy_id": decision.policy_id,
             "reason": decision.reason,
+            "audit_condition": self.condition.value,
+            "enforcement_effect": self._policy_enforcement_effect(decision.verdict),
+            "enforced": self.condition == AuditCondition.ENFORCE
+            and decision.verdict in {PolicyVerdict.BLOCK, PolicyVerdict.REWRITE},
             "target_action_id": target_action_id,
             "original_content": original_content,
             "post_content": post_content,
@@ -670,6 +869,9 @@ class Session:
                 pd_payload["rewritten_mentioned_items"] = None
         else:
             pd_payload["rewritten_mentioned_items"] = None
+        governance_verdict = getattr(decision, "governance_verdict", None)
+        if governance_verdict is not None:
+            pd_payload["governance_verdict"] = governance_verdict
         rec = ActionRecord(
             action_id=f"pol-{uuid.uuid4().hex[:12]}",
             prev_hash=self.action_log.head_hash(agent_id),
@@ -689,6 +891,21 @@ class Session:
             self.shadow_log.append(shadow_rec)
         if self.cassette is not None:
             self.cassette.record(rec)
+
+    def _policy_enforcement_effect(self, verdict: PolicyVerdict) -> str:
+        if self.condition == AuditCondition.PASSIVE:
+            if verdict == PolicyVerdict.BLOCK:
+                return "would_block_audit_only"
+            if verdict == PolicyVerdict.REWRITE:
+                return "would_rewrite_audit_only"
+            return "allow_audit_only"
+        if self.condition == AuditCondition.ENFORCE:
+            if verdict == PolicyVerdict.BLOCK:
+                return "blocked"
+            if verdict == PolicyVerdict.REWRITE:
+                return "rewritten"
+            return "allowed"
+        return "not_applicable"
 
 
 def _content_key_for_action(action_type: ActionType) -> str | None:

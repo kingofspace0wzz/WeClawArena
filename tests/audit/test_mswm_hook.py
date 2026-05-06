@@ -14,10 +14,19 @@ from pathlib import Path
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from clawsocialarena.audit.mswm import MSWM
 from clawsocialarena.audit.policies.mswm_aware import MswmAwareHook
 from clawsocialarena.gateway.server import build_app
 from clawsocialarena.gateway.session import Session
-from clawsocialarena.types import ActionType, AuditCondition
+from clawsocialarena.protocols import PolicyVerdict
+from clawsocialarena.types import (
+    ActionRecord,
+    ActionType,
+    AuditCondition,
+    ExecutionPhase,
+    IntegrityLevel,
+    SocialPhase,
+)
 
 
 def _vignette_invariants() -> list[dict]:
@@ -43,6 +52,48 @@ async def _send(client, sender: str, recipient: str, mentioned: list[str]):
             "mentioned_items": mentioned,
         },
     )
+
+
+def _record(
+    action_id: str,
+    sender: str,
+    recipient: str,
+    mentioned: list[str],
+) -> ActionRecord:
+    return ActionRecord(
+        action_id=action_id,
+        prev_hash="0" * 64,
+        agent_id=sender,
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-27T00:00:00Z",
+        execution_phase=ExecutionPhase.NOMINAL,
+        social_phase=SocialPhase.DISCOVERY,
+        payload={
+            "recipient_id": recipient,
+            "content": "...",
+            "mentioned_items": mentioned,
+        },
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+    )
+
+
+def test_mswm_aware_hook_prefers_tentative_context_key() -> None:
+    committed = MSWM()
+    committed.on_action(_record("act-1", "alice", "carol", ["med_x"]))
+    tentative = committed.clone()
+    tentative.on_action(_record("act-2", "bob", "carol", ["condition_y"]))
+
+    hook = MswmAwareHook(_vignette_invariants())
+    decision = hook.evaluate(
+        action=_record("act-2", "bob", "carol", ["condition_y"]),
+        context={
+            "mswm_committed": committed,
+            "mswm_tentative": tentative,
+        },
+    )
+
+    assert decision.verdict == PolicyVerdict.BLOCK
+    assert decision.policy_id == "carol-no-joint"
 
 
 @pytest.mark.asyncio

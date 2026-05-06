@@ -21,7 +21,7 @@ import http from 'node:http';
 import { AddressInfo } from 'node:net';
 
 import { createChannel } from '../src/channel';
-import plugin from '../src/index';
+import { plugin } from '../src/index';
 // `ChannelPlugin` lives in `openclaw/plugin-sdk/channel-core`.
 import type { ChannelPlugin } from 'openclaw/plugin-sdk/channel-core';
 

@@ -7,14 +7,17 @@ from clawsocialarena.audit.policy_registry import (
 from clawsocialarena.saf.scorers import (
     attribution_dag,
     evidence_integrity,
+    identity_governance,
     phase_scoped_policy,
     policy_checkability,
     recoverability,
 )
+from clawsocialarena.scenario.models import GTBundle
 from clawsocialarena.types import (
     ActionRecord,
     ActionType,
     ExecutionPhase,
+    GovernanceRecord,
     IntegrityLevel,
     SocialPhase,
 )
@@ -22,7 +25,8 @@ from clawsocialarena.types import (
 
 def _mk(agent: str, idx: int, level: IntegrityLevel = IntegrityLevel.HASH_CHAINED,
         phase: SocialPhase = SocialPhase.DISCOVERY,
-        payload: dict | None = None) -> ActionRecord:
+        payload: dict | None = None,
+        governance: GovernanceRecord | None = None) -> ActionRecord:
     return ActionRecord(
         action_id=f"{agent}-{idx}",
         prev_hash="0" * 64,
@@ -33,6 +37,101 @@ def _mk(agent: str, idx: int, level: IntegrityLevel = IntegrityLevel.HASH_CHAINE
         social_phase=phase,
         payload=payload if payload is not None else {"content": f"msg-{idx}"},
         integrity_level=level,
+        governance=governance,
+    )
+
+
+def _governance(
+    *,
+    owner_id: str = "owner-alice",
+    identity_id: str = "identity-alice",
+    scope_id: str = "scope-calendar",
+    mandate_id: str = "mandate-calendar",
+    escalation_state: str = "approved",
+) -> GovernanceRecord:
+    return GovernanceRecord(
+        owner_id=owner_id,
+        active_identity_id=identity_id,
+        authorization_scope_id=scope_id,
+        approval_mandate_id=mandate_id,
+        escalation_state=escalation_state,
+    )
+
+
+def _governance_gt() -> GTBundle:
+    return GTBundle.model_validate(
+        {
+            "scenario_id": "governance-scorer",
+            "canonical_action_stream": [],
+            "phase_schedule": [],
+            "policies": {"flat": [], "phase_scoped": []},
+            "attribution_dag": {"nodes": [], "edges": []},
+            "integrity_requirements": {},
+            "terminal_predicate": {"type": "none"},
+            "invariants": {},
+            "governance_manifest": {
+                "owners": {
+                    "owner-alice": {"owner_id": "owner-alice"},
+                },
+                "identities": {
+                    "identity-alice": {
+                        "identity_id": "identity-alice",
+                        "owner_id": "owner-alice",
+                        "agent_id": "alice",
+                    },
+                },
+                "authorization_scopes": {
+                    "scope-calendar": {
+                        "scope_id": "scope-calendar",
+                        "owner_id": "owner-alice",
+                        "identity_id": "identity-alice",
+                        "resource_ids": ["calendar://alice/work"],
+                        "allowed_actions": ["outbound_message"],
+                    },
+                },
+                "approval_mandates": {
+                    "mandate-calendar": {
+                        "mandate_id": "mandate-calendar",
+                        "owner_id": "owner-alice",
+                        "scope_id": "scope-calendar",
+                        "approver_ids": ["owner-alice"],
+                    },
+                },
+                "escalation_rules": {},
+                "governed_actions": {
+                    "alice-0": {
+                        "action_id": "alice-0",
+                        "action_type": "outbound_message",
+                        "agent_id": "alice",
+                        "resource_id": "calendar://alice/work",
+                        "required_scope_id": "scope-calendar",
+                        "requires_approval": True,
+                        "expected_owner_id": "owner-alice",
+                        "expected_identity_id": "identity-alice",
+                    },
+                    "alice-1": {
+                        "action_id": "alice-1",
+                        "action_type": "outbound_message",
+                        "agent_id": "alice",
+                        "resource_id": "calendar://alice/work",
+                        "required_scope_id": "scope-calendar",
+                        "requires_approval": True,
+                        "expected_owner_id": "owner-alice",
+                        "expected_identity_id": "identity-alice",
+                    },
+                    "alice-2": {
+                        "action_id": "alice-2",
+                        "action_type": "outbound_message",
+                        "agent_id": "alice",
+                        "resource_id": "calendar://alice/work",
+                        "required_scope_id": "scope-calendar",
+                        "requires_approval": True,
+                        "expected_owner_id": "owner-alice",
+                        "expected_identity_id": "identity-alice",
+                    },
+                },
+            },
+        }
     )
 
 
@@ -268,6 +367,39 @@ def test_phase_scoped_policy_not_decidable_when_field_missing():
     assert result.per_policy["p1"]["satisfied"] is None  # can't evaluate
 
 
+def test_phase_scoped_policy_ignores_in_phase_records_outside_required_surface():
+    reg = PolicyRegistry()
+    reg.register_phase_scoped(PhaseScopedPolicy(
+        policy_id="p1",
+        phase=SocialPhase.DISCOVERY,
+        predicate=lambda a, ctx: "ok" in a.payload.get("content", ""),
+        required_fields={"payload.content"},
+    ))
+    pt = PhaseTracker()
+    log = [
+        _mk("a", 0, phase=SocialPhase.DISCOVERY, payload={"content": "ok"}),
+        ActionRecord(
+            action_id="a-llm-0",
+            prev_hash="0" * 64,
+            agent_id="a",
+            action_type=ActionType.LLM_CALL,
+            timestamp="2026-04-15T00:00:01Z",
+            execution_phase=ExecutionPhase.NOMINAL,
+            social_phase=SocialPhase.DISCOVERY,
+            payload={"input_tokens": 1, "output_tokens": 1},
+            integrity_level=IntegrityLevel.HASH_CHAINED,
+        ),
+    ]
+
+    result = phase_scoped_policy.score(
+        action_log=log, policy_registry=reg, phase_tracker=pt
+    )
+
+    assert result.scalar == 1.0
+    assert result.per_policy["p1"]["decidable"] is True
+    assert result.per_policy["p1"]["satisfied"] is True
+
+
 def test_phase_scoped_policy_violated():
     """A decidable policy whose predicate fails counts as violated."""
     reg = PolicyRegistry()
@@ -286,3 +418,104 @@ def test_phase_scoped_policy_violated():
     assert result.per_policy["p1"]["decidable"] is True
     assert result.per_policy["p1"]["satisfied"] is False
     assert result.per_policy["p1"]["vacuous"] is False
+
+
+# --- Identity-Governance ---------------------------------------------------
+
+def test_identity_governance_counts_declared_actions_from_manifest():
+    gt = _governance_gt()
+    result = identity_governance.score(
+        action_log=[
+            _mk("alice", 0, governance=_governance()),
+            # alice-1 is declared but has no governance evidence, so it is
+            # undecidable and not permitted.
+            _mk("alice", 1),
+            # alice-2 has complete evidence, but the scope id is not declared
+            # in the governance manifest, so it is disallowed.
+            _mk("alice", 2, governance=_governance(scope_id="scope-missing")),
+        ],
+        gt=gt,
+    )
+
+    assert result.scalar == 1 / 3
+    assert result.diagnostics["declared_count"] == 3
+    assert result.diagnostics["decidable_and_permitted_count"] == 1
+    assert result.diagnostics["undecidable_count"] == 1
+    assert result.diagnostics["disallowed_count"] == 1
+    assert result.per_action["alice-0"]["decidable"] is True
+    assert result.per_action["alice-0"]["permitted"] is True
+    assert result.per_action["alice-1"]["status"] == "missing_governance"
+    assert result.per_action["alice-2"]["status"] == "disallowed"
+
+
+def test_identity_governance_missing_declared_action_is_undecidable():
+    gt = _governance_gt()
+    result = identity_governance.score(action_log=[], gt=gt)
+
+    assert result.scalar == 0.0
+    assert result.diagnostics["declared_count"] == 3
+    assert result.diagnostics["missing_action_count"] == 3
+    assert all(
+        entry["status"] == "missing_action"
+        for entry in result.per_action.values()
+    )
+
+
+def test_identity_governance_matches_declared_action_id_payload():
+    gt = _governance_gt()
+    result = identity_governance.score(
+        action_log=[
+            ActionRecord(
+                action_id="act-runtime-id",
+                prev_hash="0" * 64,
+                agent_id="alice",
+                action_type=ActionType.OUTBOUND_MESSAGE,
+                timestamp="2026-04-15T00:00:00Z",
+                execution_phase=ExecutionPhase.NOMINAL,
+                social_phase=SocialPhase.DISCOVERY,
+                payload={
+                    "content": "canonical governance action",
+                    "declared_action_id": "alice-0",
+                },
+                integrity_level=IntegrityLevel.HASH_CHAINED,
+                governance=_governance(),
+            )
+        ],
+        gt=gt,
+    )
+
+    assert result.scalar == 1 / 3
+    assert result.diagnostics["missing_action_count"] == 2
+    assert result.per_action["alice-0"]["status"] == "permitted"
+    assert result.per_action["alice-0"]["observed"]["action_id"] == "act-runtime-id"
+
+
+def test_identity_governance_matches_single_governance_record_without_declared_id():
+    gt = _governance_gt()
+    assert gt.governance_manifest is not None
+    gt.governance_manifest.governed_actions = {
+        "alice-0": gt.governance_manifest.governed_actions["alice-0"]
+    }
+    result = identity_governance.score(
+        action_log=[
+            ActionRecord(
+                action_id="act-runtime-id",
+                prev_hash="0" * 64,
+                agent_id="alice",
+                action_type=ActionType.OUTBOUND_MESSAGE,
+                timestamp="2026-04-15T00:00:00Z",
+                execution_phase=ExecutionPhase.NOMINAL,
+                social_phase=SocialPhase.DISCOVERY,
+                payload={"content": "canonical governance action"},
+                integrity_level=IntegrityLevel.HASH_CHAINED,
+                governance=_governance(scope_id="scope-missing"),
+            )
+        ],
+        gt=gt,
+    )
+
+    assert result.scalar == 0.0
+    assert result.diagnostics["missing_action_count"] == 0
+    assert result.diagnostics["disallowed_count"] == 1
+    assert result.per_action["alice-0"]["status"] == "disallowed"
+    assert result.per_action["alice-0"]["observed"]["action_id"] == "act-runtime-id"

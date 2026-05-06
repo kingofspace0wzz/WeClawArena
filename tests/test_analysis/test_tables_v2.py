@@ -41,7 +41,7 @@ def test_headline_table_df_has_expected_columns(tmp_path: Path):
     table = headline_table_df(df)
     for col in (
         "condition",
-        "category",
+        "attack_axis",
         "live_or_replay",
         "metric",
         "mean",
@@ -54,6 +54,13 @@ def test_headline_table_df_has_expected_columns(tmp_path: Path):
     saf = table[table["metric"] == "saf_overall"]
     saf_by_cond = saf.groupby("condition")["mean"].mean()
     assert saf_by_cond["enforce"] >= saf_by_cond["baseline"]
+    assert "governance_violation_rate" in set(table["metric"])
+    assert set(table["attack_axis"]) == {
+        "collaboration",
+        "security",
+        "privacy",
+        "governance",
+    }
 
 
 def test_model_comparison_held_at_passive(tmp_path: Path):
@@ -62,7 +69,7 @@ def test_model_comparison_held_at_passive(tmp_path: Path):
     assert "|" in md
     assert "tabular" in tex
     frame = model_comparison_table_df(df, condition="passive")
-    # 4 models × 2 categories (times live_or_replay count).
+    # 4 models × 4 attack axes (times live_or_replay count).
     assert set(frame["model"]) == {
         "claude-sonnet-4-6",
         "gpt-5-mini",
@@ -71,6 +78,14 @@ def test_model_comparison_held_at_passive(tmp_path: Path):
     }
     assert "saf_overall" in frame.columns
     assert "psi" in frame.columns
+    assert "gamma" in frame.columns
+    assert "identity_governance" in frame.columns
+    assert set(frame["attack_axis"]) == {
+        "collaboration",
+        "security",
+        "privacy",
+        "governance",
+    }
 
 
 def test_rewrite_quality_shows_enforce_minus_passive(tmp_path: Path):
@@ -103,6 +118,8 @@ def test_headline_empty_when_no_matching_metric(tmp_path: Path):
             "scenario_id": ["x"],
             "category": ["CD"],
             "family": ["auditability"],
+            "attack_axis": ["governance"],
+            "attack_type": ["approval_bypass"],
             "model": ["claude"],
             "condition": ["passive"],
             "live_or_replay": ["live"],

@@ -26,6 +26,7 @@ and a memory-kind rewrite replaces the persisted memory_write content.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -204,6 +205,54 @@ async def test_baseline_ignores_hooks_entirely(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_outbound_enqueues_from_session_under_baseline(
+    tmp_path: Path,
+) -> None:
+    session = Session.build(
+        scenario_id="baseline-session-send",
+        condition=AuditCondition.BASELINE,
+        db_path=tmp_path / "ignored.db",
+        hooks=[RewriteMessageHook()],
+    )
+
+    outcome = await session.send_outbound(
+        sender_id="alice",
+        recipient_id="bob",
+        content="hello x",
+    )
+
+    assert outcome.action_id is None
+    assert outcome.blocked is False
+    sender_id, delivered = session.inboxes["bob"].get_nowait()
+    assert (sender_id, delivered) == ("alice", "hello x")
+    assert session.action_log is None
+
+
+@pytest.mark.asyncio
+async def test_record_outbound_waits_for_audit_lock(tmp_path: Path) -> None:
+    session = _passive_session(tmp_path, [])
+    await session.audit_lock.acquire()
+
+    try:
+        task = asyncio.create_task(
+            session.record_outbound(
+                sender_id="alice",
+                recipient_id="bob",
+                content="hello",
+                mentioned_items=["z"],
+            )
+        )
+        await asyncio.sleep(0)
+        assert task.done() is False
+    finally:
+        session.audit_lock.release()
+
+    outcome = await task
+    assert outcome.blocked is False
+    assert session.mswm.known_items("bob") == {"z"}
+
+
+@pytest.mark.asyncio
 async def test_enforce_block_suppresses_inbox_and_returns_blocked_true(
     tmp_path: Path,
 ) -> None:
@@ -268,6 +317,30 @@ async def test_enforce_tool_block_skips_mcp_dispatch(tmp_path: Path) -> None:
     assert ActionType.POLICY_DECISION in types
     assert ActionType.TOOL_CALL not in types
     assert ActionType.TOOL_OBSERVATION_RETURN not in types
+
+
+@pytest.mark.asyncio
+async def test_mcp_dispatch_does_not_hold_audit_lock_during_tool_execution(
+    tmp_path: Path,
+) -> None:
+    session = _enforce_session(tmp_path, [])
+
+    def inspect_lock(_: dict) -> dict:
+        return {"audit_lock_held": session.audit_lock.locked()}
+
+    session.mcp_host.register("inspect_lock", inspect_lock)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/mcp/inspect_lock",
+            json={"agent_id": "alice", "arguments": {}},
+        )
+        assert resp.status == 200
+        body = await resp.json()
+
+    assert body["blocked"] is False
+    assert body["observation"] == {"audit_lock_held": False}
 
 
 @pytest.mark.asyncio
@@ -353,11 +426,11 @@ async def test_enforce_rewrite_updates_mswm_to_match_rewritten_content(
     """ENFORCE + rewrite that drops a mentioned item ⇒ MSWM reflects the
     rewritten payload, not the original.
 
-    This is the Codex-flagged Fix-1 invariant: previously the provisional
-    MSWM update left ``items_learned_from_j`` carrying the redacted item
-    even though the persisted action removed it. The Session now reverts
-    and re-applies MSWM so the peer's peer model agrees with the
-    persisted payload.
+    This is the Codex-flagged Fix-1 invariant: previously the initial
+    candidate action left tentative MSWM carrying the redacted item even
+    though the persisted action removed it. Session now rebuilds
+    transaction-local state from committed MSWM plus the rewritten candidate
+    action so the peer's peer model agrees with the persisted payload.
     """
 
     session = _enforce_session(

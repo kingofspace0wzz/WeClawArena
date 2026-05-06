@@ -35,11 +35,11 @@ def _prep(tmp_path: Path) -> pd.DataFrame:
     return load_long_csv(out)
 
 
-def test_ablation_figure_has_three_axes(tmp_path: Path):
+def test_ablation_figure_has_four_axes(tmp_path: Path):
     df = _prep(tmp_path)
     fig = ablation_figure(df)
     assert isinstance(fig, Figure)
-    assert len(fig.axes) == 3
+    assert len(fig.axes) == 4
 
 
 def test_ablation_panels_have_condition_ladder(tmp_path: Path):
@@ -51,6 +51,8 @@ def test_ablation_panels_have_condition_ladder(tmp_path: Path):
     assert lines, "expected at least one category series drawn"
     xs = [x for line in lines for x in line.get_xdata()]
     assert any("baseline" in str(x) or x == 0 for x in xs) or xticks
+    labels = {line.get_label() for line in lines}
+    assert labels == {"collaboration", "security", "privacy", "governance"}
 
 
 def test_rewrite_quality_figure_has_one_axis(tmp_path: Path):
@@ -58,9 +60,9 @@ def test_rewrite_quality_figure_has_one_axis(tmp_path: Path):
     fig = rewrite_quality_figure(df)
     assert isinstance(fig, Figure)
     assert len(fig.axes) == 1
-    # One bar per category on the fixture (CD, MC).
+    # One bar per attack axis on the fixture.
     bars = fig.axes[0].patches
-    assert len(bars) >= 2
+    assert len(bars) >= 4
 
 
 def test_disagreement_vignettes_figure_is_multi_panel(tmp_path: Path):

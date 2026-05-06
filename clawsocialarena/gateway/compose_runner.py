@@ -31,6 +31,7 @@ wrapper stays readable.
 from __future__ import annotations
 
 import contextlib
+import os
 import shutil
 import subprocess
 import time
@@ -137,6 +138,7 @@ def ComposeRunner(
         raise DockerUnavailable("docker is not on PATH")
 
     template_path = Path(template_path)
+    build_flag = "--build" if _compose_build_enabled() else "--no-build"
     up_cmd = [
         "docker",
         "compose",
@@ -145,6 +147,7 @@ def ComposeRunner(
         "-p",
         project_name,
         "up",
+        build_flag,
         "-d",
     ]
     subprocess.run(up_cmd, check=True, env=env)
@@ -172,3 +175,10 @@ def ComposeRunner(
             "-v",
         ]
         subprocess.run(down_cmd, check=False)
+
+
+def _compose_build_enabled() -> bool:
+    raw = os.environ.get("CLAWSOCIALARENA_COMPOSE_BUILD")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off"}

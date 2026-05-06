@@ -190,3 +190,18 @@ def test_empty_both_is_vacuously_one():
         produced_dag={"nodes": [], "edges": []},
         gt_dag={"nodes": [], "edges": []},
     ) == 1.0
+
+
+def test_singleton_gt_nodes_without_edges_are_excluded_from_tau_denominator():
+    """Singleton planted disclosures are not attribution chains.
+
+    In preserved-inference scenarios the runtime should not emit an
+    attribution chain unless a policy decision rewrites or blocks an
+    action. GT node-only disclosures therefore remain vacuous when the
+    produced DAG is empty.
+    """
+
+    gt = _dag(nodes=[("source-0", "L0")], edges=[])
+    produced = _dag(nodes=[], edges=[])
+
+    assert attribution_dag.score(produced_dag=produced, gt_dag=gt) == 1.0

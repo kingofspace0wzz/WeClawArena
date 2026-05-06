@@ -22,6 +22,7 @@ from aiohttp import web
 
 from clawsocialarena.gateway import routes
 from clawsocialarena.gateway.session import Session
+from clawsocialarena.scenario.models import GTBundle
 from clawsocialarena.types import AuditCondition
 
 
@@ -57,10 +58,20 @@ def _build_default_session(args: argparse.Namespace) -> Session:
                 f"--db-path is required when --condition={condition.value}"
             )
         db_path = args.db_path
+    gt_path = getattr(args, "gt_path", None)
+    gt: GTBundle | None = None
+    if gt_path:
+        gt = GTBundle.model_validate_json(Path(gt_path).read_text(encoding="utf-8"))
+    resource_root = getattr(args, "resource_root", None)
     return Session.build(
         scenario_id=args.scenario_id,
         condition=condition,
         db_path=Path(db_path),
+        work_dir=getattr(args, "work_dir", None),
+        phase_schedule=gt.phase_schedule if gt is not None else None,
+        governance_manifest=gt.governance_manifest if gt is not None else None,
+        resource_manifest=gt.resource_manifest if gt is not None else None,
+        resource_root=resource_root,
     )
 
 
@@ -81,9 +92,24 @@ def main(argv: list[str] | None = None) -> None:
         help="Primary ActionLog DB path; required under passive/enforce.",
     )
     parser.add_argument(
+        "--work-dir",
+        default=None,
+        help="Directory for gateway run artifacts such as cassette.jsonl.",
+    )
+    parser.add_argument(
         "--scenario-id",
         default="gateway-default",
         help="Scenario id to assign to the default Session.",
+    )
+    parser.add_argument(
+        "--gt-path",
+        default=None,
+        help="Optional scenario.gt.json path used to load phase/governance/resource GT.",
+    )
+    parser.add_argument(
+        "--resource-root",
+        default=None,
+        help="Optional scenario resources directory mounted into the gateway container.",
     )
     args = parser.parse_args(argv)
 

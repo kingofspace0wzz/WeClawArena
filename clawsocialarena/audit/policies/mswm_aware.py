@@ -1,18 +1,20 @@
 """MSWM-aware policy hook (Phase C / Task C6).
 
 Evaluates a configured list of joint-decidability invariants against the
-live MSWM state attached to the Session. For each invariant that the MSWM
-reports as ``violated`` given the current action, the hook returns a
-``PolicyDecision`` with verdict ``block`` (or ``rewrite`` when the invariant
-explicitly asks for redaction).
+tentative MSWM state supplied by the policy context. For each invariant
+that the MSWM reports as ``violated`` given the current action, the hook
+returns a ``PolicyDecision`` with verdict ``block`` (or ``rewrite`` when
+the invariant explicitly asks for redaction).
 
 The hook belongs to the ``message`` kind — spec §2.6 says MSWM updates fire
 on outbound disclosures and the MSWM-aware containment vignette (§3.1 #1)
 catches the inferential-leakage case at send time. Extending the hook to
 tool-kind or memory-kind buckets is future work.
 
-Context assumption: ``context["mswm"]`` must be present — the gateway
-Session passes it in ``_record_action`` as of Phase C / Task C5.
+Context assumption: ``context["mswm_tentative"]`` should contain the MSWM
+state after applying the candidate action. The legacy ``context["mswm"]``
+key is still accepted as an alias for the same post-candidate state for
+compatibility with older callers.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from clawsocialarena.types import ActionRecord
 
 
 class MswmAwareHook:
-    """Policy hook that consults :class:`~clawsocialarena.audit.mswm.MSWM`.
+    """Policy hook that consults tentative MSWM from the evaluation context.
 
     Invariants are plain dicts (the predicate schema documented on
     :meth:`MSWM.joint_decidability`). Each invariant may also carry:
@@ -53,7 +55,9 @@ class MswmAwareHook:
     def evaluate(
         self, *, action: ActionRecord, context: dict
     ) -> PolicyDecision:
-        mswm = context.get("mswm")
+        mswm = context.get("mswm_tentative")
+        if mswm is None:
+            mswm = context.get("mswm")
         if mswm is None:
             # No MSWM in the context — the hook is a no-op. This path keeps
             # the hook safe against mis-plumbing (e.g. a legacy caller

@@ -17,10 +17,10 @@ F1 denominator. Edges whose label is ``policy`` are likewise filtered
 out of the edge-set comparison.
 
 Chains of length >= 2 rule (spec §3.2): a scenario whose GT DAG has no
-edges (singleton actions with no attribution chain) does not enter the
-tau denominator. When ``gt_dag`` is empty AND ``produced_dag`` is empty,
-the score is vacuously 1.0. When ``gt_dag`` is empty but ``produced_dag``
-has any chain edges, the score is 0.0 (spurious chains).
+chain edges (including singleton planted disclosures) does not enter the
+tau denominator. When GT has no chain edges and the produced DAG also has
+no chain edges, the score is vacuously 1.0. When GT has no chain edges but
+the produced DAG has any chain edge, the score is 0.0 (spurious chains).
 
 The returned score is the mean of the edge-set F1 and the node-label F1
 so both topology and labelling contribute equally. Empty GT edge set +
@@ -87,11 +87,10 @@ def _node_label_pairs(dag: dict[str, Any]) -> set[tuple[str, str]]:
 def score(*, produced_dag: dict, gt_dag: dict) -> float:
     """Mean of edge-set F1 and node-label-set F1.
 
-    Both components use the same degenerate-case rules: empty-vs-empty is
-    1.0, empty-vs-nonempty is 0.0. For the node-label set, "empty" is
-    applied AFTER filtering annotation + out-of-taxonomy labels; that
-    keeps DAGs that are pure annotations from rewarding a scorer for
-    "matching nothing".
+    Both components use the same F1 rules after the chain-length gate. For
+    the node-label set, "empty" is applied AFTER filtering annotation +
+    out-of-taxonomy labels; that keeps DAGs that are pure annotations from
+    rewarding a scorer for "matching nothing" when GT has real chain edges.
     """
 
     pred_edges = _edge_triples(produced_dag)
@@ -99,21 +98,16 @@ def score(*, produced_dag: dict, gt_dag: dict) -> float:
     pred_nodes = _node_label_pairs(produced_dag)
     gt_nodes = _node_label_pairs(gt_dag)
 
-    # Chains of length >= 2 rule: when the GT carries no chain edges, the
-    # tau denominator is undefined. Fall back to node-only F1 if the GT
-    # has labelled nodes, otherwise to the edge-only degenerate case.
+    # Chains of length >= 2 rule: when the GT carries no chain edges, tau
+    # is undefined and singleton planted-disclosure nodes are excluded
+    # from the denominator. A produced chain is still spurious.
+    if not gt_edges:
+        return 1.0 if not pred_edges else 0.0
+
     edge_f1 = _f1(pred_edges, gt_edges)
     node_f1 = _f1(pred_nodes, gt_nodes)
 
-    # When both dimensions are degenerate on the GT side (no chain edges
-    # AND no labelled nodes), return the edge-set verdict directly: if
-    # the produced DAG also has nothing, this is 1.0; any prediction is
-    # 0.0. Preserves the v1 attribution-scorer contract for scenarios
-    # without attribution chains.
-    if not gt_edges and not gt_nodes:
-        return edge_f1
-
-    # When only the GT node set is empty AND the produced side is also
+    # When the GT node set is empty AND the produced side is also
     # empty, skip the node component entirely to preserve legacy scoring
     # behavior on node-less DAGs. The edge-set F1 is load-bearing; the
     # node-set F1 is strictly additive when labels are present on either

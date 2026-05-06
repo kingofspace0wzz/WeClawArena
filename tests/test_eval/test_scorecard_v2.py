@@ -18,6 +18,7 @@ def _minimal_saf() -> SAFDimsPayload:
             "attribution": 1.0,
             "evidence_integrity": 1.0,
             "phase_scoped_policy": 1.0,
+            "identity_governance": 1.0,
         },
         passes={
             "recoverability": True,
@@ -25,8 +26,10 @@ def _minimal_saf() -> SAFDimsPayload:
             "attribution": True,
             "evidence_integrity": True,
             "phase_scoped_policy": True,
+            "identity_governance": True,
         },
         overall=1.0,
+        diagnostics={"identity_governance": {"declared_count": 0}},
     )
 
 
@@ -57,6 +60,11 @@ def test_v2_scorecard_json_roundtrip():
     original = RunScorecard(
         scenario_id="scen-1",
         saf=_minimal_saf(),
+        governance={
+            "governance_violation_rate": 0.25,
+            "component_rates": {"approval_bypass": 0.5},
+        },
+        attack_plan={"axis": "governance", "attack_type": "approval_bypass"},
         gateway_invariant_passed=False,
         cassette_hash="abc123",
         live_or_replay="replay",
@@ -65,6 +73,13 @@ def test_v2_scorecard_json_roundtrip():
     blob = original.model_dump_json()
     rebuilt = RunScorecard.model_validate_json(blob)
     assert rebuilt == original
+    assert rebuilt.saf.diagnostics["identity_governance"]["declared_count"] == 0
+    assert rebuilt.governance.governance_violation_rate == 0.25
+    assert rebuilt.governance.component_rates["approval_bypass"] == 0.5
+    assert rebuilt.attack_plan == {
+        "axis": "governance",
+        "attack_type": "approval_bypass",
+    }
 
 
 def test_v1_dict_is_readable_via_from_v1_dict():
@@ -104,6 +119,11 @@ def test_v1_dict_is_readable_via_from_v1_dict():
     assert sc.scenario_id == "scen-old"
     assert sc.saf.overall == 0.87
     assert sc.evaluator_version == "eval_v1.0.0"
+    assert sc.saf.diagnostics["schema"]["legacy"] is True
+    assert sc.saf.diagnostics["schema"]["dimension_count"] == 5
+    assert sc.saf.diagnostics["schema"]["missing_dimensions"] == [
+        "identity_governance"
+    ]
 
 
 def test_from_v1_dict_preserves_existing_v2_fields_when_present():
@@ -119,6 +139,7 @@ def test_from_v1_dict_preserves_existing_v2_fields_when_present():
                 "attribution": 1.0,
                 "evidence_integrity": 1.0,
                 "phase_scoped_policy": 1.0,
+                "identity_governance": 1.0,
             },
             "passes": {
                 "recoverability": True,
@@ -126,8 +147,10 @@ def test_from_v1_dict_preserves_existing_v2_fields_when_present():
                 "attribution": True,
                 "evidence_integrity": True,
                 "phase_scoped_policy": True,
+                "identity_governance": True,
             },
             "overall": 1.0,
+            "diagnostics": {"identity_governance": {"declared_count": 0}},
         },
         "gateway_invariant_passed": False,
         "cassette_hash": "feedface",
@@ -139,6 +162,7 @@ def test_from_v1_dict_preserves_existing_v2_fields_when_present():
     assert sc.cassette_hash == "feedface"
     assert sc.live_or_replay == "replay"
     assert sc.episode_graph_id == "graph-2"
+    assert sc.saf.diagnostics["identity_governance"]["declared_count"] == 0
 
 
 def test_evaluator_version_v2_is_default():
@@ -217,3 +241,36 @@ def test_v1_dict_without_new_fields_produces_valid_json():
     v2_parsed = json.loads(v2_text)
     assert v2_parsed["gateway_invariant_passed"] is True
     assert v2_parsed["live_or_replay"] == "live"
+    assert v2_parsed["saf"]["diagnostics"]["schema"]["legacy"] is False
+
+
+def test_legacy_five_dimension_payload_loads_and_is_marked():
+    legacy = RunScorecard.from_v1_dict(
+        {
+            "scenario_id": "scen-legacy",
+            "saf": {
+                "dims": {
+                    "recoverability": 1.0,
+                    "policy_checkability": 1.0,
+                    "attribution": 1.0,
+                    "evidence_integrity": 1.0,
+                    "phase_scoped_policy": 1.0,
+                },
+                "passes": {
+                    "recoverability": True,
+                    "policy_checkability": True,
+                    "attribution": True,
+                    "evidence_integrity": True,
+                    "phase_scoped_policy": True,
+                },
+                "overall": 1.0,
+            },
+        }
+    )
+
+    assert "identity_governance" not in legacy.saf.dims
+    assert legacy.saf.diagnostics["schema"] == {
+        "dimension_count": 5,
+        "legacy": True,
+        "missing_dimensions": ["identity_governance"],
+    }

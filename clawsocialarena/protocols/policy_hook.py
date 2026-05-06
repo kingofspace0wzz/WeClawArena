@@ -24,6 +24,18 @@ class PolicyDecision(BaseModel):
 class PolicyHook(Protocol):
     """Hook that evaluates an ActionRecord and returns a PolicyDecision.
 
+    ``action`` is the candidate action record under policy review. It may
+    not have been committed to the durable audit log yet.
+
+    ``context`` carries hook-specific shared state. Common keys are:
+
+    - ``mswm_tentative``: MSWM state after applying the candidate action.
+    - ``mswm_committed``: MSWM state before applying the candidate action.
+    - ``mswm``: legacy compatibility alias for the tentative
+      post-candidate MSWM state supplied by older callers.
+    - ``candidate_action_id``: identifier of the candidate action being
+      evaluated, when available.
+
     Hooks may additionally declare a ``hook_kind`` class attribute to scope
     which action types they fire on. The AuditedMessageBus convention:
 

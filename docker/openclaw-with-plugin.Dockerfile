@@ -6,7 +6,7 @@
 # `gateway_plugin/` into an npm tarball via `pnpm run build` + `npm pack`.
 # Stage 2 (`runtime`) is the image the arena actually runs: it installs
 # the OpenClaw CLI from the public npm registry and registers the
-# preloaded plugin tarball with `openclaw plugin install`.
+# preloaded plugin tarball with `openclaw plugins install`.
 #
 # The image is built with the worktree root as the build context so the
 # `gateway_plugin/` directory is reachable without extra copies. See
@@ -51,20 +51,28 @@ FROM node:24-alpine AS runtime
 ARG OPENCLAW_VERSION=latest
 RUN npm install -g "openclaw@${OPENCLAW_VERSION}"
 
+# OpenClaw's plugin installer and the arena entrypoint both expect
+# Python on PATH.
+RUN apk add --no-cache python3 py3-pip \
+ && ln -sf /usr/bin/python3 /usr/local/bin/python
+
+# OpenClaw stores per-user state under `<home>/.openclaw`; pinning the
+# home root gives A14 a stable mount point for cassettes and arena config.
+# This must be set before plugin installation so build-time and runtime
+# plugin registries are the same registry.
+ENV HOME=/home/node
+ENV OPENCLAW_HOME=/home/node
+
 # Bring the packed plugin across. The wildcard tolerates the version
 # suffix that `npm pack` adds to the filename.
 COPY --from=plugin-builder /out/*.tgz /tmp/clawsocial-plugin.tgz
 
-# Register the plugin with the OpenClaw CLI. `openclaw plugin install`
+# Register the plugin with the OpenClaw CLI. `openclaw plugins install`
 # accepts a local `.tgz` path; we remove the tarball afterward so the
 # final image does not ship two copies of the plugin bytes.
-RUN openclaw plugin install /tmp/clawsocial-plugin.tgz \
+RUN openclaw plugins install /tmp/clawsocial-plugin.tgz \
  && rm /tmp/clawsocial-plugin.tgz
 
-# OpenClaw stores its per-user state under `$HOME/.openclaw` by default;
-# pinning the path gives A14 a stable mount point for cassettes and
-# arena config.
-ENV OPENCLAW_HOME=/home/node/.openclaw
 WORKDIR /workspace
 
 # The scenario bundle compose file invokes this script as the agent
@@ -73,10 +81,6 @@ WORKDIR /workspace
 # Shipping the script in the image keeps the bundle small -- compose
 # only has to reference the in-image path.
 #
-# Python is needed for the `/healthz` poll in the entrypoint. The rest
-# of the arena wiring already assumes Python is on PATH.
-RUN apk add --no-cache python3 py3-pip \
- && ln -sf /usr/bin/python3 /usr/local/bin/python
 COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
 RUN chmod +x /usr/local/bin/agent-entrypoint.sh
 

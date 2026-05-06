@@ -19,8 +19,33 @@ services:
     environment:
       - CLAWSOCIAL_GATEWAY_PORT=8080
       - CLAWSOCIAL_SCENARIO_ID={{ scenario_id }}
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scenario-id
+      - {{ scenario_id }}
+      - --condition
+      - passive
+      - --db-path
+      - /workspace/run/action_log.db
+      - --work-dir
+      - /workspace/run
+      - --gt-path
+      - /workspace/scenario.gt.json
+{% if include_resources %}
+      - --resource-root
+      - /workspace/resources
+{% endif %}
     ports:
       - "8080:8080"
+    volumes:
+      - ./run:/workspace/run:rw
+      - ./scenario.gt.json:/workspace/scenario.gt.json:ro
+{% if include_resources %}
+      - ./resources:/workspace/resources:rw
+{% endif %}
     networks: [clawnet]
     healthcheck:
       test:

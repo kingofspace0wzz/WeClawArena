@@ -28,12 +28,18 @@ class CategoryCode(StrEnum):
 
 
 class TaskFamily(StrEnum):
+    # v2 task families (spec §4.3). These are the four verifiable families
+    # covered by the benchmark plus the two hard-stratum soft-halo families.
     SCHEDULING = "scheduling"
+    CONSENSUS = "consensus"
+    COALITION = "coalition"
+    INFERENCE = "inference"
+    CODE_REVIEW = "code_review"
+    DOC_EDITING = "doc_editing"
+    # v1 legacy values retained for stored bundles and older planning helpers.
     AGGREGATION = "aggregation"
     TRANSACTION = "transaction"
     DECISION = "decision"
-    CODE_REVIEW = "code_review"
-    DOC_EDITING = "doc_editing"
 
 
 class TemplateShape(BaseModel):
@@ -58,6 +64,11 @@ class TemplateShape(BaseModel):
     # bindings. Default empty so v1 templates keep working.
     mcp_tool_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
     persona_manifest: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    governance_manifest: dict[str, Any] = Field(default_factory=dict)
+    resource_manifest: dict[str, Any] = Field(default_factory=dict)
+    resource_fixtures: dict[str, Any] = Field(default_factory=dict)
+    construction_manifest: dict[str, Any] = Field(default_factory=dict)
+    attack_plan: dict[str, Any] | None = None
     # Task D6: scripted attacker actions threaded into canonical_action_stream
     # by ``gt_assembly``. Each entry is an ActionRecord-shaped dict; the
     # critical payload key for MSWM updates is ``mentioned_items``.

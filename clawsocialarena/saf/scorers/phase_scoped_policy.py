@@ -2,9 +2,9 @@
 
 A policy with phase P is:
 - vacuously satisfied if there are ZERO records in phase P (no violation possible).
-- not decidable if any in-phase record is missing a required field.
-- satisfied if all in-phase records are decidable AND the predicate holds for each.
-- violated if all in-phase records are decidable AND the predicate fails for at least one.
+- not decidable if no in-phase record exposes the required policy surface.
+- satisfied if all applicable in-phase records satisfy the predicate.
+- violated if at least one applicable in-phase record fails the predicate.
 
 Returns a `PhaseScopedPolicyResult` with:
 - `scalar`: |decidable_and_satisfied| / |declared|
@@ -64,19 +64,20 @@ def score(
             }
             satisfied_count += 1
             continue
-        # Decidability: all in-phase records must have every required field.
-        decidable = all(
-            _field_present(r, f) for r in in_phase for f in p.required_fields
-        )
-        if not decidable:
+        applicable = [
+            r
+            for r in in_phase
+            if all(_field_present(r, f) for f in p.required_fields)
+        ]
+        if not applicable:
             per_policy[p.policy_id] = {
                 "decidable": False,
                 "satisfied": None,
                 "vacuous": False,
             }
             continue
-        # Satisfaction: predicate holds for every in-phase record.
-        satisfied = all(p.predicate(r, {}) for r in in_phase)
+        # Satisfaction: predicate holds for every applicable in-phase record.
+        satisfied = all(p.predicate(r, {}) for r in applicable)
         per_policy[p.policy_id] = {
             "decidable": True,
             "satisfied": satisfied,

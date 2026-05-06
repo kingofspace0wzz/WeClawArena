@@ -28,8 +28,10 @@ import json
 from typing import Any
 
 from aiohttp import web
+from pydantic import ValidationError
 
 from clawsocialarena.gateway.session import Session
+from clawsocialarena.types import GovernanceRecord
 
 
 async def healthz(_request: web.Request) -> web.Response:
@@ -109,11 +111,59 @@ def _parse_source_action_ids(body: dict) -> list[str] | web.Response:
     )
 
 
+def _parse_turn_index(body: dict) -> int | None | web.Response:
+    """Return optional non-negative ``turn_index`` or a uniform 400 response."""
+
+    raw: Any = body.get("turn_index")
+    if raw is None:
+        return None
+    if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
+        return raw
+    return web.json_response(
+        {
+            "error": "invalid_field_type",
+            "field": "turn_index",
+            "expected": "non-negative integer",
+        },
+        status=400,
+    )
+
+
+def _parse_governance(body: dict) -> GovernanceRecord | None | web.Response:
+    """Return optional governance context or a uniform 400 response."""
+
+    raw: Any = body.get("governance")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return web.json_response(
+            {
+                "error": "invalid_field_type",
+                "field": "governance",
+                "expected": "object",
+            },
+            status=400,
+        )
+    try:
+        return GovernanceRecord.model_validate(raw)
+    except ValidationError as exc:
+        return web.json_response(
+            {
+                "error": "invalid_field_type",
+                "field": "governance",
+                "expected": "GovernanceRecord",
+                "details": exc.errors(),
+            },
+            status=400,
+        )
+
+
 async def send(request: web.Request) -> web.Response:
     """Enqueue a message for ``recipient_id`` and log an outbound record.
 
     Request JSON: ``{"sender_id": str, "recipient_id": str, "content": str,
-    "source_action_ids": list[str]?}``. Response JSON:
+    "source_action_ids": list[str]?, "mentioned_items": list[str]?,
+    "enqueue": bool?}``. Response JSON:
     ``{"action_id": str | null, "blocked": bool}`` with HTTP 200.
 
     Under BASELINE the ``action_id`` is ``null`` and the message is still
@@ -140,13 +190,33 @@ async def send(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
+    declared_action_id_raw: Any = body.get("declared_action_id")
+    declared_action_id: str | None = None
+    if "declared_action_id" in body:
+        if not isinstance(declared_action_id_raw, str) or not declared_action_id_raw:
+            return web.json_response(
+                {
+                    "error": "invalid_field_type",
+                    "field": "declared_action_id",
+                    "expected": "non-empty string",
+                },
+                status=400,
+            )
+        declared_action_id = declared_action_id_raw
 
     # Phase C: optional ``mentioned_items`` list drives MSWM disclosure
     # updates. Accept absent / null / array-of-string; anything else is a
-    # 400. An empty list is allowed but does nothing MSWM-wise.
+    # 400. Preserve an explicitly empty list as audited "checked no item"
+    # evidence; absence remains None and omits the payload key.
     raw_mentioned: Any = body.get("mentioned_items")
-    mentioned: list[str] = []
-    if raw_mentioned is not None:
+    mentioned: list[str] | None = None
+    if "mentioned_items" in body and raw_mentioned is not None:
         if not isinstance(raw_mentioned, list) or not all(
             isinstance(x, str) for x in raw_mentioned
         ):
@@ -159,22 +229,43 @@ async def send(request: web.Request) -> web.Response:
                 status=400,
             )
         mentioned = list(raw_mentioned)
+    elif "mentioned_items" in body:
+        mentioned = []
+
+    enqueue_raw = body.get("enqueue", True)
+    if not isinstance(enqueue_raw, bool):
+        return web.json_response(
+            {"error": "invalid_field_type", "field": "enqueue", "expected": "bool"},
+            status=400,
+        )
 
     session = _get_session(request)
-    outcome = await session.record_outbound(
-        sender_id=sender_id,
-        recipient_id=recipient_id,
-        content=content,
-        source_action_ids=sources,
-        mentioned_items=mentioned,
-    )
+    if enqueue_raw:
+        outcome = await session.send_outbound(
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            content=content,
+            source_action_ids=sources,
+            mentioned_items=mentioned,
+            declared_action_id=declared_action_id,
+            governance=governance,
+            turn_index=turn_index,
+        )
+    else:
+        outcome = await session.record_outbound(
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            content=content,
+            source_action_ids=sources,
+            mentioned_items=mentioned,
+            declared_action_id=declared_action_id,
+            governance=governance,
+            turn_index=turn_index,
+        )
     if outcome.blocked:
         # ENFORCE block: no inbox enqueue, caller gets a structured hint.
         return web.json_response({"action_id": None, "blocked": True})
 
-    delivered = outcome.rewritten_content if outcome.rewritten_content is not None else content
-    inbox = session.ensure_inbox(recipient_id)
-    await inbox.put((sender_id, delivered))
     return web.json_response({"action_id": outcome.action_id, "blocked": False})
 
 
@@ -235,6 +326,12 @@ async def tool_call(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
 
     session = _get_session(request)
     outcome = await session.record_tool_call(
@@ -242,6 +339,8 @@ async def tool_call(request: web.Request) -> web.Response:
         tool_name=body["tool_name"],
         arguments=arguments,
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
     return web.json_response(
         {"action_id": outcome.action_id, "blocked": outcome.blocked}
@@ -271,6 +370,12 @@ async def tool_observation_return(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
 
     session = _get_session(request)
     outcome = await session.record_tool_observation(
@@ -279,8 +384,12 @@ async def tool_observation_return(request: web.Request) -> web.Response:
         tool_name=body["tool_name"],
         observation=body["observation"],
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
-    return web.json_response({"action_id": outcome.action_id})
+    return web.json_response(
+        {"action_id": outcome.action_id, "blocked": outcome.blocked}
+    )
 
 
 async def memory_write(request: web.Request) -> web.Response:
@@ -313,6 +422,12 @@ async def memory_write(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
 
     session = _get_session(request)
     outcome = await session.record_memory_write(
@@ -320,6 +435,8 @@ async def memory_write(request: web.Request) -> web.Response:
         content=body["content"],
         tags=tags,
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
     return web.json_response(
         {"action_id": outcome.action_id, "blocked": outcome.blocked}
@@ -366,6 +483,12 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
 
     agent_id: str = body["agent_id"]
     session = _get_session(request)
@@ -375,6 +498,8 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
         tool_name=tool_name,
         arguments=arguments,
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
     if tc_outcome.blocked:
         return web.json_response(
@@ -400,7 +525,18 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
         tool_name=tool_name,
         observation=json.dumps(observation, sort_keys=True, ensure_ascii=False),
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
+    if obs_outcome.blocked:
+        return web.json_response(
+            {
+                "tool_call_action_id": tc_outcome.action_id,
+                "tool_observation_action_id": None,
+                "observation": None,
+                "blocked": True,
+            }
+        )
 
     return web.json_response(
         {
@@ -453,6 +589,12 @@ async def llm_call(request: web.Request) -> web.Response:
     sources = _parse_source_action_ids(body)
     if isinstance(sources, web.Response):
         return sources
+    governance = _parse_governance(body)
+    if isinstance(governance, web.Response):
+        return governance
+    turn_index = _parse_turn_index(body)
+    if isinstance(turn_index, web.Response):
+        return turn_index
 
     session = _get_session(request)
     outcome = await session.record_llm_call(
@@ -463,5 +605,9 @@ async def llm_call(request: web.Request) -> web.Response:
         latency_ms=body["latency_ms"],
         model=body["model"],
         source_action_ids=sources,
+        governance=governance,
+        turn_index=turn_index,
     )
-    return web.json_response({"action_id": outcome.action_id})
+    return web.json_response(
+        {"action_id": outcome.action_id, "blocked": outcome.blocked}
+    )

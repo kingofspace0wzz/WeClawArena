@@ -59,6 +59,7 @@ def emit_compose_yaml(
     scenario: Scenario,
     *,
     compose_build_root: Path | str | None = None,
+    include_resources: bool = False,
 ) -> str:
     """Render `docker-compose.yml` text for the given scenario.
 
@@ -86,6 +87,7 @@ def emit_compose_yaml(
     return template.render(
         scenario_id=scenario.scenario_id,
         build_context=str(root),
+        include_resources=include_resources,
         agents=[
             {
                 "agent_id": agent.agent_id,

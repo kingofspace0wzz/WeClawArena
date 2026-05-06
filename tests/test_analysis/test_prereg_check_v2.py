@@ -35,9 +35,10 @@ def test_evaluate_hypotheses_covers_h1_through_h5(tmp_path: Path):
 def test_h1_passes_on_fixture(tmp_path: Path):
     _, df = _prep(tmp_path)
     [h1] = [r for r in evaluate_hypotheses(df) if r.hypothesis == "H1"]
-    # Fixture stamps attribution (τ) = 0.85 and phase_scoped_policy (φ) = 0.87
-    # as the two weakest dims under passive.
+    # Fixture stamps attribution (τ), phase_scoped_policy (φ), and
+    # identity_governance (γ) as the three weakest dims under passive.
     assert h1.verdict == "supported", h1.summary
+    assert "identity_governance" in h1.statistics
 
 
 def test_h2_passes_on_fixture(tmp_path: Path):
@@ -46,6 +47,28 @@ def test_h2_passes_on_fixture(tmp_path: Path):
     assert h2.verdict == "supported", h2.summary
     assert h2.statistics["privacy_pvalue"] < 0.05
     assert h2.statistics["security_pvalue"] < 0.05
+    assert h2.statistics["governance_pvalue"] < 0.05
+    assert h2.statistics["governance_enforce_mean"] < h2.statistics[
+        "governance_baseline_mean"
+    ]
+    assert h2.statistics["governance_enforce_mean"] < h2.statistics[
+        "governance_passive_mean"
+    ]
+    assert h2.statistics["governance_passive_mean"] < h2.statistics[
+        "governance_baseline_mean"
+    ]
+
+
+def test_h2_rejects_when_passive_is_not_between_baseline_and_enforce(
+    tmp_path: Path,
+):
+    _, df = _prep(tmp_path)
+    mask = (df["attack_axis"] == "governance") & (df["condition"] == "passive")
+    df.loc[mask, "governance_violation_rate"] = 0.99
+
+    [h2] = [r for r in evaluate_hypotheses(df) if r.hypothesis == "H2"]
+
+    assert h2.verdict == "rejected", h2.summary
 
 
 def test_h3_passes_on_fixture(tmp_path: Path):
@@ -63,6 +86,8 @@ def test_h4_passes_on_fixture(tmp_path: Path):
     # Vanilla-AA = 0.95 > SAF overall = 0.90 on every passive row.
     assert h4.verdict == "supported", h4.summary
     assert h4.statistics["frac_vaa_over_saf"] == 1.0
+    assert h4.statistics["inference_chain_failure_rate"] > 0.0
+    assert h4.statistics["identity_governance_failure_rate"] > 0.0
 
 
 def test_h5_passes_on_fixture(tmp_path: Path):

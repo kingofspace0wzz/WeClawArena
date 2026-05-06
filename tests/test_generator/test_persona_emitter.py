@@ -56,9 +56,19 @@ def test_emit_persona_system_md_contains_agent_id_and_prompt():
     scenario = _scenario()
     files = emit_persona_files(scenario)
     alice_md = files["alice.system.md"]
-    # The Markdown body surfaces the agent id + the persona prompt body.
+    # The Markdown heading carries the runtime agent id for tooling.
     assert "alice" in alice_md
     assert "Alice's personal agent" in alice_md
+
+
+def test_emit_persona_system_md_omits_internal_ids_from_agent_facing_text():
+    scenario = _scenario()
+    files = emit_persona_files(scenario)
+    alice_md = files["alice.system.md"]
+
+    assert "Scenario agent id" not in alice_md
+    assert "Backing user id" not in alice_md
+    assert "user-a" not in alice_md
 
 
 def test_emit_persona_tools_json_is_valid_json_array():

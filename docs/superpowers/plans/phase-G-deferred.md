@@ -1,5 +1,20 @@
 # Phase G deferred tasks (G5-G8)
 
+> **Status note as of 2026-05-06:** This is a historical Phase G resume note.
+> It still describes the run-grid infrastructure, but branch, Docker, and
+> batch status must be checked against `docs/project_status.md` before use.
+
+> **Update as of 2026-05-05:** The earlier 150-scenario / 4,440-run budget
+> and the later 550-variant scaffold target are obsolete for release
+> planning. The 550-variant tree is a pre-calibration scaffold. The active
+> next target is the 680-variant balanced difficulty pilot: 630 main matched
+> variants, 25 hard-verification variants, 20 episode-graph variants, and 5
+> audit challenge cases. If the pilot validates the tier rubric, the
+> recommended release grid is 1100 total variants with 1050 main matched
+> variants. Full-grid run counts and budget should be recomputed from the
+> selected target and observed smoke-run costs; see
+> `docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md` §5.5.
+
 Phase G lands the infrastructure needed to run the ClawSocialArena v2
 compute budget: grid config schema, batch runner with live and replay
 modes, cassette enrichment, and cost tracking. The actual LLM-API runs
@@ -58,8 +73,8 @@ committing to the full budget.
 4. Run: ``python scripts/run_grid.py --config configs/pilot.yaml --out
    results/v1.0.0 --no-dry-run``.
 5. After completion, open ``results/v1.0.0/cost.csv`` and compute the
-   mean cost per row. Multiply by the full-budget row count (~4,440) to
-   extrapolate.
+   mean cost per row. Multiply by the selected pilot or release run count
+   to extrapolate.
 6. Write ``docs/pilot-report-2026-04.md`` with: number of runs,
    total tokens, total spend, extrapolated full-budget spend, wall-clock
    per run, noteworthy failures, and go/no-go on the full budget.
@@ -67,11 +82,13 @@ committing to the full budget.
 
 ### G6 — Full live main table
 
-Goal: 600 live runs for the headline main table.
+Goal: live runs for the headline main table, using the current benchmark
+target rather than the obsolete 500-main-variant scaffold.
 
 1. Confirm the G5 pilot is within budget and no blocking failures.
-2. Materialize the full main-table grid (150 scenarios × 3 conditions ×
-   4 models, split 50 live + 100 replay per spec §2.11).
+2. Materialize the full main-table grid for the selected target. The next
+   pilot has 630 matched variants; the release grid has 1050 matched
+   variants if the pilot passes calibration.
 3. Run: ``python scripts/run_grid.py --config configs/main_table.yaml
    --out results/v1.0.0 --parallel 4 --no-dry-run``. The ``--parallel``
    knob is currently a placeholder; wire it to a ``concurrent.futures``
@@ -86,7 +103,8 @@ Goal: 600 live runs for the headline main table.
 
 ### G7 — Remaining buckets
 
-Goal: replay + ablations + seed-variance + episode-graph (~3,840 runs).
+Goal: replay + ablations + seed-variance + episode-graph + hard / audit
+challenge buckets according to the selected calibrated run budget.
 
 1. Materialize each bucket's config against the appropriate cassettes:
    ``configs/ablations.yaml`` already carries the template.
@@ -98,7 +116,7 @@ Goal: replay + ablations + seed-variance + episode-graph (~3,840 runs).
 
 ### G8 — Tag ``phase-G-complete``
 
-1. Confirm all ~4,440 scorecards exist under ``results/v1.0.0/``.
+1. Confirm all configured scorecards exist under ``results/v1.0.0/``.
 2. Confirm no scorecard has ``chain_integrity_primary == False``:
    ``python scripts/audit_scorecards.py --out results/v1.0.0`` (script
    to write as part of G8).

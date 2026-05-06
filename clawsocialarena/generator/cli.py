@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -36,10 +37,16 @@ from clawsocialarena.generator.gt_assembly import (
     assemble_gt_bundle,
     assemble_scenario_json,
 )
+from clawsocialarena.generator.governance_emitter import (
+    emit_governance_manifest_files,
+)
 from clawsocialarena.generator.instantiation import instantiate
 from clawsocialarena.generator.mcp_emitter import emit_mcp_configs
 from clawsocialarena.generator.persona_emitter import emit_persona_files
 from clawsocialarena.generator.registry import get_template, list_registered
+from clawsocialarena.generator.resource_emitter import write_resource_bundle
+from clawsocialarena.generator.task_patterns import pattern_for
+from clawsocialarena.generator.task_success_specs import task_success_metadata
 from clawsocialarena.generator.template import CategoryCode, TaskFamily
 from clawsocialarena.scenario.models import Scenario
 
@@ -211,7 +218,13 @@ def _write_bundle(
     consumer sees the adjusted prompt uniformly.
     """
 
+    _clean_generated_bundle_entries(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if not shape.construction_manifest:
+        shape = shape.model_copy(
+            update={"construction_manifest": _default_construction_manifest(shape)}
+        )
 
     scenario_dict = assemble_scenario_json(shape)
     gt_dict = assemble_gt_bundle(shape)
@@ -236,7 +249,11 @@ def _write_bundle(
     # docker-compose.yml -- absolute build context so the emitted compose
     # resolves identically no matter how deep the bundle sits on disk.
     (out_dir / "docker-compose.yml").write_text(
-        emit_compose_yaml(scenario, compose_build_root=_REPO_ROOT)
+        emit_compose_yaml(
+            scenario,
+            compose_build_root=_REPO_ROOT,
+            include_resources=bool(gt_dict.get("resource_manifest")),
+        )
     )
 
     # personas/
@@ -268,6 +285,103 @@ def _write_bundle(
         gt_dict.get("mcp_tool_manifest", {})
     ).items():
         (mcp_dir / filename).write_text(contents)
+
+    # governance/
+    governance_files = emit_governance_manifest_files(
+        gt_dict.get("governance_manifest")
+    )
+    if governance_files:
+        governance_dir = out_dir / "governance"
+        governance_dir.mkdir(parents=True, exist_ok=True)
+        for filename, contents in governance_files.items():
+            (governance_dir / filename).write_text(contents)
+
+    # resources/
+    write_resource_bundle(
+        out_dir / "resources",
+        gt_dict.get("resource_manifest"),
+        getattr(shape, "resource_fixtures", {}),
+    )
+
+
+def _clean_generated_bundle_entries(out_dir: Path) -> None:
+    """Remove stale generated files before rewriting a bundle in place."""
+
+    for name in (
+        "scenario.json",
+        "scenario.gt.json",
+        "docker-compose.yml",
+        "personas",
+        "mcp",
+        "governance",
+        "resources",
+    ):
+        path = out_dir / name
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+
+
+def _default_construction_manifest(shape) -> dict:
+    manifest = {
+        "construction_mode": "template_world_pack",
+        "world_id": f"template://{shape.category.value}/{shape.task_family.value}",
+        "world_schema_version": "clawsocialarena-template-v0",
+        "profile_sources": _profile_sources(shape),
+        "resource_sources": [
+            {
+                "resource_id": resource_id,
+                "resource_type": str(resource.get("type") or "unknown"),
+                "source_ref": f"template://{shape.scenario_id}/{resource_id}",
+                "materialized_path": resource.get("path"),
+            }
+            for resource_id, resource in shape.resource_manifest.get(
+                "resources",
+                {},
+            ).items()
+        ],
+        "source_pattern": pattern_for(
+            family=shape.task_family.value,
+            tier="realistic",
+        ),
+        "naturalization": {"method": "deterministic_template"},
+        "realism_status": "structural_draft",
+    }
+    manifest.update(
+        task_success_metadata(
+            family=shape.task_family.value,
+            terminal_predicate=dict(shape.terminal_predicate),
+            designed_difficulty_tier="realistic",
+            expected_task_failure_modes=[],
+            agents=[dict(agent) for agent in shape.agents],
+            initial_state=dict(shape.initial_state),
+            resource_manifest=dict(shape.resource_manifest),
+        )
+    )
+    return manifest
+
+
+def _profile_sources(shape) -> list[dict]:
+    sources = []
+    persona_manifest = shape.persona_manifest or {}
+    for agent in shape.agents:
+        agent_id = str(agent.get("agent_id"))
+        user_id = str(agent.get("user_id") or agent_id)
+        profile = persona_manifest.get(agent_id, {})
+        sources.append(
+            {
+                "user_id": user_id,
+                "agent_id": agent_id,
+                "dataset": "AgentSocialBench",
+                "dataset_version": "template_fixture",
+                "profile_ref": str(
+                    profile.get("profile_ref") or f"asb://profiles/{user_id}"
+                ),
+                "profile_hash": "sha256:" + ("0" * 64),
+            }
+        )
+    return sources
 
 
 if __name__ == "__main__":

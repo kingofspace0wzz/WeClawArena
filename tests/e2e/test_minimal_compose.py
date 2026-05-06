@@ -13,14 +13,13 @@ the in-process gateway, a successful ``/send`` enqueues the payload into
 action log; the ``/recv`` assertion is the closest user-facing probe that
 does not require reaching into container-internal state.
 
-A note on the OpenClaw CLI surface: the invocation below uses a
-placeholder ``openclaw message send --to ... --message ...`` command. The
-real CLI verb landing alongside A10 is not yet pinned down. Phase G will
-substitute the concrete OpenClaw CLI shape (``openclaw agent --message``
-is the current fallback in the OpenClaw README) once the plugin install
-chain and CLI are both exercised for real. Since Docker is unavailable on
-the authoring host, this scaffold cannot be run-verified; it is shipped
-structurally correct and guarded by the Docker skip so CI stays green.
+The OpenClaw CLI currently installs and loads external channel plugins,
+but ``openclaw message send`` still validates channels against a narrower
+delivery allowlist. The smoke therefore imports the installed
+ClawSocialArena plugin inside the OpenClaw image and calls its outbound
+adapter directly. This keeps the E2E focused on the arena-owned contract:
+the packaged plugin can route an outbound message through the audit
+gateway from inside the agent container.
 """
 from __future__ import annotations
 
@@ -56,21 +55,37 @@ def test_minimal_compose_one_outbound_logged() -> None:
     assert template.exists(), f"minimal compose template missing at {template}"
 
     with ComposeRunner(template) as handle:
-        # Have alice send a message to bob via the gateway plugin channel.
-        # The exact OpenClaw invocation depends on the CLI surface; this
-        # will be swapped for a real verb in Phase G once A10's plugin
-        # install chain is exercised end-to-end. ``exec -T`` disables the
-        # pseudo-TTY so the command is usable from a non-interactive
-        # pytest run.
+        # Have alice send a message to bob via the packaged gateway
+        # plugin. ``exec -T`` disables the pseudo-TTY so the command is
+        # usable from a non-interactive pytest run.
         subprocess.run(
             [
                 "docker", "compose",
                 "-f", str(template),
                 "-p", handle.project_name,
                 "exec", "-T", "alice",
-                "openclaw", "message", "send",
-                "--to", "bob",
-                "--message", "hello bob",
+                "node", "--input-type=module", "-e",
+                """
+const { plugin } = await import('/home/node/.openclaw/extensions/clawsocial/dist/index.js');
+await plugin.start({
+  agentId: 'alice',
+  accountId: 'alice',
+  baseUrl: process.env.CLAWSOCIAL_GATEWAY_URL,
+  autoStartPolling: false,
+});
+try {
+  const result = await plugin.outbound.sendText({
+    accountId: 'alice',
+    to: 'bob',
+    text: 'hello bob',
+  });
+  if (result.channel !== 'clawsocial') {
+    throw new Error(`unexpected channel ${result.channel}`);
+  }
+} finally {
+  await plugin.stop('alice');
+}
+""",
             ],
             check=True,
         )

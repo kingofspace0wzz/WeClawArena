@@ -3,6 +3,7 @@ from pydantic import ValidationError
 from clawsocialarena.types import (
     ActionRecord,
     ActionType,
+    GovernanceRecord,
     IntegrityLevel,
     AuditCondition,
     ExecutionPhase,
@@ -67,4 +68,42 @@ def test_action_record_requires_signature_at_high_integrity():
             payload={"to": "agent-b", "content": "hello"},
             integrity_level=IntegrityLevel.CROSS_AGENT_SIGNED,
             signature=None,
+        )
+
+
+def test_action_record_governance_round_trips_through_json():
+    rec = ActionRecord(
+        action_id="abc",
+        prev_hash="0" * 64,
+        agent_id="agent-a",
+        action_type=ActionType.OUTBOUND_MESSAGE,
+        timestamp="2026-04-15T00:00:00Z",
+        execution_phase=ExecutionPhase.APPROVAL,
+        social_phase=SocialPhase.NEGOTIATION,
+        payload={"to": "agent-b", "content": "please approve"},
+        integrity_level=IntegrityLevel.HASH_CHAINED,
+        governance=GovernanceRecord(
+            owner_id="owner-alice",
+            active_identity_id="identity-alice-delegate",
+            authorization_scope_id="scope-calendar-write",
+            approval_mandate_id="mandate-owner-approval",
+            escalation_state="pending_owner_review",
+        ),
+    )
+
+    rebuilt = ActionRecord.model_validate_json(rec.model_dump_json())
+
+    assert rebuilt == rec
+    assert rebuilt.governance is not None
+    assert rebuilt.governance.owner_id == "owner-alice"
+    assert rebuilt.governance.escalation_state == "pending_owner_review"
+
+
+def test_action_record_governance_requires_all_fields():
+    with pytest.raises(ValidationError):
+        GovernanceRecord(
+            owner_id="owner-alice",
+            active_identity_id="identity-alice-delegate",
+            authorization_scope_id="scope-calendar-write",
+            escalation_state="pending_owner_review",
         )

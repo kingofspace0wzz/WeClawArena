@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
       "aiohttp>=3.9" \
-      "pydantic>=2.6" \
+      "pydantic>=2.12" \
       "numpy>=1.26" \
       "networkx>=3.2" \
       "pandas>=2.2" \

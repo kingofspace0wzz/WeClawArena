@@ -258,4 +258,5 @@ def test_full_saf_scorer_also_works_on_fixture(tmp_path: Path):
         "attribution",
         "evidence_integrity",
         "phase_scoped_policy",
+        "identity_governance",
     }

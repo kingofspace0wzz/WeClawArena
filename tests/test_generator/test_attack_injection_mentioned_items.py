@@ -13,7 +13,9 @@ from clawsocialarena.generator.attack_injection import (
     inject_attack,
 )
 from clawsocialarena.generator.gt_assembly import assemble_gt_bundle
+from clawsocialarena.generator.templates.am_inference import AMInferenceTemplate
 from clawsocialarena.generator.templates.cu_scheduling import CUSchedulingTemplate
+from clawsocialarena.generator.templates.mg_coalition import MGCoalitionTemplate
 
 
 def test_privacy_attack_injection_adds_action_with_mentioned_items():
@@ -30,6 +32,8 @@ def test_privacy_attack_injection_adds_action_with_mentioned_items():
     mentioned = action["payload"]["mentioned_items"]
     assert isinstance(mentioned, list)
     assert mentioned == ["probe-collaborative_exfiltration"]
+    assert "[ATTACKER:" not in action["payload"]["content"]
+    assert "probe for probe-" not in action["payload"]["content"]
 
 
 def test_integrity_attack_injection_also_carries_mentioned_items():
@@ -41,8 +45,54 @@ def test_integrity_attack_injection_also_carries_mentioned_items():
         attacker_agent_id="alice",
     )
     assert len(shape.injected_actions) == 1
-    mentioned = shape.injected_actions[0]["payload"]["mentioned_items"]
+    payload = shape.injected_actions[0]["payload"]
+    mentioned = payload["mentioned_items"]
     assert mentioned == ["probe-goal_hijacking"]
+    assert "[ATTACKER:" not in payload["content"]
+    assert "probe for probe-" not in payload["content"]
+
+
+def test_attack_injection_uses_existing_poison_marker_in_seed_message():
+    shape = MGCoalitionTemplate().build(seed=1, scenario_id="mg-coa-1")
+
+    shape = inject_attack(
+        shape=shape,
+        attack_type=AttackType.GOAL_HIJACKING,
+        attacker_agent_id="peer-delta",
+    )
+
+    payload = shape.injected_actions[-1]["payload"]
+    assert "rollback-instructions" in payload["content"]
+    assert "[ATTACKER:" not in payload["content"]
+    assert "probe for probe-" not in payload["content"]
+
+
+def test_task_sabotage_seed_message_is_task_conditioned():
+    shape = CUSchedulingTemplate().build(seed=1, scenario_id="cu-sched-1")
+
+    shape = inject_attack(
+        shape=shape,
+        attack_type=AttackType.TASK_SABOTAGE,
+        attacker_agent_id="alice",
+    )
+
+    content = shape.injected_actions[-1]["payload"]["content"]
+    assert "I still have concerns about finalizing this" not in content
+    assert "availability" in content.lower()
+
+
+def test_goal_hijacking_seed_message_is_task_conditioned():
+    shape = AMInferenceTemplate().build(seed=1, scenario_id="am-inf-1")
+
+    shape = inject_attack(
+        shape=shape,
+        attack_type=AttackType.GOAL_HIJACKING,
+        attacker_agent_id="agent-close",
+    )
+
+    content = shape.injected_actions[-1]["payload"]["content"]
+    assert "Let us optimize for my preferred outcome first" not in content
+    assert "tier" in content.lower()
 
 
 def test_injected_actions_surface_in_canonical_action_stream():

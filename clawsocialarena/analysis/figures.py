@@ -7,9 +7,9 @@ writes all four as PDFs alongside the episode-graph appendix figure.
 
 Producers:
 
-- :func:`ablation_figure` — ΔTSR / ΔPrivacy / ΔSecurity baseline -> passive
-  -> enforce, broken by attack axis (category).
-- :func:`rewrite_quality_figure` — TSR(enforce) − TSR(passive) per category.
+- :func:`ablation_figure` — ΔTSR / ΔPrivacy / ΔSecurity / ΔGovernance
+  baseline -> passive -> enforce, broken by attack axis.
+- :func:`rewrite_quality_figure` — TSR(enforce) − TSR(passive) per attack axis.
 - :func:`disagreement_vignettes_figure` — three-panel case studies
   comparing SAF vs vanilla-AA per scenario.
 - :func:`sensitivity_figure` — binary SAF pass-rate at each threshold
@@ -45,6 +45,14 @@ _CONDITION_ORDER: tuple[str, ...] = ("baseline", "passive", "enforce")
 _PRIVACY_METRICS: tuple[str, ...] = ("cdlr", "culr", "mplr", "halr", "cslr")
 
 
+def _with_attack_axis(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure I6 attack-axis grouping exists for legacy wide inputs."""
+
+    if "attack_axis" not in df.columns and "category" in df.columns:
+        return df.assign(attack_axis=df["category"])
+    return df
+
+
 def _group_mean(df: pd.DataFrame, *, by: Sequence[str], metric: str) -> pd.DataFrame:
     """Group-by mean of a single metric column; returns a tidy DataFrame."""
 
@@ -57,78 +65,80 @@ def _group_mean(df: pd.DataFrame, *, by: Sequence[str], metric: str) -> pd.DataF
 
 
 def ablation_figure(df: pd.DataFrame) -> Figure:
-    """Three-panel figure: ΔTSR / ΔPrivacy / ΔSecurity across conditions × category.
+    """Four-panel figure across conditions × attack axis.
 
     Each panel plots mean ± SD across scenarios, with one line per
-    category (``family`` could also be used; category is the attack
-    axis). X axis is the condition ladder.
+    attack axis. X axis is the condition ladder.
     """
 
-    df = df.copy()
+    df = _with_attack_axis(df.copy())
     # Mean across any scalar privacy leak columns present -> one "privacy" series.
     present_priv = [c for c in _PRIVACY_METRICS if c in df.columns]
     if present_priv:
         df["privacy_mean"] = df[present_priv].mean(axis=1)
     else:
         df["privacy_mean"] = 0.0
+    if "governance_violation_rate" not in df.columns:
+        df["governance_violation_rate"] = 0.0
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    fig, axes = plt.subplots(1, 4, figsize=(15, 4))
     metrics = (
         ("tsr", "TSR (↑)"),
         ("privacy_mean", "Privacy leak (↓)"),
         ("asr", "Security ASR (↓)"),
+        ("governance_violation_rate", "Governance violation (↓)"),
     )
-    categories = sorted(df["category"].dropna().unique())
+    attack_axes = sorted(df["attack_axis"].dropna().unique())
     for ax, (col, label) in zip(axes, metrics):
-        for cat in categories:
-            sub = df[df["category"] == cat]
+        for attack_axis in attack_axes:
+            sub = df[df["attack_axis"] == attack_axis]
             means = [
                 float(sub[sub["condition"] == c][col].mean())
                 for c in _CONDITION_ORDER
             ]
-            ax.plot(_CONDITION_ORDER, means, marker="o", label=str(cat))
+            ax.plot(_CONDITION_ORDER, means, marker="o", label=str(attack_axis))
         ax.set_title(label)
         ax.set_xlabel("Condition")
         ax.grid(True, alpha=0.3)
     axes[0].set_ylabel("Mean metric value")
-    if categories:
-        axes[-1].legend(title="Category", loc="best")
+    if attack_axes:
+        axes[-1].legend(title="Attack axis", loc="best")
     fig.tight_layout()
     return fig
 
 
 def rewrite_quality_figure(df: pd.DataFrame) -> Figure:
-    """Bar plot of TSR(enforce) − TSR(passive) per category."""
+    """Bar plot of TSR(enforce) − TSR(passive) per attack axis."""
 
-    sub = df[df["condition"].isin(["passive", "enforce"])].copy()
+    sub = _with_attack_axis(df[df["condition"].isin(["passive", "enforce"])].copy())
     pivot = sub.pivot_table(
-        index=["category", "model", "scenario_id"],
+        index=["attack_axis", "model", "scenario_id"],
         columns="condition",
         values="tsr",
         aggfunc="mean",
     )
     if {"passive", "enforce"} <= set(pivot.columns):
         pivot["delta"] = pivot["enforce"] - pivot["passive"]
-        per_cat = (
+        per_axis = (
             pivot.reset_index()
-            .groupby("category")["delta"]
+            .groupby("attack_axis")["delta"]
             .agg(["mean", "std", "count"])
             .reset_index()
         )
     else:
-        per_cat = pd.DataFrame(columns=["category", "mean", "std", "count"])
+        per_axis = pd.DataFrame(columns=["attack_axis", "mean", "std", "count"])
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    if not per_cat.empty:
-        xs = np.arange(len(per_cat))
-        yerr = per_cat["std"].fillna(0.0).to_numpy()
-        ax.bar(xs, per_cat["mean"], yerr=yerr, capsize=6)
+    if not per_axis.empty:
+        xs = np.arange(len(per_axis))
+        yerr = per_axis["std"].fillna(0.0).to_numpy()
+        ax.bar(xs, per_axis["mean"], yerr=yerr, capsize=6)
         ax.set_xticks(xs)
-        ax.set_xticklabels(per_cat["category"])
+        ax.set_xticklabels(per_axis["attack_axis"])
     ax.axhline(0.0, color="black", linewidth=0.8)
     ax.set_ylabel("TSR(enforce) − TSR(passive)")
-    ax.set_xlabel("Category")
-    ax.set_title("Rewrite-quality delta per category")
+    ax.set_xlabel("Attack axis")
+    ax.set_title("Rewrite-quality delta per attack axis")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     return fig

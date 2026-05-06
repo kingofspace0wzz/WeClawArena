@@ -32,7 +32,7 @@ import {
   type GatewayClientOptions,
   type Inbound,
   type ToolCallBody,
-} from './gateway-client';
+} from './gateway-client.js';
 
 export interface ChannelOptions {
   baseUrl: string;

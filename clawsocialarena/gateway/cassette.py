@@ -28,6 +28,7 @@ import json
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TextIO
 
 from clawsocialarena.types import ActionRecord
 
@@ -54,7 +55,7 @@ class CassetteRecorder:
 
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._fp = self._path.open("a", encoding="utf-8")
+        self._fp: TextIO | None = self._path.open("a", encoding="utf-8")
         self._lock = threading.Lock()
 
     def record(self, record: ActionRecord) -> None:
@@ -94,19 +95,21 @@ class CassetteRecorder:
             entry["signature"] = record.signature
         line = json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n"
         with self._lock:
-            if self._fp is None:
+            fp = self._fp
+            if fp is None:
                 raise ValueError("cassette closed")
-            self._fp.write(line)
-            self._fp.flush()
+            fp.write(line)
+            fp.flush()
 
     def close(self) -> None:
         """Close the underlying file handle; safe to call multiple times."""
 
         with self._lock:
-            if self._fp is None:
+            fp = self._fp
+            if fp is None:
                 return
             try:
-                self._fp.close()
+                fp.close()
             finally:
                 self._fp = None
 

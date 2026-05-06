@@ -65,3 +65,60 @@ def test_docker_available_returns_true_when_shutil_resolves(
 
     monkeypatch.setattr(compose_runner.shutil, "which", lambda _name: "/usr/local/bin/docker")
     assert docker_available() is True
+
+
+def test_compose_runner_rebuilds_images_before_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(compose_runner.shutil, "which", lambda _name: "/usr/local/bin/docker")
+    monkeypatch.setattr(compose_runner, "_wait_for_healthz", lambda *_args, **_kwargs: None)
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs) -> None:
+        calls.append(cmd)
+
+    monkeypatch.setattr(compose_runner.subprocess, "run", fake_run)
+
+    with ComposeRunner(Path("/tmp/docker-compose.yml"), project_name="demo"):
+        pass
+
+    assert calls[0] == [
+        "docker",
+        "compose",
+        "-f",
+        "/tmp/docker-compose.yml",
+        "-p",
+        "demo",
+        "up",
+        "--build",
+        "-d",
+    ]
+
+
+def test_compose_runner_can_skip_rebuilds_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(compose_runner.shutil, "which", lambda _name: "/usr/local/bin/docker")
+    monkeypatch.setattr(compose_runner, "_wait_for_healthz", lambda *_args, **_kwargs: None)
+    monkeypatch.setenv("CLAWSOCIALARENA_COMPOSE_BUILD", "0")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs) -> None:
+        calls.append(cmd)
+
+    monkeypatch.setattr(compose_runner.subprocess, "run", fake_run)
+
+    with ComposeRunner(Path("/tmp/docker-compose.yml"), project_name="demo"):
+        pass
+
+    assert calls[0] == [
+        "docker",
+        "compose",
+        "-f",
+        "/tmp/docker-compose.yml",
+        "-p",
+        "demo",
+        "up",
+        "--no-build",
+        "-d",
+    ]
