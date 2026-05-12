@@ -416,41 +416,34 @@ def _overlay_one_variant(
 ) -> dict[str, Any]:
     """Apply the right stress recipe for ``axis`` to ``variant_dir``.
 
+    Thin wrapper around
+    :func:`clawsocialarena.attacks.runtime_overlay.apply_recipe_to_variant_dir`
+    that preserves the CLI's report-summary shape and handles the
+    scaffold-specific :func:`_rewrite_variant_metadata` step.
+
     Returns a small report dict (recipe_name + counts of applied
     mutations) for the runner's summary.
     """
-    recipe_name = _AXIS_TO_RECIPE.get(axis)
-    if not recipe_name or recipe_name not in STRESS_RECIPE_REGISTRY:
-        return {"axis": axis, "recipe": None, "applied": False}
-    recipe = STRESS_RECIPE_REGISTRY[recipe_name]
+    from clawsocialarena.attacks.runtime_overlay import apply_recipe_to_variant_dir
+
     base_bundle = _load_base_bundle(variant_dir)
-    artifacts = recipe.build_variant_artifacts(
-        base_bundle=base_bundle, family_id=family_id, seed=seed
+    outcome = apply_recipe_to_variant_dir(
+        variant_dir=variant_dir,
+        attack_mode=axis,
+        base_bundle=base_bundle,
+        family_id=family_id,
+        seed=seed,
     )
-    file_writes = _apply_resource_file_writes(
-        variant_dir=variant_dir, writes=artifacts.resource_file_writes
-    )
-    db_inserts = _apply_resource_db_inserts(
-        variant_dir=variant_dir, inserts=artifacts.resource_db_inserts
-    )
-    db_updates = _apply_resource_db_updates(
-        variant_dir=variant_dir, updates=artifacts.resource_db_updates
-    )
-    _apply_scenario_mutations(variant_dir=variant_dir, artifacts=artifacts)
+    if not outcome.get("applied"):
+        return {"axis": axis, "recipe": None, "applied": False}
+    artifacts = outcome.pop("_artifacts")
+    recipe_name = outcome["recipe"]
     _rewrite_variant_metadata(
         variant_dir=variant_dir,
         artifacts=artifacts,
         recipe_name=recipe_name,
     )
-    return {
-        "axis": axis,
-        "recipe": recipe_name,
-        "applied": True,
-        "file_writes": file_writes,
-        "db_inserts": db_inserts,
-        "db_updates": db_updates,
-        "requires_runtime_peer": artifacts.requires_runtime_peer,
-    }
+    return {"axis": axis, **outcome}
 
 
 def main() -> int:
