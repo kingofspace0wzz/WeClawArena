@@ -1,3 +1,9 @@
+"""LEGACY -- difficulty tiers were retired in v2 (spec
+2026-05-12-persisted-naturalized-scenarios-design.md). The functions
+in this module still exist for import-path stability but always return
+the "easy" profile regardless of the ``tier`` arg. Do not use them for
+new code; new scenarios have no tier dimension.
+"""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -10,13 +16,17 @@ from clawsocialarena.generator.template import TaskFamily
 _TIERS = {"easy", "realistic", "stress"}
 
 
-def difficulty_profile(*, family: str, tier: str) -> dict[str, Any]:
-    if tier not in _TIERS:
-        raise ValueError(f"unsupported designed difficulty tier: {tier}")
+def difficulty_profile(*, family: str, tier: str | None) -> dict[str, Any]:
+    """LEGACY: returns the "easy" profile regardless of ``tier``.
+
+    Difficulty tiers were retired in v2; this stub stays for legacy
+    imports. The "easy" profile carries no extra task pressure prose
+    or constraint overrides.
+    """
     task_family = TaskFamily(family)
-    profile = _base_profile(task_family, tier)
-    profile["designed_difficulty_tier"] = tier
-    profile["source_pattern"] = pattern_for(family=task_family.value, tier=tier)
+    profile = _base_profile(task_family, "easy")
+    profile["designed_difficulty_tier"] = "easy"
+    profile["source_pattern"] = pattern_for(family=task_family.value, tier="easy")
     return profile
 
 

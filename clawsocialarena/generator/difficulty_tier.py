@@ -1,4 +1,12 @@
-"""Difficulty tier scaffolding for the Phase-5 pilot.
+"""LEGACY -- difficulty tiers were retired in v2 (spec
+2026-05-12-persisted-naturalized-scenarios-design.md). The functions
+in this module still exist for import-path stability but always return
+the tier-1 ("easy") profile regardless of the ``tier`` arg. Do not
+use them for new code; new scenarios have no tier dimension.
+
+(Original docstring follows.)
+
+Difficulty tier scaffolding for the Phase-5 pilot.
 
 Three tiers (1=easy, 2=realistic, 3=stress) drive variation per base
 task across the 14 cells. Tier names match spec section 5
@@ -80,14 +88,9 @@ TIERS: tuple[TierSpec, ...] = (
 )
 
 
-def tier_for(tier_index: int) -> TierSpec:
-    """Return the TierSpec at the 1..3 index or raise ValueError."""
-    for tier in TIERS:
-        if tier.tier == tier_index:
-            return tier
-    raise ValueError(
-        f"unsupported tier_index={tier_index}; supported: {[t.tier for t in TIERS]}"
-    )
+def tier_for(tier_index: int | None) -> TierSpec:
+    """LEGACY: returns the tier-1 ("easy") spec for any input."""
+    return TIERS[0]
 
 
 # Per-pack hooks. Each function receives the bundle's mutable scenario
@@ -186,14 +189,14 @@ def apply_tier(
     *,
     family_id: str,
     scenario_dict: dict[str, Any],
-    tier_index: int,
+    tier_index: int | None,
 ) -> TierApplyResult:
-    """Apply tier-level overrides to a bundle's scenario dict.
+    """LEGACY: apply the tier-1 ("easy") overrides regardless of ``tier_index``.
 
-    Returns a snapshot so the generator can record what changed before
-    re-materializing the bundle. ``scenario_dict`` itself is left
-    unchanged -- the result carries the proposed overrides as a separate
-    dict the caller composes onto a fresh bundle.
+    Difficulty tiers were retired in v2; this function now always uses
+    the easy tier internally. Returns a snapshot so the generator can
+    record what changed before re-materializing the bundle. The
+    ``scenario_dict`` itself is left unchanged.
     """
     tier = tier_for(tier_index)
     base_overrides: dict[str, Any] = {}
