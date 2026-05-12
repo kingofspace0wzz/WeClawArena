@@ -2,8 +2,8 @@
 
 These tests use a slice of cells to keep runtime manageable; one
 parametrized test covers every family to catch loader-kwarg drift.
-A full 126-bundle materialization sanity test runs once at the end
-with a short tmp_path.
+A full 42-bundle materialization sanity test runs once at the end
+with a short tmp_path (14 cells x 3 tasks, tier dim dropped).
 """
 from __future__ import annotations
 
@@ -155,11 +155,12 @@ def test_generator_works_for_one_cell_per_family(
 
 
 @pytest.mark.slow
-def test_generator_full_run_produces_126_bundles(tmp_path: Path) -> None:
-    """End-to-end materialization across every cell. Marked slow so the
-    default `pytest -q` run skips it via `-m "not slow"`; CI can
+def test_generator_full_run_produces_42_bundles(tmp_path: Path) -> None:
+    """End-to-end materialization across every cell with tier dimension dropped.
+    Marked slow so the default `pytest -q` run skips it via `-m "not slow"`; CI can
     flip on the marker when the full benchmark scaffolding lands.
+    14 cells × 3 tasks (tier dim dropped) = 42 base bundles.
     """
     records = generate_base_bundles(out_dir=tmp_path)
-    assert len(records) == 126
-    assert len({r.base_scenario_id for r in records}) == 126
+    assert len(records) == 42
+    assert len({r.base_scenario_id for r in records}) == 42
