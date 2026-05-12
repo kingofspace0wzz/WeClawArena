@@ -349,6 +349,55 @@ def test_naturalization_patch_serializes_structured_file_body() -> None:
     }
 
 
+def test_naturalization_patch_serializes_list_shaped_file_body() -> None:
+    """gpt-5.2 sometimes returns a list-shaped resource file (e.g.,
+    tau2_retail's ``orders.json`` or tau2_telecom's ``lines.json``)
+    verbatim as the value, not wrapped in ``{content: ...}``. The
+    coercion validator must JSON-serialize the list into the
+    ``content`` string so downstream callers see a uniform shape.
+    Regression for the Phase-5 Run-Batch 1 smoke (35/70 errors on
+    the three tau2 families before the fix).
+    """
+    patch = NaturalizationPatch.model_validate(
+        {
+            "scenario_id": "tau2_retail_household_exchange_phase5_v0",
+            "world_patch": {
+                "files": {
+                    "household/HH-7/orders.json": [
+                        {"order_id": "#W1", "status": "delivered"},
+                        {"order_id": "#W2", "status": "open"},
+                    ]
+                },
+                "databases": {},
+            },
+            "scenario_patch": {
+                "opening_message": "Please resolve the household exchange.",
+                "persona_notes": {},
+            },
+            "construction_metadata": {
+                "naturalization_mode": "llm",
+                "naturalization_model": "gpt-5",
+                "prompt_hash": "sha256:prompt",
+                "cache_key": "sha256:cache",
+            },
+            "usage": {
+                "model": "gpt-5",
+                "input_tokens": 1000,
+                "cached_input_tokens": 0,
+                "output_tokens": 500,
+            },
+        }
+    )
+
+    content = json.loads(
+        patch.world_patch.files["household/HH-7/orders.json"].content
+    )
+    assert content == [
+        {"order_id": "#W1", "status": "delivered"},
+        {"order_id": "#W2", "status": "open"},
+    ]
+
+
 def test_cache_key_is_stable_for_sorted_json_payloads() -> None:
     left = {"b": 2, "a": 1}
     right = json.loads('{"a": 1, "b": 2}')

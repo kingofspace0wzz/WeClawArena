@@ -16,6 +16,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from clawsocialarena.attacks.schema import (
+    AttackIntensity,
+    AttackerControl,
+    DeliverySurface,
+    normalize_attack_plan,
+)
 from clawsocialarena.generator.attack_injection import AttackType
 from clawsocialarena.generator.attack_injection import inject_attack
 from clawsocialarena.generator.cli import _write_bundle
@@ -314,6 +320,7 @@ def _generate_supported(*, plan: Plan, out: Path) -> int:
                 attack_type=AttackType(row.attack_type),
                 attacker_agent_id=attacker_agent_id,
                 declared_axis=row.attack_axis,
+                attack_intensity=_attack_intensity_for_row(row),
             )
         bundle_dir = out / row.scenario_id
         _write_bundle(shape, bundle_dir)
@@ -414,8 +421,15 @@ def _write_registered_row_bundle(
             attack_type=AttackType(row.attack_type),
             attacker_agent_id=attacker_agent_id,
             declared_axis=row.attack_axis,
+            attack_intensity=_attack_intensity_for_row(row),
         )
     _write_bundle(shape, bundle_dir)
+
+
+def _attack_intensity_for_row(row: PlanRow) -> str:
+    if row.designed_difficulty_tier == AttackIntensity.STRESS.value:
+        return AttackIntensity.STRESS.value
+    return AttackIntensity.STANDARD.value
 
 
 def _shape_with_difficulty_profile(shape: Any, row: PlanRow) -> Any:
@@ -879,7 +893,77 @@ def _audit_challenge_payload(case_id: str) -> dict[str, Any]:
     }
     if case_id not in cases:
         raise ValueError(f"unknown audit challenge case: {case_id}")
-    return cases[case_id]
+    payload = cases[case_id]
+    _normalize_audit_challenge_attack_plan(payload)
+    return payload
+
+
+def _normalize_audit_challenge_attack_plan(payload: dict[str, Any]) -> None:
+    gt = payload.get("gt")
+    if not isinstance(gt, dict):
+        return
+    raw_plan = gt.get("attack_plan")
+    if not isinstance(raw_plan, dict):
+        return
+    action_log = payload.get("action_log")
+    actions = action_log if isinstance(action_log, list) else []
+    plan = dict(raw_plan)
+    plan.setdefault("attack_intensity", AttackIntensity.STRESS.value)
+    plan.setdefault("attacker_control", AttackerControl.SEEDED_CHALLENGE.value)
+    plan.setdefault("delivery_surface", _audit_delivery_surface(plan, actions))
+    plan.setdefault("compliance_markers", _audit_compliance_markers(plan, actions))
+    gt["attack_plan"] = normalize_attack_plan(plan)
+
+
+def _audit_delivery_surface(
+    attack_plan: dict[str, Any],
+    action_log: list[Any],
+) -> str:
+    target_ids = {
+        str(action_id)
+        for action_id in attack_plan.get("target_action_ids", [])
+        if action_id
+    }
+    for action in action_log:
+        if not isinstance(action, dict):
+            continue
+        if target_ids and str(action.get("action_id")) not in target_ids:
+            continue
+        action_type = action.get("action_type")
+        if action_type == "summary_write":
+            return DeliverySurface.SUMMARY.value
+        if action_type == "delegation_spawn":
+            return DeliverySurface.TOOL_METADATA.value
+        return DeliverySurface.MESSAGE.value
+    return DeliverySurface.MESSAGE.value
+
+
+def _audit_compliance_markers(
+    attack_plan: dict[str, Any],
+    action_log: list[Any],
+) -> list[str]:
+    markers: list[str] = []
+    for marker_field in ("attack_type", "axis", "attacker_agent_id"):
+        value = attack_plan.get(marker_field)
+        if isinstance(value, str) and value:
+            markers.append(value)
+    for action_id in attack_plan.get("target_action_ids", []):
+        if action_id:
+            markers.append(str(action_id))
+    for action in action_log:
+        if not isinstance(action, dict):
+            continue
+        payload = action.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        for item_id in payload.get("mentioned_items", []):
+            if item_id:
+                markers.append(str(item_id))
+        for key in ("resource_id", "delegatee_agent_id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                markers.append(value)
+    return list(dict.fromkeys(markers))
 
 
 def _base_scenario(

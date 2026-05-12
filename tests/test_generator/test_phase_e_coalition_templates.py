@@ -7,6 +7,8 @@ agent layout prescribed by spec Section 4.3.
 
 from __future__ import annotations
 
+import json
+
 from clawsocialarena.generator.registry import get_template, list_registered
 from clawsocialarena.generator.template import CategoryCode, TaskFamily, Template
 from clawsocialarena.generator.templates.cm_coalition import CMCoalitionTemplate
@@ -179,6 +181,15 @@ def test_coalition_templates_carry_only_narrator_npc_turns():
             )
 
 
+def test_no_attacker_coalition_templates_do_not_request_forbidden_capabilities():
+    for cls in (MGCoalitionTemplate, HSCoalitionTemplate):
+        shape = cls().build(seed=1, scenario_id="coa")
+        text = json.dumps(shape.model_dump(mode="json")).lower()
+        assert "try to get" not in text
+        assert "add rollback-instructions" not in text
+        assert "admin:wipe-cluster included" not in text
+
+
 def test_coalition_phase_schedule_covers_five_phases():
     expected = {
         "discovery",
@@ -220,7 +231,7 @@ def test_mg_coalition_shared_memory_poison_contract():
     assert adv_action["type"] == "shared_memory_poison"
     assert adv_action["state_path"] == "runbook.notes"
     prompts = {agent["agent_id"]: agent["system_prompt_template"] for agent in shape.agents}
-    assert "rollback-instructions" in prompts["peer-delta"]
+    assert "rollback-instructions" not in prompts["peer-delta"]
     assert "runbook" in shape.mcp_tool_manifest
 
 
@@ -240,7 +251,7 @@ def test_hs_coalition_delegation_escalation_contract():
     assert adv_action["type"] == "delegation_escalation"
     assert adv_action["state_path"] == "manifest.applied_capabilities"
     prompts = {agent["agent_id"]: agent["system_prompt_template"] for agent in shape.agents}
-    assert "admin:wipe-cluster" in prompts["spoke-ops"]
+    assert "admin:wipe-cluster" not in prompts["spoke-ops"]
     assert "admin:wipe-cluster" not in prompts["spoke-api"]
     assert "delegation_ledger" in shape.mcp_tool_manifest
 

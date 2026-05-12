@@ -12,12 +12,37 @@ from clawsocialarena.llm.costing import TokenUsage
 
 @dataclass(frozen=True)
 class OpenAIConfig:
-    construction_model: str = "gpt-5"
+    construction_model: str = "gpt-5.2"
     agent_model: str = "gpt-4.1-mini"
 
 
 class OpenAIJsonResult(BaseModel):
     data: dict[str, Any]
+    usage: TokenUsage
+
+
+class OpenAIToolCall(BaseModel):
+    """One tool invocation emitted by the model.
+
+    ``call_id`` is the OpenAI-assigned id (Responses API ``call_id``
+    field); ``name`` is the function name; ``arguments`` is the
+    JSON-decoded argument dict the model produced.
+    """
+
+    call_id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+class OpenAIToolCallResult(BaseModel):
+    """Half-duplex turn output: either ``tool_calls`` is non-empty
+    (the model chose to call a tool) OR ``content`` is non-empty
+    (the model chose to send a message). Both empty means the model
+    declined to act (the agent loop treats this as ``wait``).
+    """
+
+    tool_calls: list[OpenAIToolCall] = []
+    content: str = ""
     usage: TokenUsage
 
 
@@ -31,6 +56,17 @@ class JsonClient(Protocol):
         schema: dict[str, Any] | None = None,
         cache_key: str | None = None,
     ) -> OpenAIJsonResult:
+        ...
+
+    def create_with_tools(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        tools: list[dict[str, Any]],
+        cache_key: str | None = None,
+    ) -> OpenAIToolCallResult:
         ...
 
 
@@ -95,6 +131,62 @@ class OpenAIResponsesJsonClient:
         response = client.responses.create(**kwargs)
         return OpenAIJsonResult(
             data=_loads_response_json_object(_response_output_text(response)),
+            usage=TokenUsage(
+                model=model,
+                input_tokens=_response_input_tokens(response),
+                cached_input_tokens=_response_cached_tokens(response),
+                output_tokens=_response_output_tokens(response),
+            ),
+        )
+
+    def create_with_tools(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        tools: list[dict[str, Any]],
+        cache_key: str | None = None,
+    ) -> OpenAIToolCallResult:
+        """Half-duplex turn: pass ``tools`` (Responses-API function
+        schemas) so the model can EITHER emit one or more
+        ``function_call`` items OR emit free-text content.
+
+        ``tools`` items must follow the Responses API shape::
+
+            {
+                "type": "function",
+                "name": "finalize_proposal",
+                "description": "...",
+                "parameters": {"type": "object", ...},
+            }
+        """
+        factory = self._openai_factory
+        if factory is None:
+            from openai import OpenAI
+
+            factory = OpenAI
+
+        client = factory(
+            api_key=require_openai_key(),
+            timeout=self._timeout_seconds,
+        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "instructions": system_prompt,
+            "input": json.dumps(payload, sort_keys=True),
+            "tools": tools,
+            "store": False,
+        }
+        if cache_key is not None:
+            kwargs["prompt_cache_key"] = cache_key
+
+        response = client.responses.create(**kwargs)
+        tool_calls = _response_tool_calls(response)
+        content_text = _response_output_text(response).strip()
+        return OpenAIToolCallResult(
+            tool_calls=tool_calls,
+            content=content_text,
             usage=TokenUsage(
                 model=model,
                 input_tokens=_response_input_tokens(response),
@@ -191,6 +283,36 @@ def _response_output_text(response: Any) -> str:
             if text:
                 fragments.append(str(text))
     return "".join(fragments) or "{}"
+
+
+def _response_tool_calls(response: Any) -> list[OpenAIToolCall]:
+    """Extract function-call items from a Responses API response.
+
+    The Responses API returns tool invocations as ``output`` items
+    whose ``type`` is ``function_call``. Each item carries
+    ``call_id``, ``name``, and a string ``arguments`` field that we
+    JSON-decode. Items with a non-decodable ``arguments`` field land
+    in the result with an empty dict so the agent loop can surface
+    the malformed call to the model on the next turn.
+    """
+    out: list[OpenAIToolCall] = []
+    for item in getattr(response, "output", []) or []:
+        item_type = getattr(item, "type", None)
+        if item_type != "function_call":
+            continue
+        call_id = str(getattr(item, "call_id", "") or "")
+        name = str(getattr(item, "name", "") or "")
+        raw_args = getattr(item, "arguments", "") or ""
+        if isinstance(raw_args, dict):
+            args: dict[str, Any] = raw_args
+        else:
+            try:
+                decoded = json.loads(raw_args) if raw_args else {}
+            except (ValueError, TypeError):
+                decoded = {}
+            args = decoded if isinstance(decoded, dict) else {}
+        out.append(OpenAIToolCall(call_id=call_id, name=name, arguments=args))
+    return out
 
 
 def _loads_response_json_object(text: str) -> dict[str, Any]:

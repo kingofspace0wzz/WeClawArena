@@ -89,19 +89,23 @@ npx pnpm -C gateway_plugin test
 
 ## Current Benchmark Next Step
 
-Run the first category-sweep gate before further scale-out. This batch selects one complete five-mode variant block from each main task category/family cell, so category-specific task and trajectory issues show up early:
+Run the first passive attack-calibration gate before further scale-out. This batch selects stress-tier adversarial rows across the seven main categories and four attack modes, then reports attack recipe, intensity, and stage metrics:
 
 ```bash
 .venv/bin/python scripts/naturalize_and_run_batch.py \
-  --batch-id batch-0066-category-sweep-000 \
-  --batch-size 70 \
-  --batch-strategy category-sweep \
-  --sweep-index 0 \
-  --construction-model gpt-5 \
-  --agent-model gpt-4.1-mini
+  --batch-id batch-0074-attack-calibration-000 \
+  --batch-strategy attack-calibration \
+  --batch-size 28 \
+  --out benchmark/batches \
+  --max-cost-usd 25 \
+  --construction-model gpt-5.2 \
+  --agent-model gpt-4.1-mini \
+  --naturalization-attempts 3 \
+  --simulation-attempts 2 \
+  --condition passive
 ```
 
-Review the generated tasks, simulation trajectories, task success rate, attack success rate, SAF scores, and audit summaries before running the next category-sweep gate.
+Review the generated tasks, simulation trajectories, task success rate, attack success rate, attack-stage metrics, SAF scores, and audit summaries before running the next gate.
 
 ## License
 

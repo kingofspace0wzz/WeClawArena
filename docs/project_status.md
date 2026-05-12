@@ -1,6 +1,6 @@
 # ClawSocialArena Current Project Status
 
-**Last updated:** 2026-05-06
+**Last updated:** 2026-05-08
 
 This is the current entry point for project state. Older design specs and plans remain useful as historical records, but they should not be used as execution instructions unless this file points to them.
 
@@ -27,6 +27,7 @@ Do not remove either worktree or branch without an explicit cleanup review. The 
 | Runtime and SAF design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` |
 | Benchmark construction design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
 | Experimental design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` |
+| Attack vector and stress-attack design | `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md` |
 | Benchmark dataset guide | `docs/benchmark_dataset_guide.md` |
 | Task difficulty design | `docs/superpowers/specs/2026-05-05-task-difficulty-success-calibration-design.md` |
 | LLM naturalization and batch pipeline design | `docs/superpowers/specs/2026-05-02-llm-naturalization-batch-pipeline-design.md` |
@@ -54,15 +55,28 @@ The earlier 550-variant tree is a pre-calibration scaffold, not the final benchm
 
 ## Current Batch Status
 
-The only retained batch directories are:
+Older retained batch directories are diagnostic only:
 
 | Batch | Status |
 |---|---|
 | `batch-0061-resource-label-sanitized-25` | Diagnostic only. Old scorecard metrics are affected by evaluator fixes. |
 | `batch-0064-construction-metrics-fixes-50` | Diagnostic only. Old scorecard metrics are affected by evaluator fixes. |
 | `batch-0065-scale-gate-50-idx075` | Diagnostic only. Old metrics are affected by evaluator fixes and by the AM scheduling/naturalization construction fixes. |
+| `batch-0067-category-sweep-000-postcommit` | Diagnostic only. Superseded by later category-sweep gates and evaluator corrections. |
+| `batch-0068-category-sweep-001` and reruns | Diagnostic only except for targeted trajectory inspection. Superseded by the corrected batch-0069 re-score. |
 
-These retained batches should not be used as final benchmark evidence. The next benchmark step is to rerun corrected replacement gates from indexes `0`, `25`, and `75`, review the generated tasks and trajectories, then continue scale-out only if the review passes.
+The latest corrected passive construction gate is `batch-0073-category-sweep-004`. It completed a 70-row category sweep with strict structured-message metrics and SAF applicability-aware reporting. Its QC report is `benchmark/reviews/batch-0073-category-sweep-004-qc-report.md`.
+
+| Batch | Accepted | Task successes | Accepted task failures | Attack successes | SAF failures | Resource/tool violations | Condition | Current gate |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| `batch-0069-category-sweep-002` | 70 / 70 | 57 | 13 | 3 | 0 | 0 | `passive` | `proceed` |
+| `batch-0071-condition-sentinel-0069` | 9 / 9 | 4 | 5 | 4 | 0 | 0 | `mixed` | `proceed` |
+| `batch-0072-category-sweep-003-merged-rerun1` | 70 / 70 | 64 | 6 | 5 | 0 | 0 | `passive` | `proceed` |
+| `batch-0073-category-sweep-004` | 70 / 70 | 66 | 4 | 4 | 0 | 0 | `passive` | `proceed` |
+
+These retained batches should not be used as final benchmark evidence until review marks rows release-ready. The current gates show that the pipeline can generate, run, and score cross-category passive construction batches and can score selected `baseline`, `passive`, and `enforce` condition variants from the same naturalized bundles.
+
+The corrected condition-sentinel sweep on three selected batch-0069 rows accepted all nine reruns. `baseline` now writes `bundle/run/baseline_transcript.jsonl` and emits a scorecard with task, privacy, security, and governance metrics while marking SAF as not applicable. The QC report is `benchmark/reviews/batch-0071-condition-sentinel-0069-qc-report.md`.
 
 The retained runs correspond to these replacement-gate slices of the current 680-variant scaffold:
 
@@ -88,12 +102,22 @@ Because these corrections change construction and evaluation semantics, old batc
 
 ## Next Step
 
-Rerun replacement gate batches with the corrected scaffold and evaluator:
+Do not start another passive category-sweep batch until the attack-vector weakness is addressed. The next execution step is the attack-calibration gate based on `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`: use recipe metadata, stress recipes, attack-stage metrics, and QC reporting before resuming scale-out.
+
+The expected command is:
 
 ```bash
-scripts/naturalize_and_run_batch.py --start-index 0 --batch-size 25
-scripts/naturalize_and_run_batch.py --start-index 25 --batch-size 50
-scripts/naturalize_and_run_batch.py --start-index 75 --batch-size 50
+.venv/bin/python scripts/naturalize_and_run_batch.py \
+  --batch-id batch-0074-attack-calibration-000 \
+  --batch-strategy attack-calibration \
+  --batch-size 28 \
+  --out benchmark/batches \
+  --max-cost-usd 25 \
+  --construction-model gpt-5.2 \
+  --agent-model gpt-4.1-mini \
+  --naturalization-attempts 3 \
+  --simulation-attempts 2 \
+  --condition passive
 ```
 
-Use the project-standard model settings from the batch runner: `gpt-5` for naturalization and `gpt-4.1-mini` for simulated agents. Stop after each gate for task-quality and trajectory review.
+Use `--batch-size 28` because the first selector takes seven categories times four adversarial modes. Use the project-standard model settings from the batch runner: `gpt-5.2` for naturalization and `gpt-4.1-mini` for simulated agents. Stop after the attack-calibration gate to write `benchmark/reviews/<batch_id>-qc-report.md`, include deterministic metrics, attack recipe and intensity distributions, attack-stage metrics, and review-agent feedback, and classify findings as weak attack design, delivery failure, evaluator miss, or valid attack non-success.

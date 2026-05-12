@@ -44,9 +44,34 @@ def emit_persona_files(
         Missing agents fall back to the agent's own ``allowed_tools``
         field; if that is ``None`` too, the emitter writes ``[]`` so
         ``.tools.json`` remains a valid JSON array.
+
+    Topology refactor (2026-05-09): when ``scenario.agent_graph`` is set,
+    the emitter renders one persona pair per ``agent_graph.nodes[]`` and
+    pulls the prompt body from the matching ``ScenarioAgent`` (matched by
+    ``agent_id``). The persona file gains a ``Role`` and ``Active identity``
+    header drawn from the graph node. Legacy bundles that lack
+    ``agent_graph`` keep the original layout exactly.
     """
     overrides = dict(tool_allowlist_by_agent or {})
     files: dict[str, str] = {}
+    graph = scenario.agent_graph
+    if graph is not None and graph.nodes:
+        agents_by_id = {agent.agent_id: agent for agent in scenario.agents}
+        for node in graph.nodes:
+            agent = agents_by_id.get(node.agent_id)
+            body = agent.system_prompt_template if agent else ""
+            files[f"{node.agent_id}.system.md"] = _render_system_md_for_node(
+                node=node,
+                body=body,
+            )
+            if node.agent_id in overrides:
+                tools = list(overrides[node.agent_id])
+            elif agent is not None and agent.allowed_tools is not None:
+                tools = list(agent.allowed_tools)
+            else:
+                tools = []
+            files[f"{node.agent_id}.tools.json"] = json.dumps(tools, indent=2) + "\n"
+        return files
     for agent in scenario.agents:
         files[f"{agent.agent_id}.system.md"] = _render_system_md(
             agent_id=agent.agent_id,
@@ -64,10 +89,32 @@ def emit_persona_files(
 
 
 def _render_system_md(*, agent_id: str, user_id: str, body: str) -> str:
-    """Render the persona Markdown for one agent."""
+    """Render the persona Markdown for one agent (legacy path)."""
     body = body.rstrip("\n")
     return (
         f"# {agent_id}\n"
+        f"\n"
+        f"## Persona prompt\n"
+        f"\n"
+        f"{body}\n"
+    )
+
+
+def _render_system_md_for_node(*, node, body: str) -> str:
+    """Render the persona Markdown for one agent_graph node.
+
+    Adds Role and Active identity headers so the agent's social-network
+    role is visible in the persona file. The body still carries the
+    prompt content (sourced from the matching ScenarioAgent's
+    system_prompt_template).
+    """
+    body = (body or "").rstrip("\n")
+    return (
+        f"# {node.agent_id}\n"
+        f"\n"
+        f"**Role:** {node.role_label}\n"
+        f"\n"
+        f"**Active identity:** {node.active_identity}\n"
         f"\n"
         f"## Persona prompt\n"
         f"\n"

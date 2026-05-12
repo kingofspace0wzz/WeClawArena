@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from clawsocialarena.generator.task_patterns import pattern_for
@@ -27,10 +28,12 @@ def apply_world_pack(
     resource_selection_axis: str | None = None,
 ) -> TemplateShape:
     """Bind ASB-derived world resources and source metadata to a template shape."""
+    users = _users_for_agents(shape, pack)
     selected = _select_resource_ids(
         pack=pack,
         task_family=task_family,
         harm_axis=resource_selection_axis or harm_axis,
+        required_user_ids=[user.user_id for _, user in users],
     )
     agents = _agents_with_resource_tools(shape, pack, selected)
     resource_manifest = _resource_manifest(pack, selected)
@@ -65,6 +68,7 @@ def _select_resource_ids(
     pack: UserWorldPack,
     task_family: str,
     harm_axis: str,
+    required_user_ids: list[str] | None = None,
 ) -> list[str]:
     selected: set[str] = set()
     for use_case in pack.legitimate_use_cases:
@@ -79,7 +83,71 @@ def _select_resource_ids(
             if ResourceRole.TASK_RELEVANT in resource.roles:
                 selected.add(resource.resource_id)
 
-    _ensure_file_and_database(pack, selected)
+    required_user_ids = list(dict.fromkeys(required_user_ids or []))
+    if required_user_ids:
+        for user_id in required_user_ids:
+            _ensure_user_file_and_database(pack, selected, user_id=user_id)
+    else:
+        _ensure_file_and_database(pack, selected)
+    return sorted(selected)
+
+
+def select_resources_for_family_pack(
+    *,
+    pack: UserWorldPack,
+    family_id: str,
+    declared_resource_ids: list[str],
+    required_user_ids: list[str] | None = None,
+) -> list[str]:
+    """Family-pack-aware resource selection (topology refactor 2026-05-09).
+
+    Replaces the category + harm_axis heuristic with an explicit list of
+    resource_ids declared by the family pack. The family-pack loader knows
+    its task domain (PR review, retail order, telecom incident, etc.) and
+    is responsible for declaring which world-pack resources are task-
+    relevant for the family. This module just validates and returns them,
+    plus the standard "ensure at least one file and one database" coverage
+    rule from the legacy path.
+
+    This is the targeted fix for the "decoupled resources" defect in
+    batch 0074 (MC-inference rows about PR review carrying custody /
+    health / finance / school notes): the category label no longer
+    drives resource selection.
+
+    Parameters
+    ----------
+    pack : UserWorldPack
+        The world pack to draw resources from.
+    family_id : str
+        Identifier of the family pack making the request (e.g.
+        "tau2_retail"). Used for diagnostic context only; the loader
+        owns the policy.
+    declared_resource_ids : list[str]
+        Explicit resource_ids the family pack wants for this scenario.
+        Unknown ids are silently dropped (caller validates against the
+        pack's resource_ids set if it wants a hard failure).
+    required_user_ids : list[str] | None
+        When supplied, the function ensures each user_id has at least
+        one file and one database in the selection, matching the legacy
+        coverage rule.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of selected resource_ids.
+    """
+    del family_id  # used only for diagnostic context
+    valid_ids = {resource.resource_id for resource in _all_resources(pack)}
+    selected: set[str] = {
+        rid for rid in declared_resource_ids if rid in valid_ids
+    }
+
+    required_user_ids = list(dict.fromkeys(required_user_ids or []))
+    if required_user_ids:
+        for user_id in required_user_ids:
+            _ensure_user_file_and_database(pack, selected, user_id=user_id)
+    else:
+        _ensure_file_and_database(pack, selected)
     return sorted(selected)
 
 
@@ -97,6 +165,37 @@ def _ensure_file_and_database(pack: UserWorldPack, selected: set[str]) -> None:
         selected.add(pack.resources.files[0].resource_id)
     if not has_database and pack.resources.databases:
         selected.add(pack.resources.databases[0].resource_id)
+
+
+def _ensure_user_file_and_database(
+    pack: UserWorldPack,
+    selected: set[str],
+    *,
+    user_id: str,
+) -> None:
+    owned_files = [resource for resource in pack.resources.files if resource.user_id == user_id]
+    owned_databases = [
+        resource for resource in pack.resources.databases if resource.user_id == user_id
+    ]
+    if not owned_files or not owned_databases:
+        raise ValueError(
+            f"world pack {pack.world_id!r} lacks file/database coverage for {user_id!r}"
+        )
+    if not any(resource.resource_id in selected for resource in owned_files):
+        selected.add(_best_resource_id(owned_files))
+    if not any(resource.resource_id in selected for resource in owned_databases):
+        selected.add(_best_resource_id(owned_databases))
+
+
+def _best_resource_id(
+    resources: Sequence[FileResourceSpec | DatabaseResourceSpec],
+) -> str:
+    task_relevant = [
+        resource
+        for resource in resources
+        if ResourceRole.TASK_RELEVANT in resource.roles
+    ]
+    return (task_relevant or resources)[0].resource_id
 
 
 def _persona_manifest(shape: TemplateShape, pack: UserWorldPack) -> dict[str, dict[str, Any]]:
@@ -307,6 +406,10 @@ def _construction_manifest(
             for resource in _all_resources(pack)
             if resource.resource_id in set(selected_resource_ids)
         ],
+        "selected_resources_by_user": _selected_resources_by_user(
+            pack,
+            selected_resource_ids,
+        ),
         "naturalization": {
             "method": "structural_world_pack",
             "llm_model": None,
@@ -333,6 +436,18 @@ def _construction_manifest(
         )
     )
     return manifest
+
+
+def _selected_resources_by_user(
+    pack: UserWorldPack,
+    selected_resource_ids: list[str],
+) -> dict[str, list[str]]:
+    selected = set(selected_resource_ids)
+    grouped: dict[str, list[str]] = {}
+    for resource in _all_resources(pack):
+        if resource.resource_id in selected:
+            grouped.setdefault(resource.user_id, []).append(resource.resource_id)
+    return {user_id: sorted(resource_ids) for user_id, resource_ids in sorted(grouped.items())}
 
 
 def _default_attack_plan(

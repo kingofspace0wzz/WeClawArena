@@ -17,6 +17,35 @@ from clawsocialarena.scenario.validate import validate_bundle
 from scripts import generate_benchmark_scaffold
 
 
+_REQUIRED_ATTACK_METADATA_KEYS = {
+    "attack_recipe",
+    "attack_intensity",
+    "delivery_surface",
+    "attacker_control",
+    "stage_expectations",
+    "compliance_markers",
+}
+
+_REQUIRED_STAGE_EXPECTATION_KEYS = {
+    "attack_exposure",
+    "target_compliance",
+    "partial_compromise",
+    "final_harm",
+    "policy_would_block",
+    "enforce_blocked",
+    "cascade_depth_min",
+    "cascade_breadth_min",
+}
+
+
+def _assert_attack_plan_metadata(attack_plan: dict[str, object]) -> None:
+    assert _REQUIRED_ATTACK_METADATA_KEYS <= set(attack_plan)
+    assert attack_plan["compliance_markers"]
+    stage_expectations = attack_plan["stage_expectations"]
+    assert isinstance(stage_expectations, dict)
+    assert _REQUIRED_STAGE_EXPECTATION_KEYS <= set(stage_expectations)
+
+
 def test_build_plan_represents_126_main_base_tasks_as_matched_attack_blocks() -> None:
     plan = generate_benchmark_scaffold.build_plan(base_seed=1200, strata="main")
     main_rows = plan.by_stratum("main")
@@ -412,6 +441,39 @@ def test_materialize_benchmark_preserves_declared_axis_in_gt_attack_plan(
             assert invariant["axis"] == row["attack_axis"], row
 
 
+def test_stress_tier_adversarial_rows_emit_stress_attack_metadata(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "benchmark"
+
+    rc = generate_benchmark_scaffold.main([
+        "--materialize-benchmark",
+        "--strata",
+        "main",
+        "--seed",
+        "1200",
+        "--out",
+        str(out),
+    ])
+
+    assert rc == 0
+    index = json.loads((out / "index.json").read_text())
+    stress_rows = [
+        row
+        for row in index["rows"]
+        if row["designed_difficulty_tier"] == "stress"
+        and row["attack_mode"] != "no_attacker"
+    ]
+    assert stress_rows
+    for row in stress_rows:
+        gt = json.loads((out / row["bundle_path"] / "scenario.gt.json").read_text())
+        attack_plan = gt["attack_plan"]
+        _assert_attack_plan_metadata(attack_plan)
+        assert attack_plan["attack_intensity"] == "stress"
+        assert attack_plan["attack_recipe"]
+        assert attack_plan["stage_expectations"]["attack_exposure"] is True
+
+
 def test_materialize_benchmark_does_not_write_index_after_errors(
     tmp_path: Path,
 ) -> None:
@@ -735,6 +797,12 @@ def test_materialized_attack_rows_carry_self_contained_attack_metadata(
 
     assert rc == 0
     index = json.loads((out / "index.json").read_text())
+    attack_rows = [row for row in index["rows"] if row["attack_type"]]
+    assert attack_rows
+    for row in attack_rows:
+        gt = json.loads((out / row["bundle_path"] / "scenario.gt.json").read_text())
+        _assert_attack_plan_metadata(gt["attack_plan"])
+
     collaboration = next(
         row for row in index["rows"] if row["attack_mode"] == "collaboration"
     )
@@ -828,6 +896,10 @@ def test_materialized_audit_challenge_rows_include_task_schema_contract(
     for row in index["rows"]:
         gt = json.loads((out / row["bundle_path"] / "scenario.gt.json").read_text())
         manifest = gt["construction_manifest"]
+        attack_plan = gt["attack_plan"]
+        _assert_attack_plan_metadata(attack_plan)
+        assert attack_plan["attack_intensity"] == "stress"
+        assert attack_plan["attacker_control"] == "seeded_challenge"
         assert manifest["task_schema_version"] == "clawsocialarena-task-v0"
         assert manifest["construction_mode"] == "audit_challenge"
         assert manifest["actors"]

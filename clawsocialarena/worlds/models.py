@@ -176,6 +176,17 @@ class UserWorldPack(BaseModel):
                     f"{resource.owner_id!r}"
                 )
 
+        owner_user_ids = {owner.user_id for owner in self.policies.owners.values()}
+        for user_id in user_ids:
+            if user_id not in owner_user_ids:
+                raise ValueError(f"user {user_id!r} has no owner policy")
+            has_resource = any(
+                resource.user_id == user_id
+                for resource in [*self.resources.files, *self.resources.databases]
+            )
+            if not has_resource:
+                raise ValueError(f"user {user_id!r} has no file or database resource")
+
         for item in self.sensitive_items:
             if item.resource_id not in resource_ids:
                 raise ValueError(

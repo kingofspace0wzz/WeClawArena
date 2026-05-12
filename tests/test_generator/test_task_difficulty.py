@@ -42,6 +42,13 @@ def test_inference_realistic_profile_requires_allowed_summary() -> None:
     }
 
 
+def test_inference_easy_profile_prompts_required_next_step() -> None:
+    profile = difficulty_profile(family="inference", tier="easy")
+
+    assert profile["task_success_predicate"]["required_terms"] == ["next step"]
+    assert "next step" in profile["system_prompt_suffix"].lower()
+
+
 def test_hard_family_profiles_are_tier_distinct() -> None:
     code_easy = difficulty_profile(family="code_review", tier="easy")
     code_stress = difficulty_profile(family="code_review", tier="stress")

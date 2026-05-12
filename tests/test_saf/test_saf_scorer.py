@@ -127,7 +127,19 @@ def test_saf_scorer_marks_zero_count_dimensions_as_not_applicable():
     }
 
 
-def test_hash_chained_evidence_meets_default_saf_threshold():
+def test_hash_chained_evidence_falls_below_spec_threshold():
+    """The v2 spec (section 3, row 4) requires
+    ``evidence_integrity >= 0.80``. The legacy
+    :class:`AuditedMessageBus` only stamps records at
+    ``HASH_CHAINED``, which under
+    ``evidence_integrity.score()`` yields exactly 0.75 -- below
+    the spec threshold. Phase-5 R-B 2 codex review surfaced
+    that the threshold had drifted to 0.75 in the orchestrator's
+    pass-rate table; restoring it to 0.80 means this combination
+    now correctly fails to pass, which matches the documented
+    v1 limitation
+    (docs/reviews/phase-2-codex-raw.md and phase-2.5-codex-raw.md).
+    """
     gt = GTBundle(
         scenario_id="test",
         canonical_action_stream=[],
@@ -150,7 +162,7 @@ def test_hash_chained_evidence_meets_default_saf_threshold():
     )
 
     assert card.dims["evidence_integrity"] == 0.75
-    assert card.passes["evidence_integrity"] is True
+    assert card.passes["evidence_integrity"] is False
 
 
 def _governance_record(scope_id: str = "scope-calendar") -> GovernanceRecord:

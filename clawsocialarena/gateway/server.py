@@ -16,6 +16,7 @@ the ``ActionLog`` and ``ShadowLog`` have somewhere to land.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from aiohttp import web
@@ -63,6 +64,18 @@ def _build_default_session(args: argparse.Namespace) -> Session:
     if gt_path:
         gt = GTBundle.model_validate_json(Path(gt_path).read_text(encoding="utf-8"))
     resource_root = getattr(args, "resource_root", None)
+    family_id = getattr(args, "family_id", None)
+    scenario_path = getattr(args, "scenario_path", None)
+    if not family_id and scenario_path:
+        scenario_blob = json.loads(Path(scenario_path).read_text(encoding="utf-8"))
+        if isinstance(scenario_blob, dict):
+            family_id = scenario_blob.get("family_id") or None
+    family_pack_context_path = getattr(args, "family_pack_context_path", None)
+    family_pack_context: dict | None = None
+    if family_pack_context_path:
+        family_pack_context = json.loads(
+            Path(family_pack_context_path).read_text(encoding="utf-8")
+        )
     return Session.build(
         scenario_id=args.scenario_id,
         condition=condition,
@@ -72,6 +85,8 @@ def _build_default_session(args: argparse.Namespace) -> Session:
         governance_manifest=gt.governance_manifest if gt is not None else None,
         resource_manifest=gt.resource_manifest if gt is not None else None,
         resource_root=resource_root,
+        family_id=family_id,
+        family_pack_context=family_pack_context,
     )
 
 
@@ -110,6 +125,21 @@ def main(argv: list[str] | None = None) -> None:
         "--resource-root",
         default=None,
         help="Optional scenario resources directory mounted into the gateway container.",
+    )
+    parser.add_argument(
+        "--scenario-path",
+        default=None,
+        help="Optional scenario.json path read to auto-detect family_id when --family-id is omitted.",
+    )
+    parser.add_argument(
+        "--family-id",
+        default=None,
+        help="Family pack id (e.g. tau2_retail). When set, the corresponding MCP tool handlers are registered automatically.",
+    )
+    parser.add_argument(
+        "--family-pack-context-path",
+        default=None,
+        help="Optional JSON file overriding the family pack context (e.g. household_id, primary_owner_id).",
     )
     args = parser.parse_args(argv)
 

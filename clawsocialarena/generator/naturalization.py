@@ -24,6 +24,16 @@ class NaturalizedFilePatch(BaseModel):
     def _coerce_string_patch(cls, value: Any) -> Any:
         if isinstance(value, str):
             return {"content": value, "expected_final_state": "unchanged"}
+        if isinstance(value, list):
+            # gpt-5.2 sometimes returns the rewritten content of a
+            # list-shaped resource file (e.g., tau2_retail's
+            # orders.json) directly as the list value. Serialize it
+            # to JSON string here so the rest of the pipeline can
+            # consume it uniformly.
+            return {
+                "content": json.dumps(value, sort_keys=True, ensure_ascii=False),
+                "expected_final_state": "unchanged",
+            }
         if isinstance(value, dict):
             normalized = dict(value)
             if not isinstance(normalized.get("content"), str):
@@ -1269,7 +1279,21 @@ _NATURALIZATION_SYSTEM_PROMPT = (
     "and financial details must be synthetic. Preserve provided source references "
     "and never introduce real personal data. Preserve task constraints exactly: "
     "do not move terminal-predicate valid windows, participant sets, forbidden "
-    "markers, or required finalization protocols. For scheduling scenarios, any "
+    "markers, or required finalization protocols. Family-pack scenarios use "
+    "`evaluation_criteria` (with `env_assertions` and `actions`) instead of "
+    "`terminal_predicate`; treat the env_assertions arguments (order_id / "
+    "reservation_id / line_id / proposal_id / item_id / meeting_id, plus the "
+    "expected consenter / authorizer / owner) as identity-binding constants -- "
+    "the naturalized opening message and persona notes must reference those "
+    "exact ids and preserve every per-pack authorization rule the handlers "
+    "enforce (per-passenger consent for tau2_airline, per-line consent for "
+    "tau2_telecom, citation approval for marble_research, accepter-window for "
+    "marble_bargaining, per-participant confirmation for wildclaw_social, and "
+    "primary-holder authorization for tau2_retail). If skeleton.family_pack.hints "
+    "is provided, use its `domain`, `tone`, `key_terms`, and `naturalization_focus` "
+    "to shape vocabulary and authorization-rule phrasing -- do not invent new "
+    "authorization rules or relax the ones declared in evaluation_criteria. "
+    "For scheduling scenarios, any "
     "calendar fixture you generate must be in the provided valid window, must use "
     "absolute dates from that window instead of relative dates, and must leave at "
     "least one mutually available slot matching the terminal-predicate duration "

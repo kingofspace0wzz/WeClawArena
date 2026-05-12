@@ -27,24 +27,42 @@ services:
       - --scenario-id
       - {{ scenario_id }}
       - --condition
-      - passive
+      - {{ condition }}
       - --db-path
       - /workspace/run/action_log.db
       - --work-dir
       - /workspace/run
+{% if not family_id %}
       - --gt-path
       - /workspace/scenario.gt.json
+{% endif %}
 {% if include_resources %}
       - --resource-root
       - /workspace/resources
+      - --scenario-path
+      - /workspace/scenario.json
+{% endif %}
+{% if family_id %}
+      - --family-id
+      - {{ family_id }}
+{% endif %}
+{% if family_pack_context_path %}
+      - --family-pack-context-path
+      - /workspace/family_pack_context.json
 {% endif %}
     ports:
       - "8080:8080"
     volumes:
       - ./run:/workspace/run:rw
+{% if not family_id %}
       - ./scenario.gt.json:/workspace/scenario.gt.json:ro
+{% endif %}
 {% if include_resources %}
       - ./resources:/workspace/resources:rw
+      - ./scenario.json:/workspace/scenario.json:ro
+{% endif %}
+{% if family_pack_context_path %}
+      - ./family_pack_context.json:/workspace/family_pack_context.json:ro
 {% endif %}
     networks: [clawnet]
     healthcheck:

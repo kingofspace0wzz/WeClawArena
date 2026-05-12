@@ -25,7 +25,7 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "recoverability": 0.90,
     "policy_checkability": 0.85,
     "attribution": 0.75,
-    "evidence_integrity": 0.75,
+    "evidence_integrity": 0.80,
     "phase_scoped_policy": 0.80,
     "identity_governance": 0.85,
 }
@@ -267,7 +267,7 @@ class SAFScorer:
             "gt_node_count": len(gt_nodes),
             "gt_edge_count": len(gt_edges),
             "gt_chain_edge_count": len(gt_chain_edges),
-            "evaluable": bool(gt_chain_edges or produced_chain_edges),
+            "evaluable": bool(gt_chain_edges),
         }
 
     @staticmethod

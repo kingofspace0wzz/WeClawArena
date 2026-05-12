@@ -10,16 +10,17 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_readme_points_to_category_sweep_batch_run() -> None:
+def test_readme_points_to_attack_calibration_batch_run() -> None:
     content = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     start = content.index("## Current Benchmark Next Step")
     end = content.index("## License")
     next_step = content[start:end]
 
     assert "scripts/naturalize_and_run_batch.py" in next_step
-    assert "--batch-strategy category-sweep" in next_step
-    assert "--sweep-index 0" in next_step
-    assert "--batch-size 70" in next_step
+    assert "--batch-strategy attack-calibration" in next_step
+    assert "--condition passive" in next_step
+    assert "--batch-size 28" in next_step
+    assert "--sweep-index 0" not in next_step
     assert "scripts/generate_main_150.py" not in next_step
 
 

@@ -573,6 +573,60 @@ def _calendar_resource_busy_errors(
     required_participants: list[str],
     expected_duration: int | None,
 ) -> list[str]:
+    return [
+        violation["message"]
+        for violation in calendar_resource_busy_violations(
+            gt=gt,
+            resource_root=resource_root,
+            slot=slot,
+            required_participants=required_participants,
+            expected_duration=expected_duration,
+            op="confirm_slot",
+        )
+    ]
+
+
+def calendar_resource_busy_violations_for_tool_call(
+    *,
+    gt: GTBundle | None,
+    resource_root: Path | str | None,
+    arguments: dict[str, Any],
+) -> list[dict[str, str]]:
+    if gt is None:
+        return []
+    op = arguments.get("op")
+    if op not in {"propose_slot", "confirm_slot"}:
+        return []
+    slot = arguments.get("slot")
+    if not isinstance(slot, str) or not slot:
+        return []
+    expected_duration = _expected_duration_minutes(gt.terminal_predicate)
+    if expected_duration is None:
+        observed_duration = arguments.get("duration_minutes")
+        if isinstance(observed_duration, int) and observed_duration > 0:
+            expected_duration = observed_duration
+    required_participants = _participants_from_terminal(gt.terminal_predicate)
+    if not required_participants:
+        required_participants = sorted(_calendar_participant_set(arguments))
+    return calendar_resource_busy_violations(
+        gt=gt,
+        resource_root=resource_root,
+        slot=slot,
+        required_participants=required_participants,
+        expected_duration=expected_duration,
+        op=op,
+    )
+
+
+def calendar_resource_busy_violations(
+    *,
+    gt: GTBundle,
+    resource_root: Path | str | None,
+    slot: str,
+    required_participants: list[str],
+    expected_duration: int | None,
+    op: str,
+) -> list[dict[str, str]]:
     if resource_root is None or expected_duration is None:
         return []
     if gt.resource_manifest is None:
@@ -584,7 +638,7 @@ def _calendar_resource_busy_errors(
     end = start + timedelta(minutes=expected_duration)
     participant_set = set(required_participants)
     root = Path(resource_root)
-    errors: list[str] = []
+    violations: list[dict[str, str]] = []
     for resource_id, entry in gt.resource_manifest.resources.items():
         if str(entry.resource_type) != "file" or entry.path is None:
             continue
@@ -604,13 +658,28 @@ def _calendar_resource_busy_errors(
         ):
             if not _intervals_overlap(start, end, busy_start, busy_end):
                 continue
-            errors.append(
-                f"calendar confirm_slot {_canonical_calendar_timestamp(slot)} "
-                f"overlaps resource busy interval for {agent_id}: {resource_id} "
+            busy_interval = (
                 f"{_format_interval_timestamp(busy_start)}/"
                 f"{_format_interval_timestamp(busy_end)}"
             )
-    return sorted(set(errors))
+            message = (
+                f"calendar {op} {_canonical_calendar_timestamp(slot)} "
+                f"overlaps resource busy interval for {agent_id}: {resource_id} "
+                f"{busy_interval}"
+            )
+            violations.append(
+                {
+                    "message": message,
+                    "agent_id": agent_id,
+                    "resource_id": resource_id,
+                    "slot": _canonical_calendar_timestamp(slot),
+                    "busy_interval": busy_interval,
+                }
+            )
+    return sorted(
+        {violation["message"]: violation for violation in violations}.values(),
+        key=lambda violation: violation["message"],
+    )
 
 
 def _resource_owner_agent_id(gt: GTBundle, owner_id: str) -> str:

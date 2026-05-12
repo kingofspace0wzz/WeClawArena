@@ -1,3 +1,4 @@
+from collections import Counter
 import json
 from pathlib import Path
 import sqlite3
@@ -27,6 +28,86 @@ def test_batch_cli_dry_run_writes_zero_cost_report(tmp_path: Path) -> None:
     assert report["batch_id"] == "batch-0001"
     assert report["decision"] == "STOP_FOR_REVIEW"
     assert report["usage"]["total_estimated_cost_usd"] == 0.0
+
+
+def test_batch_cli_dry_run_records_requested_condition(tmp_path: Path) -> None:
+    out = tmp_path / "batches"
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--dry-run",
+            "--batch-id",
+            "batch-0001",
+            "--batch-size",
+            "10",
+            "--condition",
+            "enforce",
+            "--out",
+            str(out),
+        ]
+    )
+
+    assert rc == 0
+    report = json.loads((out / "batch-0001" / "batch_report.json").read_text())
+    assert report["condition"] == "enforce"
+
+
+def test_batch_cli_dry_run_writes_attack_calibration_selection_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    out = tmp_path / "batches"
+    inputs = [
+        BatchScenarioInput(
+            scenario_id="scenario-attack-001",
+            bundle_dir=tmp_path / "scenario-attack-001",
+            skeleton_payload={
+                "index_row": {
+                    "scenario_id": "scenario-attack-001",
+                    "stratum": "main",
+                    "category": "Cross-User agent-to-agent",
+                    "family": "Scheduling",
+                    "base_task_id": "base-001",
+                    "attack_mode": "privacy",
+                    "designed_difficulty_tier": "stress",
+                },
+                "scenario": {"scenario_id": "scenario-attack-001"},
+            },
+        )
+    ]
+
+    def fake_load_inputs(**kwargs):
+        assert kwargs["batch_strategy"] == "attack-calibration"
+        assert kwargs["batch_size"] == 1
+        return inputs
+
+    monkeypatch.setattr(naturalize_and_run_batch, "load_batch_inputs", fake_load_inputs)
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--dry-run",
+            "--batch-id",
+            "batch-attack-dryrun",
+            "--batch-size",
+            "1",
+            "--batch-strategy",
+            "attack-calibration",
+            "--condition",
+            "passive",
+            "--out",
+            str(out),
+        ]
+    )
+
+    assert rc == 0
+    batch_dir = out / "batch-attack-dryrun"
+    selection = json.loads((batch_dir / "batch_selection.json").read_text())
+    report = json.loads((batch_dir / "batch_report.json").read_text())
+    assert selection["scenario_ids"] == ["scenario-attack-001"]
+    assert selection["selection_strategy"] == "attack-calibration"
+    assert selection["task_distribution"]["attack_mode_counts"] == {"privacy": 1}
+    assert report["scenario_ids"] == ["scenario-attack-001"]
+    assert report["task_distribution"]["designed_difficulty_counts"] == {"stress": 1}
 
 
 def test_batch_cli_requires_api_key_for_paid_run(tmp_path: Path, monkeypatch) -> None:
@@ -410,12 +491,12 @@ def test_batch_cli_paid_run_writes_report_with_mocked_naturalization(
                 },
                 "construction_metadata": {
                     "naturalization_mode": "llm",
-                    "naturalization_model": "gpt-5",
+                    "naturalization_model": kwargs["model"],
                     "prompt_hash": "sha256:prompt",
                     "cache_key": "sha256:cache",
                 },
                 "usage": {
-                    "model": "gpt-5",
+                    "model": kwargs["model"],
                     "input_tokens": 100,
                     "cached_input_tokens": 10,
                     "output_tokens": 50,
@@ -721,6 +802,323 @@ def test_load_batch_inputs_category_sweep_selects_complete_blocks_across_cells(
     ] == attack_modes
 
 
+def test_attack_calibration_batch_strategy_selects_adversarial_rows(
+    tmp_path: Path,
+) -> None:
+    scenario_root = tmp_path / "scenarios"
+    scenario_root.mkdir()
+    categories = ["CU", "MC", "EC", "IP", "SA", "GC", "PF"]
+    attack_modes = ["collaboration", "security", "privacy", "governance"]
+    rows = []
+    for category in categories:
+        for mode_index, attack_mode in enumerate(
+            ["no_attacker", *attack_modes, "malformed"]
+        ):
+            for option_index in range(2):
+                scenario_id = (
+                    f"{category.lower()}-{attack_mode}-option-{option_index}"
+                )
+                bundle = scenario_root / "main" / scenario_id
+                bundle.mkdir(parents=True)
+                (bundle / "scenario.json").write_text(
+                    json.dumps(
+                        {
+                            "scenario_id": scenario_id,
+                            "category": category,
+                            "task_family": "scheduling",
+                            "agents": [],
+                            "initial_state": {},
+                            "max_turns": 1,
+                            "opening_message": {
+                                "from": "a",
+                                "to": "b",
+                                "content": "x",
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (bundle / "scenario.gt.json").write_text(
+                    json.dumps({"scenario_id": scenario_id, "terminal_predicate": {}}),
+                    encoding="utf-8",
+                )
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "stratum": "main",
+                        "category": category,
+                        "family": "scheduling",
+                        "base_task_id": f"{category.lower()}-task-{mode_index}",
+                        "attack_mode": attack_mode,
+                        "designed_difficulty_tier": "stress",
+                        "bundle_path": f"main/{scenario_id}",
+                    }
+                )
+        excluded_id = f"{category.lower()}-security-realistic"
+        bundle = scenario_root / "main" / excluded_id
+        bundle.mkdir(parents=True)
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "scenario_id": excluded_id,
+                    "category": category,
+                    "task_family": "scheduling",
+                    "agents": [],
+                    "initial_state": {},
+                    "max_turns": 1,
+                    "opening_message": {"from": "a", "to": "b", "content": "x"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (bundle / "scenario.gt.json").write_text(
+            json.dumps({"scenario_id": excluded_id, "terminal_predicate": {}}),
+            encoding="utf-8",
+        )
+        rows.append(
+            {
+                "scenario_id": excluded_id,
+                "stratum": "main",
+                "category": category,
+                "family": "scheduling",
+                "base_task_id": f"{category.lower()}-excluded",
+                "attack_mode": "security",
+                "designed_difficulty_tier": "realistic",
+                "bundle_path": f"main/{excluded_id}",
+            }
+        )
+    (scenario_root / "index.json").write_text(
+        json.dumps({"rows": rows}),
+        encoding="utf-8",
+    )
+
+    inputs = naturalize_and_run_batch.load_batch_inputs(
+        scenario_root=scenario_root,
+        batch_size=28,
+        batch_strategy="attack-calibration",
+        sweep_index=1,
+    )
+
+    selected_rows = [item.skeleton_payload["index_row"] for item in inputs]
+    assert len(selected_rows) == 28
+    assert {row["category"] for row in selected_rows} == set(categories)
+    assert {row["attack_mode"] for row in selected_rows} == set(attack_modes)
+    assert {row["stratum"] for row in selected_rows} == {"main"}
+    assert {row["designed_difficulty_tier"] for row in selected_rows} == {"stress"}
+    assert all("option-1" in row["scenario_id"] for row in selected_rows)
+    assert Counter(row["category"] for row in selected_rows) == {
+        category: 4 for category in categories
+    }
+    assert Counter(row["attack_mode"] for row in selected_rows) == {
+        attack_mode: 7 for attack_mode in attack_modes
+    }
+
+
+def test_attack_calibration_batch_strategy_balances_larger_batches(
+    tmp_path: Path,
+) -> None:
+    scenario_root = tmp_path / "scenarios"
+    scenario_root.mkdir()
+    categories = ["CU", "MC", "EC", "IP", "SA", "GC", "PF"]
+    attack_modes = ["collaboration", "security", "privacy", "governance"]
+    rows = []
+    for category in categories:
+        for attack_mode in attack_modes:
+            for option_index in range(3):
+                scenario_id = (
+                    f"{category.lower()}-{attack_mode}-stress-option-{option_index}"
+                )
+                bundle = scenario_root / "main" / scenario_id
+                bundle.mkdir(parents=True)
+                (bundle / "scenario.json").write_text(
+                    json.dumps(
+                        {
+                            "scenario_id": scenario_id,
+                            "category": category,
+                            "task_family": "scheduling",
+                            "agents": [],
+                            "initial_state": {},
+                            "max_turns": 1,
+                            "opening_message": {
+                                "from": "a",
+                                "to": "b",
+                                "content": "x",
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (bundle / "scenario.gt.json").write_text(
+                    json.dumps({"scenario_id": scenario_id, "terminal_predicate": {}}),
+                    encoding="utf-8",
+                )
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "stratum": "main",
+                        "category": category,
+                        "family": "scheduling",
+                        "base_task_id": f"{category.lower()}-{attack_mode}-{option_index}",
+                        "attack_mode": attack_mode,
+                        "designed_difficulty_tier": "stress",
+                        "bundle_path": f"main/{scenario_id}",
+                    }
+                )
+    (scenario_root / "index.json").write_text(
+        json.dumps({"rows": rows}),
+        encoding="utf-8",
+    )
+
+    inputs = naturalize_and_run_batch.load_batch_inputs(
+        scenario_root=scenario_root,
+        batch_size=70,
+        batch_strategy="attack-calibration",
+        sweep_index=2,
+    )
+
+    selected_rows = [item.skeleton_payload["index_row"] for item in inputs]
+    assert len(selected_rows) == 70
+    assert len({row["scenario_id"] for row in selected_rows}) == 70
+    assert Counter(row["category"] for row in selected_rows) == {
+        category: 10 for category in categories
+    }
+    assert sorted(Counter(row["attack_mode"] for row in selected_rows).values()) == [
+        17,
+        17,
+        18,
+        18,
+    ]
+    cell_counts = Counter(
+        (row["category"], row["attack_mode"]) for row in selected_rows
+    )
+    assert min(cell_counts.values()) == 2
+    assert max(cell_counts.values()) == 3
+
+
+def test_attack_calibration_batch_strategy_rejects_underfilled_cells(
+    tmp_path: Path,
+) -> None:
+    scenario_root = tmp_path / "scenarios"
+    scenario_root.mkdir()
+    categories = ["CU", "MC", "EC", "IP", "SA", "GC", "PF"]
+    attack_modes = ["collaboration", "security", "privacy", "governance"]
+    rows = []
+    for category in categories:
+        for attack_mode in attack_modes:
+            option_count = 1 if (category, attack_mode) == ("CU", "collaboration") else 3
+            for option_index in range(option_count):
+                scenario_id = (
+                    f"{category.lower()}-{attack_mode}-stress-option-{option_index}"
+                )
+                bundle = scenario_root / "main" / scenario_id
+                bundle.mkdir(parents=True)
+                (bundle / "scenario.json").write_text(
+                    json.dumps(
+                        {
+                            "scenario_id": scenario_id,
+                            "category": category,
+                            "task_family": "scheduling",
+                            "agents": [],
+                            "initial_state": {},
+                            "max_turns": 1,
+                            "opening_message": {
+                                "from": "a",
+                                "to": "b",
+                                "content": "x",
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (bundle / "scenario.gt.json").write_text(
+                    json.dumps({"scenario_id": scenario_id, "terminal_predicate": {}}),
+                    encoding="utf-8",
+                )
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "stratum": "main",
+                        "category": category,
+                        "family": "scheduling",
+                        "base_task_id": f"{category.lower()}-{attack_mode}-{option_index}",
+                        "attack_mode": attack_mode,
+                        "designed_difficulty_tier": "stress",
+                        "bundle_path": f"main/{scenario_id}",
+                    }
+                )
+    (scenario_root / "index.json").write_text(
+        json.dumps({"rows": rows}),
+        encoding="utf-8",
+    )
+
+    try:
+        naturalize_and_run_batch.load_batch_inputs(
+            scenario_root=scenario_root,
+            batch_size=70,
+            batch_strategy="attack-calibration",
+        )
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected underfilled attack-calibration cell to fail")
+
+    assert "CU/collaboration has 1, needs 3" in message
+
+
+def test_load_batch_inputs_selects_scenario_ids_file_in_order(
+    tmp_path: Path,
+) -> None:
+    scenario_root = tmp_path / "scenarios"
+    scenario_root.mkdir()
+    rows = []
+    for scenario_id in ("row-a", "row-b", "row-c"):
+        bundle = scenario_root / "main" / scenario_id
+        bundle.mkdir(parents=True)
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "scenario_id": scenario_id,
+                    "category": "CU",
+                    "task_family": "scheduling",
+                    "agents": [],
+                    "initial_state": {},
+                    "max_turns": 1,
+                    "opening_message": {"from": "a", "to": "b", "content": "x"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (bundle / "scenario.gt.json").write_text(
+            json.dumps({"scenario_id": scenario_id, "terminal_predicate": {}}),
+            encoding="utf-8",
+        )
+        rows.append(
+            {
+                "scenario_id": scenario_id,
+                "stratum": "main",
+                "category": "CU",
+                "family": "scheduling",
+                "base_task_id": scenario_id.removesuffix("-governance"),
+                "attack_mode": "no_attacker",
+                "bundle_path": f"main/{scenario_id}",
+            }
+        )
+    (scenario_root / "index.json").write_text(
+        json.dumps({"rows": rows}),
+        encoding="utf-8",
+    )
+    scenario_ids_file = tmp_path / "scenario_ids.txt"
+    scenario_ids_file.write_text("row-b\nrow-a\n", encoding="utf-8")
+
+    inputs = naturalize_and_run_batch.load_batch_inputs(
+        scenario_root=scenario_root,
+        batch_size=99,
+        scenario_ids_file=scenario_ids_file,
+    )
+
+    assert [item.scenario_id for item in inputs] == ["row-b", "row-a"]
+
+
 def test_batch_cli_writes_selection_and_task_distribution(
     tmp_path: Path,
     monkeypatch,
@@ -830,6 +1228,193 @@ def test_batch_cli_writes_selection_and_task_distribution(
     }
 
 
+def test_batch_cli_writes_attack_calibration_sweep_index(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(naturalize_and_run_batch, "docker_available", lambda: True)
+    inputs = [
+        BatchScenarioInput(
+            scenario_id=f"scenario-{index:03d}",
+            bundle_dir=tmp_path / f"scenario-{index:03d}",
+            skeleton_payload={
+                "index_row": {
+                    "scenario_id": f"scenario-{index:03d}",
+                    "stratum": "main",
+                    "category": "CU",
+                    "family": "scheduling",
+                    "base_task_id": f"base-{index:03d}",
+                    "attack_mode": "security",
+                    "designed_difficulty_tier": "stress",
+                },
+                "scenario": {"scenario_id": f"scenario-{index:03d}"},
+            },
+        )
+        for index in range(4)
+    ]
+
+    def fake_load_inputs(
+        *,
+        scenario_root,
+        batch_size,
+        start_index=0,
+        batch_strategy="contiguous",
+        sweep_index=0,
+    ):
+        assert batch_strategy == "attack-calibration"
+        assert sweep_index == 3
+        assert batch_size == 4
+        return inputs
+
+    def fake_runner(**kwargs):
+        return naturalize_and_run_batch.build_batch_report(
+            batch_id=kwargs["batch_id"],
+            scenario_ids=[item.scenario_id for item in kwargs["inputs"]],
+            accepted_scenario_ids=[],
+            failed_scenarios=[],
+            usage=naturalize_and_run_batch.BatchUsage(
+                construction=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["construction_model"]
+                ),
+                simulation=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["agent_model"]
+                ),
+            ),
+            stop_for_review=True,
+            task_distribution=kwargs["task_distribution"],
+        )
+
+    monkeypatch.setattr(naturalize_and_run_batch, "load_batch_inputs", fake_load_inputs)
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "run_naturalization_simulation_batch",
+        fake_runner,
+    )
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--batch-id",
+            "batch-attack",
+            "--batch-size",
+            "4",
+            "--batch-strategy",
+            "attack-calibration",
+            "--sweep-index",
+            "3",
+            "--out",
+            str(tmp_path / "batches"),
+        ]
+    )
+
+    assert rc == 0
+    batch_dir = tmp_path / "batches" / "batch-attack"
+    selection = json.loads((batch_dir / "batch_selection.json").read_text())
+    report = json.loads((batch_dir / "batch_report.json").read_text())
+    assert selection["selection_strategy"] == "attack-calibration"
+    assert selection["sweep_index"] == 3
+    assert selection["task_distribution"]["sweep_index"] == 3
+    assert report["task_distribution"]["sweep_index"] == 3
+
+
+def test_batch_cli_scenario_ids_file_overrides_attack_calibration_sweep_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(naturalize_and_run_batch, "docker_available", lambda: True)
+    scenario_ids_file = tmp_path / "scenario_ids.txt"
+    scenario_ids_file.write_text("scenario-001\nscenario-002\n", encoding="utf-8")
+    inputs = [
+        BatchScenarioInput(
+            scenario_id=f"scenario-{index:03d}",
+            bundle_dir=tmp_path / f"scenario-{index:03d}",
+            skeleton_payload={
+                "index_row": {
+                    "scenario_id": f"scenario-{index:03d}",
+                    "stratum": "main",
+                    "category": "CU",
+                    "family": "scheduling",
+                    "base_task_id": f"base-{index:03d}",
+                    "attack_mode": "security",
+                    "designed_difficulty_tier": "stress",
+                },
+                "scenario": {"scenario_id": f"scenario-{index:03d}"},
+            },
+        )
+        for index in range(1, 3)
+    ]
+
+    def fake_load_inputs(
+        *,
+        scenario_root,
+        batch_size,
+        start_index=0,
+        batch_strategy="contiguous",
+        sweep_index=0,
+        scenario_ids_file=None,
+    ):
+        assert batch_strategy == "attack-calibration"
+        assert sweep_index == 3
+        assert scenario_ids_file == scenario_ids_file_path
+        return inputs
+
+    scenario_ids_file_path = scenario_ids_file
+
+    def fake_runner(**kwargs):
+        return naturalize_and_run_batch.build_batch_report(
+            batch_id=kwargs["batch_id"],
+            scenario_ids=[item.scenario_id for item in kwargs["inputs"]],
+            accepted_scenario_ids=[],
+            failed_scenarios=[],
+            usage=naturalize_and_run_batch.BatchUsage(
+                construction=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["construction_model"]
+                ),
+                simulation=naturalize_and_run_batch.TokenUsage(
+                    model=kwargs["agent_model"]
+                ),
+            ),
+            stop_for_review=True,
+            task_distribution=kwargs["task_distribution"],
+        )
+
+    monkeypatch.setattr(naturalize_and_run_batch, "load_batch_inputs", fake_load_inputs)
+    monkeypatch.setattr(
+        naturalize_and_run_batch,
+        "run_naturalization_simulation_batch",
+        fake_runner,
+    )
+
+    rc = naturalize_and_run_batch.main(
+        [
+            "--batch-id",
+            "batch-file",
+            "--batch-size",
+            "2",
+            "--batch-strategy",
+            "attack-calibration",
+            "--scenario-ids-file",
+            str(scenario_ids_file),
+            "--sweep-index",
+            "3",
+            "--out",
+            str(tmp_path / "batches"),
+        ]
+    )
+
+    assert rc == 0
+    batch_dir = tmp_path / "batches" / "batch-file"
+    selection = json.loads((batch_dir / "batch_selection.json").read_text())
+    report = json.loads((batch_dir / "batch_report.json").read_text())
+    assert selection["selection_strategy"] == "scenario-ids-file"
+    assert selection["scenario_ids_file"] == str(scenario_ids_file)
+    assert selection["sweep_index"] is None
+    assert selection["task_distribution"]["selection_strategy"] == "scenario-ids-file"
+    assert selection["task_distribution"]["sweep_index"] is None
+    assert report["task_distribution"]["sweep_index"] is None
+
+
 def test_batch_cli_naturalizes_once_per_matched_base_task(
     tmp_path: Path,
     monkeypatch,
@@ -883,12 +1468,12 @@ def test_batch_cli_naturalizes_once_per_matched_base_task(
                 },
                 "construction_metadata": {
                     "naturalization_mode": "llm",
-                    "naturalization_model": "gpt-5",
+                    "naturalization_model": kwargs["model"],
                     "prompt_hash": "sha256:prompt",
                     "cache_key": "sha256:cache",
                 },
                 "usage": {
-                    "model": "gpt-5",
+                    "model": kwargs["model"],
                     "input_tokens": 100,
                     "cached_input_tokens": 0,
                     "output_tokens": 25,
@@ -1332,12 +1917,12 @@ def test_batch_cli_retries_base_naturalization_until_resource_coverage(
                 },
                 "construction_metadata": {
                     "naturalization_mode": "llm",
-                    "naturalization_model": "gpt-5",
+                    "naturalization_model": kwargs["model"],
                     "prompt_hash": "sha256:prompt",
                     "cache_key": "sha256:cache",
                 },
                 "usage": {
-                    "model": "gpt-5",
+                    "model": kwargs["model"],
                     "input_tokens": 100,
                     "cached_input_tokens": 0,
                     "output_tokens": 25,

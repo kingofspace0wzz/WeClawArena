@@ -18,7 +18,7 @@ def test_require_openai_key_rejects_missing_key(monkeypatch) -> None:
 def test_openai_config_defaults_to_pinned_models() -> None:
     config = OpenAIConfig()
 
-    assert config.construction_model == "gpt-5"
+    assert config.construction_model == "gpt-5.2"
     assert config.agent_model == "gpt-4.1-mini"
 
 

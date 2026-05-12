@@ -57,6 +57,13 @@ MODEL_RATES: dict[str, ModelRate] = {
         source_url="https://developers.openai.com/api/docs/models/gpt-5",
         effective_date="2026-05-02",
     ),
+    "gpt-5.2": ModelRate(
+        input_per_million=1.75,
+        cached_input_per_million=0.175,
+        output_per_million=14.0,
+        source_url="https://platform.openai.com/docs/models/gpt-5.2",
+        effective_date="2026-05-06",
+    ),
     "gpt-4.1-mini": ModelRate(
         input_per_million=0.40,
         cached_input_per_million=0.10,

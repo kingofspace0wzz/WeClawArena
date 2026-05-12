@@ -27,12 +27,21 @@ from clawsocialarena.llm.openai_client import (
 from clawsocialarena.llm.retry import is_transient_llm_error
 from clawsocialarena.simulation.batch_runner import (
     BatchScenarioInput,
+    BatchTaskDistribution,
     BatchUsage,
     _load_existing_naturalization_patch,
     _naturalization_resource_coverage_errors,
     build_task_distribution,
     build_batch_report,
     run_naturalization_simulation_batch,
+)
+
+
+ATTACK_CALIBRATION_MODES = (
+    "collaboration",
+    "security",
+    "privacy",
+    "governance",
 )
 
 
@@ -45,8 +54,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument(
+        "--scenario-ids-file",
+        type=Path,
+        default=None,
+        help="Optional newline-delimited scenario IDs to run in file order.",
+    )
+    parser.add_argument(
         "--batch-strategy",
-        choices=("contiguous", "category-sweep"),
+        choices=("contiguous", "category-sweep", "attack-calibration"),
         default="contiguous",
     )
     parser.add_argument("--sweep-index", type=int, default=0)
@@ -59,6 +74,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-cost-usd", type=float, default=25.0)
     parser.add_argument("--construction-model", default=defaults.construction_model)
     parser.add_argument("--agent-model", default=defaults.agent_model)
+    parser.add_argument(
+        "--condition",
+        choices=("baseline", "passive", "enforce"),
+        default="passive",
+        help="Audit-layer condition to use for every scenario in this batch.",
+    )
     parser.add_argument("--naturalization-attempts", type=int, default=3)
     parser.add_argument("--simulation-attempts", type=int, default=2)
     parser.add_argument("--resume-existing", action="store_true")
@@ -95,28 +116,18 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         batch_dir = args.out / args.batch_id
         inputs = _load_inputs_for_args(args)
+        selection_strategy = _selection_strategy_for_args(args)
         task_distribution = build_task_distribution(
             inputs,
-            selection_strategy=args.batch_strategy,
-            sweep_index=args.sweep_index
-            if args.batch_strategy == "category-sweep"
-            else None,
+            selection_strategy=selection_strategy,
+            sweep_index=_selection_sweep_index(args, selection_strategy),
         )
-        _write_report(
-            batch_dir / "batch_selection.json",
-            {
-                "batch_id": args.batch_id,
-                "selection_strategy": args.batch_strategy,
-                "start_index": args.start_index,
-                "sweep_index": args.sweep_index
-                if args.batch_strategy == "category-sweep"
-                else None,
-                "scenario_ids": [item.scenario_id for item in inputs],
-                "base_task_ids": list(
-                    dict.fromkeys(_base_task_id(item) for item in inputs)
-                ),
-                "task_distribution": task_distribution.model_dump(mode="json"),
-            },
+        _write_batch_selection(
+            batch_dir=batch_dir,
+            args=args,
+            inputs=inputs,
+            selection_strategy=selection_strategy,
+            task_distribution=task_distribution,
         )
         client = OpenAIResponsesJsonClient()
         base_task_groups = _base_task_input_groups(inputs)
@@ -181,12 +192,34 @@ def main(argv: list[str] | None = None) -> int:
             reuse_passed_simulations=not args.rerun_simulations,
             simulation_attempts=args.simulation_attempts,
             task_distribution=task_distribution,
+            condition=args.condition,
         )
         _write_report(batch_dir / "batch_report.json", report.model_dump(mode="json"))
         print(report.decision)
         return 0
 
-    scenario_ids = [f"pilot-placeholder-{idx:02d}" for idx in range(args.batch_size)]
+    batch_dir = args.out / args.batch_id
+    dry_task_distribution: BatchTaskDistribution | None = None
+    base_task_ids: list[str] | None = None
+    if _dry_run_should_validate_selection(args):
+        inputs = _load_inputs_for_args(args)
+        selection_strategy = _selection_strategy_for_args(args)
+        dry_task_distribution = build_task_distribution(
+            inputs,
+            selection_strategy=selection_strategy,
+            sweep_index=_selection_sweep_index(args, selection_strategy),
+        )
+        _write_batch_selection(
+            batch_dir=batch_dir,
+            args=args,
+            inputs=inputs,
+            selection_strategy=selection_strategy,
+            task_distribution=dry_task_distribution,
+        )
+        scenario_ids = [item.scenario_id for item in inputs]
+        base_task_ids = _base_task_ids_for_inputs(inputs)
+    else:
+        scenario_ids = [f"pilot-placeholder-{idx:02d}" for idx in range(args.batch_size)]
     report = build_batch_report(
         batch_id=args.batch_id,
         scenario_ids=scenario_ids,
@@ -196,9 +229,12 @@ def main(argv: list[str] | None = None) -> int:
             construction=TokenUsage(model=args.construction_model),
             simulation=TokenUsage(model=args.agent_model),
         ),
+        condition=args.condition,
         stop_for_review=True,
+        task_distribution=dry_task_distribution,
+        base_task_ids=base_task_ids,
     )
-    report_path = args.out / args.batch_id / "batch_report.json"
+    report_path = batch_dir / "batch_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
         report.model_dump_json(indent=2) + "\n",
@@ -208,6 +244,62 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _selection_strategy_for_args(args: argparse.Namespace) -> str:
+    return (
+        "scenario-ids-file"
+        if args.scenario_ids_file is not None
+        else args.batch_strategy
+    )
+
+
+def _selection_sweep_index(
+    args: argparse.Namespace,
+    selection_strategy: str,
+) -> int | None:
+    return (
+        args.sweep_index
+        if _selection_strategy_uses_sweep_index(selection_strategy)
+        else None
+    )
+
+
+def _dry_run_should_validate_selection(args: argparse.Namespace) -> bool:
+    return args.scenario_ids_file is not None or args.batch_strategy in {
+        "category-sweep",
+        "attack-calibration",
+    }
+
+
+def _write_batch_selection(
+    *,
+    batch_dir: Path,
+    args: argparse.Namespace,
+    inputs: list[BatchScenarioInput],
+    selection_strategy: str,
+    task_distribution: BatchTaskDistribution,
+) -> None:
+    _write_report(
+        batch_dir / "batch_selection.json",
+        {
+            "batch_id": args.batch_id,
+            "selection_strategy": selection_strategy,
+            "scenario_ids_file": str(args.scenario_ids_file)
+            if args.scenario_ids_file is not None
+            else None,
+            "start_index": args.start_index,
+            "sweep_index": _selection_sweep_index(args, selection_strategy),
+            "condition": args.condition,
+            "scenario_ids": [item.scenario_id for item in inputs],
+            "base_task_ids": _base_task_ids_for_inputs(inputs),
+            "task_distribution": task_distribution.model_dump(mode="json"),
+        },
+    )
+
+
+def _base_task_ids_for_inputs(inputs: list[BatchScenarioInput]) -> list[str]:
+    return list(dict.fromkeys(_base_task_id(item) for item in inputs))
+
+
 def load_batch_inputs(
     *,
     scenario_root: Path,
@@ -215,6 +307,7 @@ def load_batch_inputs(
     start_index: int = 0,
     batch_strategy: str = "contiguous",
     sweep_index: int = 0,
+    scenario_ids_file: Path | None = None,
 ) -> list[BatchScenarioInput]:
     return _load_batch_inputs(
         scenario_root=scenario_root,
@@ -222,11 +315,21 @@ def load_batch_inputs(
         start_index=start_index,
         batch_strategy=batch_strategy,
         sweep_index=sweep_index,
+        scenario_ids_file=scenario_ids_file,
     )
 
 
 def _load_inputs_for_args(args: argparse.Namespace) -> list[BatchScenarioInput]:
-    if args.batch_strategy == "category-sweep":
+    if args.scenario_ids_file is not None:
+        return load_batch_inputs(
+            scenario_root=args.scenario_root,
+            batch_size=args.batch_size,
+            start_index=args.start_index,
+            batch_strategy=args.batch_strategy,
+            sweep_index=args.sweep_index,
+            scenario_ids_file=args.scenario_ids_file,
+        )
+    if args.batch_strategy in {"category-sweep", "attack-calibration"}:
         return load_batch_inputs(
             scenario_root=args.scenario_root,
             batch_size=args.batch_size,
@@ -248,13 +351,19 @@ def _load_batch_inputs(
     start_index: int,
     batch_strategy: str,
     sweep_index: int,
+    scenario_ids_file: Path | None = None,
 ) -> list[BatchScenarioInput]:
     index_path = scenario_root / "index.json"
     if not index_path.exists():
         raise FileNotFoundError(f"missing scenario index: {index_path}")
     index = _read_json(index_path)
     rows = list(index.get("rows", []))
-    if batch_strategy == "contiguous":
+    if scenario_ids_file is not None:
+        selected = _select_rows_by_scenario_ids_file(
+            rows=rows,
+            scenario_ids_file=scenario_ids_file,
+        )
+    elif batch_strategy == "contiguous":
         selected = rows[start_index : start_index + batch_size]
     elif batch_strategy == "category-sweep":
         selected = _select_category_sweep_rows(
@@ -262,9 +371,15 @@ def _load_batch_inputs(
             batch_size=batch_size,
             sweep_index=sweep_index,
         )
+    elif batch_strategy == "attack-calibration":
+        selected = _select_attack_calibration_rows(
+            rows=rows,
+            batch_size=batch_size,
+            sweep_index=sweep_index,
+        )
     else:
         raise ValueError(f"unsupported batch strategy: {batch_strategy}")
-    if len(selected) < batch_size:
+    if scenario_ids_file is None and len(selected) < batch_size:
         raise ValueError(
             f"requested {batch_size} scenarios from start_index {start_index} "
             f"but only {len(selected)} are available"
@@ -280,6 +395,29 @@ def _load_batch_inputs(
         )
         for row in selected
     ]
+
+
+def _select_rows_by_scenario_ids_file(
+    *,
+    rows: list[dict[str, Any]],
+    scenario_ids_file: Path,
+) -> list[dict[str, Any]]:
+    if not scenario_ids_file.exists():
+        raise FileNotFoundError(f"missing scenario IDs file: {scenario_ids_file}")
+    scenario_ids = [
+        line.strip()
+        for line in scenario_ids_file.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    row_by_id = {
+        str(row.get("scenario_id")): row
+        for row in rows
+        if isinstance(row, dict) and row.get("scenario_id")
+    }
+    missing = [scenario_id for scenario_id in scenario_ids if scenario_id not in row_by_id]
+    if missing:
+        raise ValueError(f"scenario ID not found in index: {missing[0]}")
+    return [row_by_id[scenario_id] for scenario_id in scenario_ids]
 
 
 def _select_category_sweep_rows(
@@ -315,6 +453,119 @@ def _select_category_sweep_rows(
             f"{len(selected)} scenarios; pass --batch-size {len(selected)}"
         )
     return selected
+
+
+def _selection_strategy_uses_sweep_index(selection_strategy: str) -> bool:
+    return selection_strategy in {"category-sweep", "attack-calibration"}
+
+
+def _select_attack_calibration_rows(
+    *,
+    rows: list[dict[str, Any]],
+    batch_size: int,
+    sweep_index: int,
+) -> list[dict[str, Any]]:
+    category_order: list[str] = []
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("stratum") != "main":
+            continue
+        if row.get("designed_difficulty_tier") != "stress":
+            continue
+        category = str(row.get("category") or "")
+        attack_mode = str(row.get("attack_mode") or "")
+        if not category or attack_mode not in ATTACK_CALIBRATION_MODES:
+            continue
+        if category not in category_order:
+            category_order.append(category)
+        grouped.setdefault((category, attack_mode), []).append(row)
+
+    cell_order = _attack_calibration_cell_order(category_order)
+    missing_cells = [cell for cell in cell_order if not grouped.get(cell)]
+    if missing_cells:
+        missing = ", ".join(f"{category}/{mode}" for category, mode in missing_cells)
+        raise ValueError(
+            "attack-calibration missing stress-tier main stratum adversarial "
+            f"rows for category/mode cells: {missing}"
+        )
+
+    required_per_cell = _attack_calibration_required_counts(
+        cell_order=cell_order,
+        batch_size=batch_size,
+    )
+    underfilled_cells = [
+        (cell, required_count, len(grouped[cell]))
+        for cell, required_count in required_per_cell.items()
+        if len(grouped[cell]) < required_count
+    ]
+    if underfilled_cells:
+        details = ", ".join(
+            f"{category}/{mode} has {available}, needs {required}"
+            for (category, mode), required, available in underfilled_cells
+        )
+        raise ValueError(
+            "attack-calibration has insufficient stress-tier main stratum "
+            f"capacity for balanced category/mode cells: {details}"
+        )
+
+    selected: list[dict[str, Any]] = []
+    used_per_cell = {cell: 0 for cell in cell_order}
+    sorted_grouped = {
+        cell: sorted(options, key=lambda row: str(row.get("scenario_id") or ""))
+        for cell, options in grouped.items()
+    }
+    while len(selected) < batch_size:
+        made_progress = False
+        for cell in cell_order:
+            options = sorted_grouped[cell]
+            used_count = used_per_cell[cell]
+            if used_count >= len(options):
+                continue
+            selected.append(options[(sweep_index + used_count) % len(options)])
+            used_per_cell[cell] = used_count + 1
+            made_progress = True
+            if len(selected) == batch_size:
+                break
+        if not made_progress:
+            break
+
+    if len(selected) < batch_size:
+        exhausted_cells = ", ".join(
+            f"{category}/{mode}={used_per_cell[(category, mode)]}"
+            for category, mode in cell_order
+            if used_per_cell[(category, mode)] >= len(sorted_grouped[(category, mode)])
+        )
+        raise ValueError(
+            "attack-calibration selected "
+            f"{len(selected)} scenarios but requested {batch_size}; "
+            "insufficient stress-tier main stratum adversarial rows across "
+            f"balanced category/mode cells. exhausted cells: {exhausted_cells}"
+        )
+    return selected[:batch_size]
+
+
+def _attack_calibration_cell_order(
+    category_order: list[str],
+) -> list[tuple[str, str]]:
+    cells: list[tuple[str, str]] = []
+    for rotation in range(len(ATTACK_CALIBRATION_MODES)):
+        for category_index, category in enumerate(category_order):
+            attack_mode = ATTACK_CALIBRATION_MODES[
+                (category_index + rotation) % len(ATTACK_CALIBRATION_MODES)
+            ]
+            cells.append((category, attack_mode))
+    return cells
+
+
+def _attack_calibration_required_counts(
+    *,
+    cell_order: list[tuple[str, str]],
+    batch_size: int,
+) -> dict[tuple[str, str], int]:
+    counts = {cell: 0 for cell in cell_order}
+    for index in range(batch_size):
+        counts[cell_order[index % len(cell_order)]] += 1
+    return counts
 
 
 def build_skeleton_payload(

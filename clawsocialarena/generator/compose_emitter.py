@@ -33,6 +33,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from clawsocialarena.scenario.models import Scenario
+from clawsocialarena.types import AuditCondition
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 _TEMPLATE_NAME = "compose.yml.j2"
@@ -60,6 +61,9 @@ def emit_compose_yaml(
     *,
     compose_build_root: Path | str | None = None,
     include_resources: bool = False,
+    condition: str | AuditCondition = AuditCondition.PASSIVE,
+    family_id: str | None = None,
+    family_pack_context_path: str | None = None,
 ) -> str:
     """Render `docker-compose.yml` text for the given scenario.
 
@@ -84,15 +88,39 @@ def emit_compose_yaml(
     )
     env = _jinja_env()
     template = env.get_template(_TEMPLATE_NAME)
+    condition_value = (
+        condition.value if isinstance(condition, AuditCondition) else str(condition)
+    )
+    condition_value = AuditCondition(condition_value).value
+    resolved_family_id = family_id if family_id is not None else scenario.family_id
     return template.render(
         scenario_id=scenario.scenario_id,
         build_context=str(root),
         include_resources=include_resources,
-        agents=[
-            {
-                "agent_id": agent.agent_id,
-                "user_id": agent.user_id,
-            }
-            for agent in scenario.agents
-        ],
+        condition=condition_value,
+        agents=_agents_for_compose(scenario),
+        family_id=resolved_family_id,
+        family_pack_context_path=family_pack_context_path,
     )
+
+
+def _agents_for_compose(scenario: Scenario) -> list[dict[str, str]]:
+    """Source agent entries for compose emission.
+
+    Prefers scenario.agent_graph.nodes when present (the topology
+    refactor path defined in
+    docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md).
+    Falls back to scenario.agents for legacy bundles that pre-date the
+    refactor. The output shape is identical so the Jinja template is
+    unchanged.
+    """
+    graph = scenario.agent_graph
+    if graph is not None and graph.nodes:
+        return [
+            {"agent_id": node.agent_id, "user_id": node.owner_id}
+            for node in graph.nodes
+        ]
+    return [
+        {"agent_id": agent.agent_id, "user_id": agent.user_id}
+        for agent in scenario.agents
+    ]

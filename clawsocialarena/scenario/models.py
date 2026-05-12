@@ -24,6 +24,69 @@ class ScenarioAgent(BaseModel):
     default_identity_id: str | None = Field(default=None, min_length=1)
 
 
+class CoordinationMode(StrEnum):
+    """Static topology shape adopted from MARBLE engine.engine.py (lines 200-573).
+
+    Borrowed as a scenario-spec format only; the runtime coordinator is
+    the ClawSocialArena audit gateway, not the MARBLE engine. See the
+    topology design spec at
+    docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md
+    for the shape definitions and mode-to-category mappings.
+    """
+
+    CHAIN = "chain"
+    TREE = "tree"
+    GRAPH = "graph"
+    STAR = "star"
+
+
+class AgentGraphNode(BaseModel):
+    """One participant in the scenario's agent graph.
+
+    Replaces the implicit persona-to-agent mapping inside per-category
+    template Python files. The validator (see
+    clawsocialarena/generator/scenario_validator.py) catches duplicate
+    persona-to-agent mappings (the Camila aliasing seen in batch 0074)
+    by checking owner_id uniqueness.
+    """
+
+    agent_id: str = Field(min_length=1)
+    owner_id: str = Field(min_length=1)
+    persona_source: str = Field(min_length=1)
+    role_label: str = Field(min_length=1)
+    active_identity: str = Field(min_length=1)
+    scope: list[str] = Field(default_factory=list)
+    approval_mandate: str = Field(default="self", min_length=1)
+
+
+class AgentGraphEdge(BaseModel):
+    """One typed relationship between two agent_graph nodes.
+
+    The relationship triple format (source, target, relationship)
+    corresponds to MARBLE's relationship-triple representation. The
+    channel field binds the edge to a specific gateway-mediated channel.
+    """
+
+    source: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    relationship: str = Field(min_length=1)
+    channel: str = Field(min_length=1)
+
+
+class AgentGraph(BaseModel):
+    """Typed declaration of the scenario's topology.
+
+    Replaces the per-category Python templates with declarative config.
+    Consumed by compose_emitter (container layout), governance_emitter
+    (owner / identity / scope fields), persona_emitter (per-agent
+    persona source resolution), and world_pack_instantiation (resource
+    selection by family_id instead of category label).
+    """
+
+    nodes: list[AgentGraphNode] = Field(default_factory=list)
+    edges: list[AgentGraphEdge] = Field(default_factory=list)
+
+
 class Scenario(BaseModel):
     scenario_id: str
     category: str
@@ -32,6 +95,13 @@ class Scenario(BaseModel):
     initial_state: dict[str, Any]
     max_turns: int
     opening_message: dict[str, Any]
+    # Topology fields added in 2026-05-09. Backward compatible: bundles
+    # produced before the topology refactor lack these fields and use the
+    # legacy per-category template path. Bundles produced by family-pack
+    # loaders populate both fields and route through scenario_validator.
+    coordination_mode: CoordinationMode | None = Field(default=None)
+    agent_graph: AgentGraph | None = Field(default=None)
+    family_id: str | None = Field(default=None, min_length=1)
 
 
 class McpToolSpec(BaseModel):

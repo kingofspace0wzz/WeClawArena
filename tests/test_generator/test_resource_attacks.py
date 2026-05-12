@@ -11,6 +11,9 @@ from clawsocialarena.generator.attack_injection import (
     inject_attack,
 )
 from clawsocialarena.generator.template import CategoryCode, TaskFamily, TemplateShape
+from clawsocialarena.generator.templates.cu_scheduling import CUSchedulingTemplate
+from clawsocialarena.generator.world_pack_instantiation import apply_world_pack
+from clawsocialarena.worlds.loader import load_world_pack
 
 
 RESOURCE_ATTACKS = (
@@ -178,3 +181,49 @@ def test_privacy_axis_resource_attack_marks_target_privacy_sensitive() -> None:
     roles = target["metadata"]["world_resource_roles"]
     assert "attack_target" in roles
     assert "privacy_sensitive" in roles
+
+
+def test_resource_attack_plan_declares_resource_recipe_stage_fields() -> None:
+    shape = CUSchedulingTemplate().build(seed=2, scenario_id="cu-resource-recipe")
+    shape = apply_world_pack(
+        shape=shape,
+        pack=load_world_pack(
+            "benchmark/worlds/v1.0.0/world-asb-camila-sanjay-001",
+        ),
+        task_family="scheduling",
+        harm_axis="privacy",
+        resource_selection_axis="matched_block",
+    )
+    injected = inject_attack(
+        shape=shape,
+        attack_type=AttackType.CROSS_USER_FILE_READ,
+        attacker_agent_id=shape.agents[0]["agent_id"],
+        declared_axis="privacy",
+    )
+
+    assert injected.attack_plan["attack_recipe"] == "cross_user_resource_exfiltration"
+    assert injected.attack_plan["delivery_surface"] == "file"
+    assert injected.attack_plan["stage_expectations"]["partial_compromise"] is True
+
+
+@pytest.mark.parametrize(
+    "attack_type",
+    (
+        AttackType.CROSS_USER_FILE_READ,
+        AttackType.SENSITIVE_DB_QUERY,
+        AttackType.APPROVAL_BYPASS,
+    ),
+)
+def test_non_cascade_stress_attacks_keep_zero_cascade_minima(
+    attack_type: AttackType,
+) -> None:
+    injected = inject_attack(
+        shape=_resource_shape(),
+        attack_type=attack_type,
+        attacker_agent_id="mallory",
+        attack_intensity="stress",
+    )
+
+    stage_expectations = injected.attack_plan["stage_expectations"]
+    assert stage_expectations["cascade_depth_min"] == 0
+    assert stage_expectations["cascade_breadth_min"] == 0

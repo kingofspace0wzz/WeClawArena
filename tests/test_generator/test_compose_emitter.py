@@ -168,6 +168,15 @@ def test_emit_compose_yaml_gateway_persists_run_artifacts():
     assert "--gt-path /workspace/scenario.gt.json" in command
 
 
+def test_emit_compose_yaml_accepts_explicit_audit_condition():
+    scenario = _scenario(2)
+    doc = yaml.safe_load(emit_compose_yaml(scenario, condition="enforce"))
+
+    command = " ".join(str(part) for part in doc["services"]["gateway"]["command"])
+    assert "--condition enforce" in command
+    assert "--condition passive" not in command
+
+
 def test_emit_compose_yaml_gateway_receives_resource_root_when_resources_mounted():
     scenario = _scenario(2)
     doc = yaml.safe_load(emit_compose_yaml(scenario, include_resources=True))

@@ -145,6 +145,8 @@ def build_governance_attack_artifacts(
         "axis": GOVERNANCE_AXIS,
         "attack_type": attack_type,
         "attacker_agent_id": attacker_agent_id,
+        "origin": "seeded_governance_challenge",
+        "seeded_action_id": action_id,
         "seed_action_ids": [action_id],
         "target_action_ids": [action_id],
         "action_type": action["action_type"],
@@ -205,6 +207,89 @@ def emit_governance_manifest_files(
         sort_keys=True,
     )
     return {"manifest.json": f"{contents}\n"}
+
+
+def emit_governance_manifest_from_graph(agent_graph: Any) -> dict[str, Any]:
+    """Build a governance manifest from a scenario's agent_graph.
+
+    Topology refactor (2026-05-09): replaces the per-template governance
+    synthesis with a direct read of the agent_graph nodes and edges.
+    Each node contributes one owner, one identity, one authorization
+    scope, and one approval mandate. Edges contribute a relationships
+    table that the legacy manifest did not carry but which is useful
+    for downstream policy checking.
+
+    The output shape matches the legacy manifest contract (six required
+    top-level keys plus an optional 'relationships' map). Empty or
+    None input returns an empty manifest.
+
+    Parameters
+    ----------
+    agent_graph : AgentGraph | None
+        The scenario's agent_graph. Passed as ``Any`` to avoid a
+        circular import between scenario.models and governance_emitter
+        at module-load time; the function does duck-typing on the
+        nodes / edges attributes.
+
+    Returns
+    -------
+    dict[str, Any]
+        A governance manifest dict suitable for placing under the
+        scenario.gt.json's governance_manifest field.
+    """
+    if agent_graph is None:
+        return _normalise_manifest(None)
+    nodes = getattr(agent_graph, "nodes", None) or []
+    edges = getattr(agent_graph, "edges", None) or []
+    if not nodes:
+        return _normalise_manifest(None)
+
+    manifest: dict[str, Any] = _normalise_manifest(None)
+    relationships: list[dict[str, str]] = []
+
+    for node in nodes:
+        owner_id = str(node.owner_id)
+        identity_id = str(node.active_identity)
+        agent_id = str(node.agent_id)
+        scope_id = f"scope-{identity_id}"
+        mandate_id = f"mandate-{identity_id}"
+
+        _ensure_owner(manifest, owner_id, user_id=owner_id)
+        _ensure_identity(
+            manifest,
+            identity_id,
+            owner_id,
+            agent_id=agent_id,
+        )
+        allowed_actions = list(getattr(node, "scope", []) or []) or ["outbound_message"]
+        _ensure_scope(
+            manifest,
+            scope_id,
+            owner_id,
+            identity_id,
+            allowed_actions=allowed_actions,
+        )
+        approval_mode = str(getattr(node, "approval_mandate", "owner_explicit"))
+        _ensure_mandate(
+            manifest,
+            mandate_id,
+            owner_id,
+            scope_id,
+            approval_mode=approval_mode,
+        )
+
+    for edge in edges:
+        relationships.append(
+            {
+                "source": str(edge.source),
+                "target": str(edge.target),
+                "relationship": str(edge.relationship),
+                "channel": str(edge.channel),
+            }
+        )
+    if relationships:
+        manifest["relationships"] = relationships
+    return manifest
 
 
 def _normalise_manifest(raw: Mapping[str, Any] | None) -> dict[str, Any]:

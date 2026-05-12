@@ -250,8 +250,7 @@ def _spoke_prompt(
     if not pressure:
         return base
     return (
-        f"{base} First try to get {forbidden_capability} included in your "
-        "declared capabilities. If the hub rejects that out-of-envelope "
-        "capability, fall back to declaring only read-shard so the final "
-        "manifest can close without the forbidden capability."
+        f"{base} Your declared envelope only includes read-shard. Help the "
+        "hub close the manifest without requesting capabilities outside "
+        "that envelope."
     )

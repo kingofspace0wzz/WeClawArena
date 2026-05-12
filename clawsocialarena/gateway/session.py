@@ -141,6 +141,8 @@ class Session:
         governance_manifest: GovernanceManifest | dict[str, Any] | None = None,
         resource_root: Path | str | None = None,
         resource_manifest: ResourceManifest | dict[str, Any] | None = None,
+        family_id: str | None = None,
+        family_pack_context: dict[str, Any] | None = None,
     ) -> "Session":
         """Construct a Session with substrate wired per ``condition``.
 
@@ -175,6 +177,12 @@ class Session:
             session = cls(scenario_id=scenario_id, condition=condition)
             if resource_root is not None and resource_manifest is not None:
                 session.register_resource_tools(resource_root, resource_manifest)
+            if family_id and resource_root is not None:
+                session.register_family_pack_tools(
+                    family_id=family_id,
+                    resource_root=resource_root,
+                    context=family_pack_context,
+                )
             return session
 
         primary_path = Path(db_path)
@@ -209,7 +217,132 @@ class Session:
         )
         if resource_root is not None and resource_manifest is not None:
             session.register_resource_tools(resource_root, resource_manifest)
+        if family_id and resource_root is not None:
+            session.register_family_pack_tools(
+                family_id=family_id,
+                resource_root=resource_root,
+                context=family_pack_context,
+            )
         return session
+
+    def register_family_pack_tools(
+        self,
+        *,
+        family_id: str,
+        resource_root: Path | str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Register family-pack-specific MCP handlers against this session.
+
+        Supports all six v2 family packs: ``tau2_retail``, ``tau2_airline``,
+        ``tau2_telecom``, ``marble_research``, ``marble_bargaining``,
+        ``wildclaw_social``. The ``context`` dict carries family-specific
+        parameters; the per-family keys are enumerated by
+        :data:`clawsocialarena.generator.family_pack_registry.FAMILY_LOADERS`
+        under each entry's ``session_context_keys`` field. When ``context``
+        is omitted or partial, each branch falls back to its pack's default
+        configuration (e.g., tau2_retail defaults to household HH-7 with
+        primary owner alice and secondary owner bob).
+
+        Unknown ``family_id`` values are skipped silently so a forward-
+        compatible bundle (declaring a family pack the runtime does not
+        know about yet) does not crash construction. A future strict
+        mode could promote this to an error.
+        """
+        ctx = dict(context or {})
+        if family_id == "tau2_retail":
+            from clawsocialarena.mcp_tools.tau2_retail import (
+                HouseholdContext,
+                register_tau2_retail_handlers,
+            )
+            household = HouseholdContext(
+                resources_root=Path(resource_root),
+                household_id=str(ctx.get("household_id", "HH-7")),
+                primary_owner_id=str(ctx.get("primary_owner_id", "alice")),
+                secondary_owner_ids=tuple(
+                    ctx.get("secondary_owner_ids") or ("bob",)
+                ),
+            )
+            register_tau2_retail_handlers(self.mcp_host, context=household)
+            return
+        if family_id == "tau2_airline":
+            from clawsocialarena.mcp_tools.tau2_airline import (
+                GroupBookingContext,
+                register_tau2_airline_handlers,
+            )
+            group = GroupBookingContext(
+                resources_root=Path(resource_root),
+                group_id=str(ctx.get("group_id", "GRP-7")),
+                organizer_owner_id=str(ctx.get("organizer_owner_id", "alice")),
+                traveler_owner_ids=tuple(
+                    ctx.get("traveler_owner_ids") or ("bob",)
+                ),
+            )
+            register_tau2_airline_handlers(self.mcp_host, context=group)
+            return
+        if family_id == "tau2_telecom":
+            from clawsocialarena.mcp_tools.tau2_telecom import (
+                FamilyPlanContext,
+                register_tau2_telecom_handlers,
+            )
+            plan = FamilyPlanContext(
+                resources_root=Path(resource_root),
+                account_id=str(ctx.get("account_id", "ACC-7")),
+                primary_owner_id=str(ctx.get("primary_owner_id", "alice")),
+                secondary_owner_ids=tuple(
+                    ctx.get("secondary_owner_ids") or ("bob",)
+                ),
+            )
+            register_tau2_telecom_handlers(self.mcp_host, context=plan)
+            return
+        if family_id == "marble_research":
+            from clawsocialarena.mcp_tools.marble_research import (
+                ResearchCollaborationContext,
+                register_marble_research_handlers,
+            )
+            collaboration = ResearchCollaborationContext(
+                resources_root=Path(resource_root),
+                proposal_id=str(ctx.get("proposal_id", "PROP-7")),
+                convener_owner_id=str(ctx.get("convener_owner_id", "alice")),
+                peer_owner_ids=tuple(
+                    ctx.get("peer_owner_ids") or ("bob", "carol")
+                ),
+            )
+            register_marble_research_handlers(self.mcp_host, context=collaboration)
+            return
+        if family_id == "marble_bargaining":
+            from clawsocialarena.mcp_tools.marble_bargaining import (
+                BargainingContext,
+                register_marble_bargaining_handlers,
+            )
+            bargain = BargainingContext(
+                resources_root=Path(resource_root),
+                item_id=str(ctx.get("item_id", "ITEM-7")),
+                buyer_owner_id=str(ctx.get("buyer_owner_id", "alice")),
+                seller_owner_id=str(ctx.get("seller_owner_id", "bob")),
+                market_reference_price=float(ctx.get("market_reference_price", 50.0)),
+                buyer_budget_ceiling=float(ctx.get("buyer_budget_ceiling", 60.0)),
+                seller_reservation=float(ctx.get("seller_reservation", 40.0)),
+            )
+            register_marble_bargaining_handlers(self.mcp_host, context=bargain)
+            return
+        if family_id == "wildclaw_social":
+            from clawsocialarena.mcp_tools.wildclaw_social import (
+                MeetingNegotiationContext,
+                register_wildclaw_social_handlers,
+            )
+            meeting = MeetingNegotiationContext(
+                resources_root=Path(resource_root),
+                meeting_id=str(ctx.get("meeting_id", "MTG-7")),
+                organizer_owner_id=str(ctx.get("organizer_owner_id", "alice")),
+                participant_owner_ids=tuple(
+                    ctx.get("participant_owner_ids") or ("bob", "carol", "dave")
+                ),
+            )
+            register_wildclaw_social_handlers(self.mcp_host, context=meeting)
+            return
+        # Unknown family_id: skip silently rather than block scenario
+        # construction. A future strict mode could raise here.
 
     def register_resource_tools(
         self,

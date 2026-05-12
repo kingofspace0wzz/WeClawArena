@@ -18,9 +18,9 @@ out of the edge-set comparison.
 
 Chains of length >= 2 rule (spec §3.2): a scenario whose GT DAG has no
 chain edges (including singleton planted disclosures) does not enter the
-tau denominator. When GT has no chain edges and the produced DAG also has
-no chain edges, the score is vacuously 1.0. When GT has no chain edges but
-the produced DAG has any chain edge, the score is 0.0 (spurious chains).
+tau denominator. The SAF orchestrator marks such scenarios not applicable,
+so this scorer returns the neutral pass value 1.0 even if the runtime
+builder emits a produced chain.
 
 The returned score is the mean of the edge-set F1 and the node-label F1
 so both topology and labelling contribute equally. Empty GT edge set +
@@ -99,10 +99,10 @@ def score(*, produced_dag: dict, gt_dag: dict) -> float:
     gt_nodes = _node_label_pairs(gt_dag)
 
     # Chains of length >= 2 rule: when the GT carries no chain edges, tau
-    # is undefined and singleton planted-disclosure nodes are excluded
-    # from the denominator. A produced chain is still spurious.
+    # is undefined and singleton planted-disclosure nodes are excluded from
+    # the denominator. The orchestrator records non-applicability separately.
     if not gt_edges:
-        return 1.0 if not pred_edges else 0.0
+        return 1.0
 
     edge_f1 = _f1(pred_edges, gt_edges)
     node_f1 = _f1(pred_nodes, gt_nodes)

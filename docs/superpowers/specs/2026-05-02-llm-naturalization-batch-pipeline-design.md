@@ -8,19 +8,19 @@ The current `benchmark/scenarios/v1.0.0` tree is generated, validated, and usefu
 
 The next correction is to add a batch workflow that uses an LLM to naturalize scenario worlds, then immediately runs real agent simulations through the gateway and evaluation stack. This avoids a bad failure mode where we generate hundreds of scenario variants first, only to discover later that the live simulation path, audit layer, task-difficulty design, or final metrics cannot handle the generated tasks.
 
-The benchmark scaffold is not the benchmark task distribution. The scaffold provides schema-valid matched variants and resource manifests. GPT-5 naturalizes each `base_task_id` once, then the five attack-mode variants reuse that naturalized base task. This prevents the five modes in a matched block from becoming five unrelated tasks. After task-difficulty calibration, the main scaffold should move from the current 100-base-task pilot toward a balanced difficulty grid. The next balanced pilot has 126 main base tasks and 630 main variants; the recommended release target has 210 main base tasks and 1050 main variants.
+The benchmark scaffold is not the benchmark task distribution. The scaffold provides schema-valid matched variants and resource manifests. GPT-5.2 naturalizes each `base_task_id` once, then the five attack-mode variants reuse that naturalized base task. This prevents the five modes in a matched block from becoming five unrelated tasks. After task-difficulty calibration, the main scaffold should move from the current 100-base-task pilot toward a balanced difficulty grid. The next balanced pilot has 126 main base tasks and 630 main variants; the recommended release target has 210 main base tasks and 1050 main variants.
 
-Before naturalization, each base task must have a deterministic task schema v0. The schema records actors, per-actor visibility, initialization data/actions/message history, consensus or role rules, required evidence, evaluator bases, audit events, designed difficulty tier, and source-pattern metadata. tau2-bench contributes the task-contract pattern: setup, expected actions, environment assertions, and reward bases. WildClawBench contributes workspace and safety motifs: filesystems, secrets, semantic authority, prompt injection, unsafe operations, and draft-vs-send constraints. GPT-5 may naturalize the names, artifacts, and social setting, but it must not change those schema fields or the matched-block identity.
+Before naturalization, each base task must have a deterministic task schema v0. The schema records actors, per-actor visibility, initialization data/actions/message history, consensus or role rules, required evidence, evaluator bases, audit events, designed difficulty tier, and source-pattern metadata. tau2-bench contributes the task-contract pattern: setup, expected actions, environment assertions, and reward bases. WildClawBench contributes workspace and safety motifs: filesystems, secrets, semantic authority, prompt injection, unsafe operations, and draft-vs-send constraints. GPT-5.2 may naturalize the names, artifacts, and social setting, but it must not change those schema fields or the matched-block identity.
 
 ## 2. Goal
 
-The workflow should process main-stratum scenarios as complete matched blocks whenever possible. A batch of 10 usually contains two base tasks, each expanded into five attack modes; a batch of 5 contains one base task and is useful when finishing a single remaining category/family cell. Hard-stratum rows are standalone tasks, so hard smoke batches use consecutive rows rather than attack-mode blocks. Each batch uses GPT-5 to naturalize scenario construction inputs, then uses GPT-4.1 mini as the runtime model for all task agents. After each batch, the orchestrator must report exact input tokens, cached input tokens, output tokens, estimated cost, accepted scenario count, failed scenario count, and a revised full-benchmark cost estimate.
+The workflow should process main-stratum scenarios as complete matched blocks whenever possible. A batch of 10 usually contains two base tasks, each expanded into five attack modes; a batch of 5 contains one base task and is useful when finishing a single remaining category/family cell. Hard-stratum rows are standalone tasks, so hard smoke batches use consecutive rows rather than attack-mode blocks. Each batch uses GPT-5.2 to naturalize scenario construction inputs, then uses GPT-4.1 mini as the runtime model for all task agents. After each batch, the orchestrator must report exact input tokens, cached input tokens, output tokens, estimated cost, accepted scenario count, failed scenario count, and a revised full-benchmark cost estimate.
 
 The batch loop should look like this:
 
 ```text
 select 10 skeleton scenarios
-  -> GPT-5 naturalization
+  -> GPT-5.2 naturalization
   -> schema and safety validation
   -> Docker simulation with GPT-4.1 mini agents
   -> gateway logs, shadow logs, cassette, resource diffs
@@ -34,18 +34,18 @@ The pipeline should stop after every smoke or scale-out batch and report before 
 
 ## 3. Models and Pricing Assumptions
 
-The construction model should be `gpt-5`. The runtime agent model should be `gpt-4.1-mini`. These canonical model IDs should be stored in reports and metadata so the benchmark matches the API model names used for construction and simulation.
+The construction model should be `gpt-5.2`. The runtime agent model should be `gpt-4.1-mini`. These canonical model IDs should be stored in reports and metadata so the benchmark matches the API model names used for construction and simulation.
 
-The cost estimator should store prices in a local rate table with source URLs and an `effective_date` field. As of May 2, 2026, the model pages list GPT-5 text token prices as `$1.25` per 1M input tokens, `$0.125` per 1M cached input tokens, and `$10.00` per 1M output tokens. The GPT-4.1 mini page lists `$0.40` per 1M input tokens, `$0.10` per 1M cached input tokens, and `$1.60` per 1M output tokens. The model pages also list support for structured outputs and function calling, which are useful for schema-bound generation.
+The cost estimator should store prices in a local rate table with source URLs and an `effective_date` field. As of May 6, 2026, the local rate table prices GPT-5.2 text tokens at `$1.75` per 1M input tokens, `$0.175` per 1M cached input tokens, and `$14.00` per 1M output tokens. The GPT-4.1 mini page lists `$0.40` per 1M input tokens, `$0.10` per 1M cached input tokens, and `$1.60` per 1M output tokens. The model pages also list support for structured outputs and function calling, which are useful for schema-bound generation.
 
 Sources:
 
-- [OpenAI GPT-5 model page](https://developers.openai.com/api/docs/models/gpt-5)
+- [OpenAI GPT-5.2 model page](https://platform.openai.com/docs/models/gpt-5.2)
 - [OpenAI GPT-4.1 mini model page](https://developers.openai.com/api/docs/models/gpt-4.1-mini)
 
 ## 4. Naturalization Output
 
-GPT-5 should not emit free-form scenario folders. It should emit a structured naturalization patch that is validated before it touches the generated benchmark tree.
+GPT-5.2 should not emit free-form scenario folders. It should emit a structured naturalization patch that is validated before it touches the generated benchmark tree.
 
 The patch should include:
 
@@ -55,7 +55,7 @@ The patch should include:
 - Attack surfaces and legitimate use cases tied to selected resources.
 - A `construction_manifest` update with naturalization metadata.
 
-The patch should not include real personal data. The prompt should instruct GPT-5 to preserve ASB profile references and hashes but synthesize all files, databases, identifiers, secrets, addresses, legal details, financial details, and health notes.
+The patch should not include real personal data. The prompt should instruct GPT-5.2 to preserve ASB profile references and hashes but synthesize all files, databases, identifiers, secrets, addresses, legal details, financial details, and health notes.
 
 ## 5. Simulation Output
 
@@ -72,7 +72,7 @@ Each run should write:
 - `simulation_report.json`
 - `cost_report.json`
 
-The gateway already logs `llm_call` actions with input, output, cached tokens, latency, and model fields. The batch orchestrator should aggregate those fields and combine them with GPT-5 construction usage to produce the batch cost report.
+The gateway already logs `llm_call` actions with input, output, cached tokens, latency, and model fields. The batch orchestrator should aggregate those fields and combine them with GPT-5.2 construction usage to produce the batch cost report.
 
 ## 6. Acceptance Gates
 
@@ -80,7 +80,7 @@ A scenario is accepted when it is ready to score, not when the agents succeed at
 
 A scenario is accepted only when all readiness gates pass:
 
-1. GPT-5 returns a schema-valid naturalization patch.
+1. GPT-5.2 returns a schema-valid naturalization patch.
 2. The generated bundle validates with `validate_bundle`.
 3. Synthetic-data checks pass.
 4. Docker execution produces a bounded trajectory: normal terminal completion, attack-induced task failure, benign task failure, or turn-cap termination is acceptable if teardown succeeds and the gateway evidence remains usable.
@@ -89,7 +89,7 @@ A scenario is accepted only when all readiness gates pass:
 7. The offline evaluation runner emits a valid scorecard.
 8. The scenario has non-empty audit evidence for its intended harm axis.
 
-If a scenario fails gates 1 through 3, the orchestrator may run one GPT-5 repair attempt. If it fails again, mark it `naturalization_failed`. If it fails gates 4 through 8 because evidence is missing or corrupted, mark it `simulation_infrastructure_failed` or `evaluation_failed` with the exact failure reason. Failed scenarios should not be counted as accepted benchmark data.
+If a scenario fails gates 1 through 3, the orchestrator may run one GPT-5.2 repair attempt. If it fails again, mark it `naturalization_failed`. If it fails gates 4 through 8 because evidence is missing or corrupted, mark it `simulation_infrastructure_failed` or `evaluation_failed` with the exact failure reason. Failed scenarios should not be counted as accepted benchmark data.
 
 Do not mark a scenario failed merely because `task.tsr=0`, a privacy invariant was breached, an attack objective succeeded, SAF did not pass, or the hard turn cap ended the conversation. These outcomes belong in the accepted-run scorecard and batch outcome counts.
 
@@ -124,7 +124,7 @@ The report should include:
   "saf_failure_count": 0,
   "turn_cap_count": 0,
   "failed_count": 0,
-  "construction_model": "gpt-5",
+  "construction_model": "gpt-5.2",
   "agent_model": "gpt-4.1-mini",
   "construction_unit": "base_task",
   "usage": {
@@ -158,7 +158,9 @@ The report should include:
 
 For smoke and scale-out batches, `decision` must be `STOP_FOR_REVIEW` even if every scenario is accepted. The user should review the actual spend and failure modes before the orchestrator continues.
 
-Construction accounting is by base task, not by variant. A main batch of 10 variants should normally contain 2 complete `base_task_id` blocks. GPT-5 should naturalize those 2 base tasks once each; the five attack-mode variants in each block reuse the same naturalized task context and differ only in attack-mode injection and evaluation expectations.
+Construction accounting is by base task, not by variant. A main batch of 10 variants should normally contain 2 complete `base_task_id` blocks. GPT-5.2 should naturalize those 2 base tasks once each; the five attack-mode variants in each block reuse the same naturalized task context and differ only in attack-mode injection and evaluation expectations.
+
+Construction batches default to `--condition passive`. Attack mode remains the scenario variant axis, while audit condition is the runtime axis. Condition-sentinel sweeps should rerun selected accepted bundles under `baseline`, `passive`, and `enforce` and report `condition_counts`; they should not trigger new naturalization.
 
 For the corrected replacement gates, the planned task distribution is:
 
@@ -224,9 +226,9 @@ For the first implementation, the runner should support:
 .venv/bin/python scripts/naturalize_and_run_batch.py \
   --batch-size 10 \
   --max-cost-usd 25 \
-  --construction-model gpt-5 \
+  --construction-model gpt-5.2 \
   --agent-model gpt-4.1-mini \
-  --stop-after-batch
+  --condition passive
 ```
 
 The command should fail before paid calls if `OPENAI_API_KEY` is missing, if Docker is unavailable, or if the estimated maximum cost is above `--max-cost-usd`.

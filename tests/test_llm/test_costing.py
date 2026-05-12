@@ -33,6 +33,19 @@ def test_token_usage_canonicalizes_dated_model_aliases() -> None:
     assert estimate_cost_usd(usage, rates=MODEL_RATES) == pytest.approx(1.96875)
 
 
+def test_estimate_cost_supports_gpt_5_2() -> None:
+    usage = TokenUsage(
+        model="gpt-5.2",
+        input_tokens=1_000_000,
+        cached_input_tokens=250_000,
+        output_tokens=100_000,
+    )
+
+    cost = estimate_cost_usd(usage, rates=MODEL_RATES)
+
+    assert cost == pytest.approx(2.75625)
+
+
 def test_estimate_cost_rejects_cached_tokens_above_input_tokens() -> None:
     usage = TokenUsage(
         model="gpt-5",
