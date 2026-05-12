@@ -237,7 +237,8 @@ def test_variant_index_round_trips(tmp_path: Path) -> None:
     index_path = tmp_path / PHASE5_VARIANT_INDEX_FILENAME
     assert index_path.is_file()
     reloaded = load_variant_index(index_path)
-    assert len(reloaded) == 9 * 5
+    # 3 base bundles (3 tasks, tier dim dropped) × 5 attack modes = 15.
+    assert len(reloaded) == 3 * 5
     assert all(isinstance(v, VariantRecord) for v in reloaded)
     # Confirm recipe / surface / control round-trip too.
     sample = next(v for v in reloaded if v.attack_mode == "privacy")
@@ -257,4 +258,5 @@ def test_expand_works_for_one_cell_per_family(
     variants = expand_base_records_to_variants(
         base_records=base_records, base_dir=tmp_path
     )
-    assert len(variants) == 9 * 5
+    # 3 base bundles per cell (tier dim dropped) × 5 attack modes = 15.
+    assert len(variants) == 3 * 5

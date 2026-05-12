@@ -61,7 +61,10 @@ class VariantRecord:
     cell_id: str
     family_id: str
     task_index: int
-    tier_index: int
+    # Legacy difficulty-tier field; ``None`` on v2 records (the tier
+    # dimension was dropped). Kept on the dataclass for one release
+    # so downstream consumers can be migrated incrementally.
+    tier_index: int | None
     attack_mode: str
     attack_intensity: float
     attack_recipe: str | None
@@ -311,7 +314,7 @@ def load_variant_index(index_path: Path | str) -> list[VariantRecord]:
             cell_id=row["cell_id"],
             family_id=row["family_id"],
             task_index=row["task_index"],
-            tier_index=row["tier_index"],
+            tier_index=row.get("tier_index"),
             attack_mode=row["attack_mode"],
             attack_intensity=row["attack_intensity"],
             attack_recipe=row.get("attack_recipe"),

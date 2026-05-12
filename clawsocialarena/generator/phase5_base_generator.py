@@ -1,16 +1,16 @@
 """Cell-aware base-task generator for the Phase-5 pilot (S3 step 3).
 
-Walks the 14-cell allocation × 3 task variants × 3 difficulty tiers
-matrix and materializes each combination into a deterministic
-bundle directory. Every bundle on disk also carries a
-``phase5_metadata.json`` sidecar capturing the cell coordinate, task
-variant, tier metadata, and attack intensity so the downstream
-attack-variant injector and run-batch orchestrator can recover the
-context without re-deriving it.
+Walks the 14-cell allocation × 3 task variants matrix and
+materializes each combination into a deterministic bundle directory.
+Every bundle on disk also carries a ``phase5_metadata.json`` sidecar
+capturing the cell coordinate, task variant, and attack intensity so
+the downstream attack-variant injector and run-batch orchestrator
+can recover the context without re-deriving it.
 
-Pilot math:
+v2 math (difficulty-tier dimension dropped; stress-recipe attacks
+carry the difficulty pressure that tiers previously did):
 
-    14 cells × 3 task variants × 3 tiers = 126 base bundles
+    14 cells × 3 task variants = 42 base bundles
 
 This module is the only authority that decides where on disk each
 bundle lands; the orchestrator and the attack-variant injector both
@@ -30,7 +30,6 @@ from clawsocialarena.generator.difficulty_tier import (
     TierSpec,
     apply_tier,
     bargaining_window_kwargs,
-    tier_for,
 )
 from clawsocialarena.generator.family_pack_registry import load_and_materialize
 from clawsocialarena.generator.phase5_task_variants import (
@@ -62,8 +61,10 @@ class BaseBundleRecord:
     family_id: str
     task_index: int
     task_label: str
-    tier_index: int
-    tier_name: str
+    # Legacy difficulty-tier fields, kept Optional for one release after
+    # the tier dimension was collapsed; new records carry ``None``.
+    tier_index: int | None
+    tier_name: str | None
     attack_intensity: float
     base_scenario_id: str
     bundle_dir: str  # relative to the generator out_dir
@@ -71,37 +72,51 @@ class BaseBundleRecord:
     extras: dict[str, Any] = field(default_factory=dict)
 
 
-def _format_base_scenario_id(cell: CellSpec, task_index: int, tier_index: int) -> str:
+def _format_base_scenario_id(
+    cell: CellSpec, task_index: int, *, tier_index: int | None
+) -> str:
     """Return the canonical id for a base bundle.
 
-    Format: ``{cell_id}__t{task_index}__d{tier_index}`` where the
-    ``d`` prefix stands for "difficulty". Stable across runs because
-    cell_id is deterministic.
+    Format: ``{cell_id}__t{task_index}`` after the tier dimension was
+    dropped. When ``tier_index`` is provided (legacy callers), the
+    ``__d{tier_index}`` suffix is appended; new callers should pass
+    ``tier_index=None`` so the id matches the on-disk layout.
     """
-    return f"{cell.cell_id}__t{task_index}__d{tier_index}"
+    base = f"{cell.cell_id}__t{task_index}"
+    if tier_index is not None:
+        base = f"{base}__d{tier_index}"
+    return base
 
 
 def _bundle_subdir_for(
-    cell: CellSpec, task_index: int, tier_index: int
+    cell: CellSpec, task_index: int, *, tier_index: int | None
 ) -> Path:
-    """Return the per-bundle subdirectory relative to the generator root."""
-    return (
-        Path(cell.cell_id)
-        / f"task{task_index}"
-        / f"tier{tier_index}"
-    )
+    """Return the per-bundle subdirectory relative to the generator root.
+
+    When ``tier_index`` is ``None`` (current default), the layout is
+    ``<cell_id>/task<task_index>``. The legacy three-level layout
+    (``.../tier<n>``) is still produced when a caller passes an
+    explicit ``tier_index`` so external tooling that has not migrated
+    yet keeps working.
+    """
+    parts: list[str] = [cell.cell_id, f"task{task_index}"]
+    if tier_index is not None:
+        parts.append(f"tier{tier_index}")
+    return Path(*parts)
 
 
 def _maybe_narrow_bargaining_kwargs(
-    family_id: str, kwargs: dict[str, Any], tier_index: int
+    family_id: str, kwargs: dict[str, Any], *, tier_index: int | None
 ) -> dict[str, Any]:
     """For marble_bargaining at tiers 2/3, narrow the window kwargs.
 
+    With the difficulty-tier dim dropped, ``tier_index=None`` keeps
+    the loader's default permissive window (matches tier-1 behavior).
     All other families return ``kwargs`` unchanged. Returns a fresh
     dict so the caller's variant table is not mutated.
     """
     out = dict(kwargs)
-    if family_id != "marble_bargaining":
+    if family_id != "marble_bargaining" or tier_index is None:
         return out
     market_reference_price = float(out.get("market_reference_price") or 50.0)
     narrowed = bargaining_window_kwargs(
@@ -150,16 +165,19 @@ def _write_phase5_sidecar(
     bundle_dir: Path,
     record: BaseBundleRecord,
     scenario_overrides: dict[str, Any],
-    per_pack_extras: dict[str, Any],
 ) -> None:
     """Write the per-bundle phase5_metadata.json sidecar.
 
     The sidecar is consumed by:
     - the attack-variant injector (to know the attack_intensity per
       base bundle)
-    - the orchestrator (to know which cell / tier this bundle belongs
-      to without re-parsing the path)
+    - the orchestrator (to know which cell this bundle belongs to
+      without re-parsing the path)
+
+    ``per_pack_extras`` is sourced from ``record.extras`` so the
+    caller does not have to thread it through a separate kwarg.
     """
+    per_pack_extras = dict(record.extras.get("per_pack_extras") or {})
     payload = {
         "phase5_version": 1,
         "cell": {
@@ -194,23 +212,32 @@ def generate_base_bundles(
     out_dir: Path | str,
     cells: tuple[CellSpec, ...] | None = None,
     task_indices: tuple[int, ...] = TASK_INDICES,
-    tier_indices: tuple[int, ...] = TIER_INDICES,
+    tier_indices: tuple[int, ...] | None = None,
 ) -> list[BaseBundleRecord]:
-    """Materialize the (cell × task × tier) base bundles to ``out_dir``.
+    """Materialize the (cell × task) base bundles to ``out_dir``.
 
     Returns a list of :class:`BaseBundleRecord` in canonical iteration
-    order (cell_index ascending, task_index ascending, tier_index
-    ascending). Also writes ``phase5_base_index.json`` at the top of
-    ``out_dir`` so downstream tools can load the index without
-    re-running the generator.
+    order (cell_index ascending, task_index ascending). The
+    difficulty-tier dimension was collapsed in v2; ``tier_indices`` is
+    accepted for backward compatibility but ignored. Each (cell, task)
+    pair always materializes the easy/tier-1 baseline.
+
+    Also writes ``phase5_base_index.json`` at the top of ``out_dir``
+    so downstream tools can load the index without re-running the
+    generator.
     """
+    # ``tier_indices`` is intentionally ignored: the difficulty-tier
+    # dimension was dropped in v2. The kwarg stays in the signature so
+    # callers that pass it can be updated incrementally.
+    _ = tier_indices
+
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
     target_cells = cells if cells is not None else all_cells()
     records: list[BaseBundleRecord] = []
     # Per-family variant tables are cached so we do not rebuild them
-    # 14*3*3 times.
+    # 14*3 times.
     variants_cache: dict[str, tuple[TaskVariantSpec, ...]] = {}
 
     for cell in target_cells:
@@ -224,53 +251,54 @@ def generate_base_bundles(
                     f"family_id={cell.family_id!r}"
                 )
             variant = variants[task_index]
-            for tier_index in tier_indices:
-                tier_spec = tier_for(tier_index)
-                sub_dir = _bundle_subdir_for(cell, task_index, tier_index)
-                bundle_target_dir = out_path / sub_dir
-                bundle_target_dir.parent.mkdir(parents=True, exist_ok=True)
-                tier_kwargs = _maybe_narrow_bargaining_kwargs(
-                    cell.family_id, variant.loader_kwargs, tier_index
-                )
-                bundle_dir, _bundle = load_and_materialize(
-                    family_id=cell.family_id,
-                    out_dir=bundle_target_dir,
-                    load_kwargs=tier_kwargs,
-                )
-                (
-                    tier_applied,
-                    scenario_overrides,
-                    per_pack_extras,
-                ) = _apply_tier_overrides_to_scenario_file(
-                    bundle_dir=bundle_dir,
-                    family_id=cell.family_id,
-                    tier_index=tier_index,
-                )
-                record = BaseBundleRecord(
-                    cell_index=cell.cell_index,
-                    cell_id=cell.cell_id,
-                    category=cell.category,
-                    slot=cell.slot,
-                    family_id=cell.family_id,
-                    task_index=task_index,
-                    task_label=variant.label,
-                    tier_index=tier_index,
-                    tier_name=tier_applied.name,
-                    attack_intensity=tier_applied.attack_intensity,
-                    base_scenario_id=_format_base_scenario_id(
-                        cell, task_index, tier_index
-                    ),
-                    bundle_dir=str(bundle_dir.relative_to(out_path)),
-                    loader_kwargs=dict(tier_kwargs),
-                    extras={"per_pack_extras": per_pack_extras},
-                )
-                _write_phase5_sidecar(
-                    bundle_dir=bundle_dir,
-                    record=record,
-                    scenario_overrides=scenario_overrides,
-                    per_pack_extras=per_pack_extras,
-                )
-                records.append(record)
+            # The difficulty-tier dimension was collapsed in v2: we
+            # always materialize the easy/tier-1 baseline (no opening
+            # message pressure, full turn budget) and rely on the
+            # stress-recipe attack vectors for difficulty pressure.
+            sub_dir = _bundle_subdir_for(cell, task_index, tier_index=None)
+            bundle_target_dir = out_path / sub_dir
+            bundle_target_dir.parent.mkdir(parents=True, exist_ok=True)
+            tier_kwargs = _maybe_narrow_bargaining_kwargs(
+                cell.family_id, variant.loader_kwargs, tier_index=None
+            )
+            bundle_dir, _bundle = load_and_materialize(
+                family_id=cell.family_id,
+                out_dir=bundle_target_dir,
+                load_kwargs=tier_kwargs,
+            )
+            (
+                tier_applied,
+                scenario_overrides,
+                per_pack_extras,
+            ) = _apply_tier_overrides_to_scenario_file(
+                bundle_dir=bundle_dir,
+                family_id=cell.family_id,
+                tier_index=1,
+            )
+            record = BaseBundleRecord(
+                cell_index=cell.cell_index,
+                cell_id=cell.cell_id,
+                category=cell.category,
+                slot=cell.slot,
+                family_id=cell.family_id,
+                task_index=task_index,
+                task_label=variant.label,
+                tier_index=None,  # legacy field; kept on the dataclass for one release
+                tier_name=None,
+                attack_intensity=tier_applied.attack_intensity,
+                base_scenario_id=_format_base_scenario_id(
+                    cell, task_index, tier_index=None
+                ),
+                bundle_dir=str(bundle_dir.relative_to(out_path)),
+                loader_kwargs=dict(tier_kwargs),
+                extras={"per_pack_extras": per_pack_extras},
+            )
+            _write_phase5_sidecar(
+                bundle_dir=bundle_dir,
+                record=record,
+                scenario_overrides=scenario_overrides,
+            )
+            records.append(record)
 
     index_path = out_path / PHASE5_BASE_INDEX_FILENAME
     index_path.write_text(
@@ -279,7 +307,10 @@ def generate_base_bundles(
                 "phase5_version": 1,
                 "n_cells": len(target_cells),
                 "n_task_indices": len(task_indices),
-                "n_tier_indices": len(tier_indices),
+                # ``n_tier_indices`` stays in the schema for one
+                # release at 0 so consumers can detect the v2 layout
+                # without immediate code changes.
+                "n_tier_indices": 0,
                 "n_records": len(records),
                 "records": [asdict(r) for r in records],
             },
@@ -292,7 +323,11 @@ def generate_base_bundles(
 
 
 def load_base_index(index_path: Path | str) -> list[BaseBundleRecord]:
-    """Reload the base-bundle records written by :func:`generate_base_bundles`."""
+    """Reload the base-bundle records written by :func:`generate_base_bundles`.
+
+    Tolerates both v1 records (which carried mandatory ``tier_index`` /
+    ``tier_name``) and v2 records (which carry ``None``).
+    """
     raw = json.loads(Path(index_path).read_text(encoding="utf-8"))
     return [
         BaseBundleRecord(
@@ -303,8 +338,8 @@ def load_base_index(index_path: Path | str) -> list[BaseBundleRecord]:
             family_id=row["family_id"],
             task_index=row["task_index"],
             task_label=row["task_label"],
-            tier_index=row["tier_index"],
-            tier_name=row["tier_name"],
+            tier_index=row.get("tier_index"),
+            tier_name=row.get("tier_name"),
             attack_intensity=row["attack_intensity"],
             base_scenario_id=row["base_scenario_id"],
             bundle_dir=row["bundle_dir"],

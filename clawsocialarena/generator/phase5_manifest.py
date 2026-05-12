@@ -1,18 +1,24 @@
 """Phase-5 manifest assembly (S3 step 7).
 
-Aggregates the 630 main attack-variants and the 50 supplementary
+Aggregates the 210 main attack-variants and the 50 supplementary
 descriptors into a single ``phase5_manifest.json`` index. The
 orchestrator's Run-Batch 1..5 selectors consult this file by stratum,
-attack_mode, tier, and cell to determine which rows belong to a
-given batch.
+attack_mode, and cell to determine which rows belong to a given
+batch.
+
+v2 math (difficulty-tier dim dropped):
+
+    14 cells × 3 tasks × 5 attack modes = 210 main variants
+    + 50 supplementary descriptors
+    = 260 total rows
 
 Manifest schema (top level):
 
     {
       "phase5_version": 1,
-      "n_main": 630,
+      "n_main": 210,
       "n_supplementary": 50,
-      "n_total": 680,
+      "n_total": 260,
       "main": [<MainManifestRow>...],
       "supplementary": [<SupplementaryManifestRow>...]
     }
@@ -45,7 +51,9 @@ from clawsocialarena.generator.phase5_supplementary import (
 
 
 PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
-EXPECTED_MAIN_VARIANTS = 630
+# v2 counts: 14 cells × 3 tasks × 5 attack modes = 210 main variants
+# (the difficulty-tier dimension was dropped).
+EXPECTED_MAIN_VARIANTS = 210
 EXPECTED_SUPPLEMENTARY_VARIANTS = 50
 EXPECTED_TOTAL_VARIANTS = (
     EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
@@ -54,7 +62,7 @@ EXPECTED_TOTAL_VARIANTS = (
 
 @dataclass(frozen=True)
 class MainManifestRow:
-    """One row of the 630-row main stratum manifest.
+    """One row of the 210-row main stratum manifest.
 
     Mirrors :class:`VariantRecord` fields plus a canonical_index for
     stable ordering. ``attack_mode`` is the spec section 2 axis
@@ -68,7 +76,9 @@ class MainManifestRow:
     cell_id: str
     family_id: str
     task_index: int
-    tier_index: int
+    # Legacy difficulty-tier field; ``None`` on v2 manifests (the tier
+    # dimension was dropped). Kept on the dataclass for one release.
+    tier_index: int | None
     attack_mode: str
     attack_intensity: float
     attack_recipe: str | None
@@ -162,7 +172,7 @@ def assemble_manifest(
     expansion pass (used by tests).
 
     If ``base_records`` is ``None``, the function materializes the
-    full 126-base × 5-mode = 630-variant set into ``out_dir`` from
+    full 42-base × 5-mode = 210-variant set into ``out_dir`` from
     scratch.
 
     Writes ``phase5_manifest.json`` at ``out_dir`` and returns the
