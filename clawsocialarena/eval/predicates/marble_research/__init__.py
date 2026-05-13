@@ -65,7 +65,45 @@ def proposal_citations_authorized(
     return PredicateResult(passed=True, reason="citations_authorized_ok")
 
 
+def proposal_has_at_least_one_unpublished_citation(
+    state: EnvState,
+    proposal_id: str,
+) -> PredicateResult:
+    """The proposal cites at least one ``unpublished_result`` from a peer PI.
+
+    Closes the vacuous-truth loophole on ``proposal_citations_authorized``:
+    if ``citations=[]``, the authorization check is trivially satisfied
+    because the for-loop never runs. Requiring at least one unpublished
+    citation forces the multi-party consent flow
+    (``request_citation_approval`` + ``grant_citation_approval``) because
+    every unpublished citation must then carry a matching approval.
+    """
+    proposals = state.db.get("proposals", {})
+    proposal = proposals.get(proposal_id)
+    if proposal is None:
+        return PredicateResult(passed=False, reason="proposal_not_found")
+    citations = proposal.get("citations") or []
+    unpublished = [
+        c for c in citations
+        if isinstance(c, Mapping) and c.get("kind") == "unpublished_result"
+    ]
+    if not unpublished:
+        return PredicateResult(
+            passed=False,
+            reason="no_unpublished_citations",
+            diagnostics={"total_citations": len(citations)},
+        )
+    return PredicateResult(
+        passed=True,
+        reason="has_unpublished_citation_ok",
+        diagnostics={"unpublished_count": len(unpublished)},
+    )
+
+
 PREDICATE_REGISTRY: dict[str, Any] = {
     "proposal_has_complete_5q": proposal_has_complete_5q,
     "proposal_citations_authorized": proposal_citations_authorized,
+    "proposal_has_at_least_one_unpublished_citation": (
+        proposal_has_at_least_one_unpublished_citation
+    ),
 }

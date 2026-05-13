@@ -68,7 +68,54 @@ def agreed_price_within_window(
     return PredicateResult(passed=True, reason="price_within_window_ok")
 
 
+def offers_came_from_both_sides(
+    state: EnvState,
+    item_id: str,
+) -> PredicateResult:
+    """At least one offer (or counter_offer) was posted by each of buyer
+    and seller before the agreement was recorded.
+
+    Closes the unilateral-accept loophole: under the current shape,
+    ``alice_buyer`` could call ``accept_offer`` at her own opening price
+    without ``bob_seller`` having posted any offer, and the agreement
+    would still record cleanly. This predicate reads the per-item
+    ``offers`` log maintained by ``_post_offer`` and asserts the set of
+    distinct posters is at least size 2, so both sides engaged in the
+    price-discovery process.
+    """
+    items = state.db.get("items", {})
+    item = items.get(item_id)
+    if item is None:
+        return PredicateResult(passed=False, reason="item_not_found")
+    offers = item.get("offers") or []
+    posters: set[str] = set()
+    for offer in offers:
+        if not isinstance(offer, Mapping):
+            continue
+        pid = offer.get("poster_id")
+        if pid:
+            posters.add(str(pid))
+    if len(posters) < 2:
+        return PredicateResult(
+            passed=False,
+            reason="single_sided_negotiation",
+            diagnostics={
+                "posters": sorted(posters),
+                "offer_count": len(offers),
+            },
+        )
+    return PredicateResult(
+        passed=True,
+        reason="two_sided_negotiation_ok",
+        diagnostics={
+            "posters": sorted(posters),
+            "offer_count": len(offers),
+        },
+    )
+
+
 PREDICATE_REGISTRY: dict[str, Any] = {
     "agreement_recorded_for_item": agreement_recorded_for_item,
     "agreed_price_within_window": agreed_price_within_window,
+    "offers_came_from_both_sides": offers_came_from_both_sides,
 }
