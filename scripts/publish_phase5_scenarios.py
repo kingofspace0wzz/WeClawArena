@@ -233,9 +233,17 @@ def publish_all(
         for fut in as_completed(futures):
             outcomes[futures[fut]] = fut.result()
 
-    # Emit manifest.
+    # Emit manifest. Source of truth is store_dir on disk, not this run's
+    # filter -- otherwise an incremental --base-id publish would drop
+    # every row except the one just published. We treat any subdir
+    # containing a naturalization_record.json as a published base.
+    store_dir.mkdir(parents=True, exist_ok=True)
+    published_base_ids = sorted(
+        d.name for d in store_dir.iterdir()
+        if d.is_dir() and (d / "naturalization_record.json").is_file()
+    )
     rows: list[dict[str, Any]] = []
-    for base_id, _ in bases:
+    for base_id in published_base_ids:
         for mode in ATTACK_MODES:
             rows.append({
                 "variant_id": f"{base_id}__{mode}",
@@ -246,13 +254,12 @@ def publish_all(
     rows.sort(key=lambda r: r["variant_id"])
     manifest = {
         "version": store_dir.name,
-        "n_bases": len(bases),
+        "n_bases": len(published_base_ids),
         "n_modes": len(ATTACK_MODES),
         "n_variants": len(rows),
         "naturalization_model": naturalization_model,
         "rows": rows,
     }
-    store_dir.mkdir(parents=True, exist_ok=True)
     (store_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
     )

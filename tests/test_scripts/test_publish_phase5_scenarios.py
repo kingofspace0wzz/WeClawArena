@@ -112,3 +112,35 @@ def test_publish_emits_manifest_with_expected_rows(tmp_path: Path) -> None:
     modes = {r["attack_mode"] for r in manifest["rows"]}
     assert modes == {"no_attacker", "collaboration", "security",
                       "privacy", "governance"}
+
+
+def test_publish_with_base_id_filter_preserves_existing_manifest_rows(
+    tmp_path: Path,
+) -> None:
+    """Incremental --base-id publish keeps prior store entries in the manifest.
+
+    Regression test for the manifest-overwrite bug: a per-scenario publish
+    used to drop every row except the one just published, requiring a
+    manual rebuild via /tmp/patch_manifest.py. The publish script must
+    now discover all previously-published bases under store_dir and
+    include them alongside the newly-published one.
+    """
+    from scripts.publish_phase5_scenarios import publish_all
+
+    scaffold = _make_fake_scaffold(tmp_path, n_bases=3)
+    store = tmp_path / "store"
+    client = _FakeNaturalizationClient()
+
+    publish_all(scaffold_dir=scaffold, store_dir=store, client=client,
+                naturalization_model="test-model", base_id_filter="CELL-0__t0")
+    publish_all(scaffold_dir=scaffold, store_dir=store, client=client,
+                naturalization_model="test-model", base_id_filter="CELL-1__t0")
+
+    manifest = json.loads((store / "manifest.json").read_text())
+    base_ids = sorted({r["base_id"] for r in manifest["rows"]})
+    assert base_ids == ["CELL-0__t0", "CELL-1__t0"], (
+        "manifest should contain rows for both previously-published bases, "
+        f"not just the last publish target. got: {base_ids}"
+    )
+    assert manifest["n_bases"] == 2
+    assert manifest["n_variants"] == 10
