@@ -118,6 +118,8 @@ class LiveScenarioExecutor:
     agent_client: JsonClient | None = None
     mode: str | None = None
     audit_condition: AuditCondition = AuditCondition.PASSIVE
+    store_dir: Path | None = None      # v2 published-scenarios store
+    run_dir: Path | None = None        # where per-run variants land
 
     def __post_init__(self) -> None:
         if self.mode is None:
@@ -158,57 +160,142 @@ class LiveScenarioExecutor:
             )
 
         started = time.monotonic()
-        base_bundle_dir = _base_bundle_dir_for(row=row, base_dir=base_dir)
-        try:
-            variant_dir, variant_scenario_path = _resolve_variant_paths(
-                row=row, base_dir=base_dir
+
+        if self.store_dir is not None and self.run_dir is not None:
+            # ----- Store-mode: skip runtime naturalization -----
+            # The v2 store holds pre-naturalized bundles. Materialize the
+            # per-run variant dir by copying from the store (applying the
+            # stress-recipe overlay when attack_mode != "no_attacker").
+            from clawsocialarena.attacks.runtime_overlay import (
+                materialize_runtime_variant,
             )
-        except FileNotFoundError as exc:
-            elapsed = time.monotonic() - started
-            return _errored_result(
-                row=row,
-                started=started,
-                elapsed=elapsed,
-                error=f"variant_paths: {exc}",
-                naturalization_usage={},
-                stage="resolve_paths",
+            try:
+                variant_dir = materialize_runtime_variant(
+                    store_dir=self.store_dir,
+                    base_id=str(row.get("base_id") or ""),
+                    attack_mode=str(row.get("attack_mode") or "no_attacker"),
+                    run_dir=self.run_dir,
+                )
+            except FileNotFoundError as exc:
+                elapsed = time.monotonic() - started
+                return _errored_result(
+                    row=row,
+                    started=started,
+                    elapsed=elapsed,
+                    error=f"store_lookup: {exc}",
+                    naturalization_usage={},
+                    stage="store_lookup",
+                )
+
+            variant_scenario_path = variant_dir / "scenario.json"
+            if not variant_scenario_path.is_file():
+                elapsed = time.monotonic() - started
+                return _errored_result(
+                    row=row,
+                    started=started,
+                    elapsed=elapsed,
+                    error=f"store_mode: missing scenario.json at {variant_scenario_path}",
+                    naturalization_usage={},
+                    stage="store_lookup",
+                )
+
+            # Build a passthrough NaturalizationPatch (store is already
+            # naturalized; no persona notes are injected at runtime).
+            from clawsocialarena.generator.naturalization import (
+                NaturalizationMetadata,
+                NaturalizedScenarioPatch,
+                NaturalizedWorldPatch,
+                NaturalizationPatch,
+            )
+            from clawsocialarena.llm.costing import TokenUsage as _TokenUsage
+
+            scenario_dict_raw = json.loads(
+                variant_scenario_path.read_text(encoding="utf-8")
+            )
+            scenario_id_for_patch = str(
+                scenario_dict_raw.get("scenario_id") or row.get("variant_id") or "store"
+            )
+            opening_msg = scenario_dict_raw.get("opening_message") or {}
+            opening_text = str(opening_msg.get("content") or "Proceed.")
+            patch = NaturalizationPatch(
+                scenario_id=scenario_id_for_patch,
+                world_patch=NaturalizedWorldPatch(files={}, databases={}),
+                scenario_patch=NaturalizedScenarioPatch(
+                    opening_message=opening_text,
+                    persona_notes={},
+                ),
+                construction_metadata=NaturalizationMetadata(
+                    naturalization_mode="store",
+                    naturalization_model="gpt-5.2",
+                    prompt_hash="sha256:store",
+                    cache_key="sha256:store",
+                ),
+                usage=_TokenUsage(
+                    model="gpt-5.2",
+                    input_tokens=0,
+                    cached_input_tokens=0,
+                    output_tokens=0,
+                ),
+            )
+            naturalization_usage_raw: dict[str, Any] = {}
+            naturalization_usage = _adapt_usage_for_aggregator(
+                naturalization_usage_raw
+            )
+            # Store-mode always runs full mode; naturalization_only is N/A.
+
+        else:
+            # ----- Legacy mode: runtime naturalization -----
+            base_bundle_dir = _base_bundle_dir_for(row=row, base_dir=base_dir)
+            try:
+                variant_dir, variant_scenario_path = _resolve_variant_paths(
+                    row=row, base_dir=base_dir
+                )
+            except FileNotFoundError as exc:
+                elapsed = time.monotonic() - started
+                return _errored_result(
+                    row=row,
+                    started=started,
+                    elapsed=elapsed,
+                    error=f"variant_paths: {exc}",
+                    naturalization_usage={},
+                    stage="resolve_paths",
+                )
+
+            # ----- Stage 1: naturalization (shared by both modes) -----
+            try:
+                patch = _naturalize_base_bundle(
+                    client=self._resolve_naturalization_client(),
+                    base_bundle_dir=base_bundle_dir,
+                    row=row,
+                    naturalization_model=self.naturalization_model,
+                )
+            except NaturalizationValidationError as exc:
+                elapsed = time.monotonic() - started
+                return _errored_result(
+                    row=row,
+                    started=started,
+                    elapsed=elapsed,
+                    error=f"NaturalizationValidationError: {exc}",
+                    naturalization_usage=exc.usage.model_dump(),
+                    stage="naturalization",
+                )
+            except Exception as exc:  # noqa: BLE001 -- isolate one row
+                elapsed = time.monotonic() - started
+                return _errored_result(
+                    row=row,
+                    started=started,
+                    elapsed=elapsed,
+                    error=f"{type(exc).__name__}: {exc}",
+                    naturalization_usage={},
+                    stage="naturalization",
+                )
+
+            naturalization_usage_raw = patch.usage.model_dump()
+            naturalization_usage = _adapt_usage_for_aggregator(
+                naturalization_usage_raw
             )
 
-        # ----- Stage 1: naturalization (shared by both modes) -----
-        try:
-            patch = _naturalize_base_bundle(
-                client=self._resolve_naturalization_client(),
-                base_bundle_dir=base_bundle_dir,
-                row=row,
-                naturalization_model=self.naturalization_model,
-            )
-        except NaturalizationValidationError as exc:
-            elapsed = time.monotonic() - started
-            return _errored_result(
-                row=row,
-                started=started,
-                elapsed=elapsed,
-                error=f"NaturalizationValidationError: {exc}",
-                naturalization_usage=exc.usage.model_dump(),
-                stage="naturalization",
-            )
-        except Exception as exc:  # noqa: BLE001 -- isolate one row
-            elapsed = time.monotonic() - started
-            return _errored_result(
-                row=row,
-                started=started,
-                elapsed=elapsed,
-                error=f"{type(exc).__name__}: {exc}",
-                naturalization_usage={},
-                stage="naturalization",
-            )
-
-        naturalization_usage_raw = patch.usage.model_dump()
-        naturalization_usage = _adapt_usage_for_aggregator(
-            naturalization_usage_raw
-        )
-
-        if self.mode == "naturalization_only":
+        if self.mode == "naturalization_only" and self.store_dir is None:
             elapsed = time.monotonic() - started
             return _naturalization_only_result(
                 row=row,
@@ -919,13 +1006,13 @@ def _assemble_full_result(
     }
 
     return ScenarioResult(
-        variant_id=row["variant_id"],
-        base_scenario_id=row["base_scenario_id"],
-        cell_id=row["cell_id"],
-        family_id=row["family_id"],
-        task_index=int(row["task_index"]),
-        tier_index=int(row["tier_index"]),
-        attack_mode=row["attack_mode"],
+        variant_id=row.get("variant_id", ""),
+        base_scenario_id=row.get("base_scenario_id", ""),
+        cell_id=row.get("cell_id", ""),
+        family_id=row.get("family_id", ""),
+        task_index=int(row.get("task_index", 0)),
+        tier_index=int(row.get("tier_index", 0)),
+        attack_mode=row.get("attack_mode", "no_attacker"),
         attack_recipe=row.get("attack_recipe"),
         naturalization_success=True,
         task_success=env_result.task_success,
