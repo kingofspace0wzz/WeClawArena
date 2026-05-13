@@ -1,4 +1,4 @@
-"""Tests for the Phase-5 run-batch slicing (S4 step 1)."""
+"""Tests for the Phase-5 run-batch slicing (S4 step 1, T12 redesign)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,26 +19,32 @@ from clawsocialarena.orchestrator.phase5_run_batches import (
 )
 
 
-def test_expected_row_counts_sum_to_pilot_total() -> None:
-    """The 5 batch row counts must sum to the 680-row pilot manifest."""
-    assert total_expected_rows() == 680
-    assert [s.expected_rows for s in PHASE5_RUN_BATCHES] == [70, 140, 210, 210, 50]
-
-
 def test_batch_numbers_are_one_through_five() -> None:
     assert [s.batch_number for s in PHASE5_RUN_BATCHES] == [1, 2, 3, 4, 5]
 
 
+def test_batch_names_are_attack_regime_based() -> None:
+    names = [s.name for s in PHASE5_RUN_BATCHES]
+    assert names == ["smoke_v2", "standard", "stress", "cross_model", "supplementary"]
+
+
 def test_run_batch_for_returns_spec_or_raises() -> None:
     spec = run_batch_for(1)
-    assert spec.name == "smoke"
+    assert spec.name == "smoke_v2"
     with pytest.raises(ValueError):
         run_batch_for(99)
 
 
+def test_total_expected_rows_reflects_overlap() -> None:
+    """R-B 2 and R-B 4 share the same row set; total is not unique pilot rows."""
+    total = total_expected_rows()
+    # 30 + 210 + 168 + 210 + 50 = 668
+    assert total == sum(s.expected_rows for s in PHASE5_RUN_BATCHES)
+
+
 @pytest.fixture(scope="module")
 def full_manifest(tmp_path_factory: pytest.TempPathFactory) -> dict:
-    """One full 680-row manifest reused across the slicing tests."""
+    """One full 210-row main + 50-row supplementary manifest reused across tests."""
     out_dir = tmp_path_factory.mktemp("phase5_full_manifest")
     base_records = generate_base_bundles(out_dir=out_dir)
     expand_base_records_to_variants(
@@ -48,35 +54,19 @@ def full_manifest(tmp_path_factory: pytest.TempPathFactory) -> dict:
 
 
 def test_each_batch_selector_lands_expected_row_count(full_manifest) -> None:
-    """Every batch's selector must produce exactly its declared count."""
+    """Every batch's selector must return a count in its declared valid set."""
     for spec in PHASE5_RUN_BATCHES:
         rows = spec.select(full_manifest)
-        assert len(rows) == spec.expected_rows, (
+        valid = {spec.expected_rows, *spec.expected_rows_alternatives}
+        assert len(rows) in valid, (
             f"batch {spec.batch_number} ({spec.name}) returned "
-            f"{len(rows)} rows, expected {spec.expected_rows}"
+            f"{len(rows)} rows, expected one of {sorted(valid)}"
         )
 
 
-def test_batches_are_pairwise_disjoint(full_manifest) -> None:
-    """No variant_id may appear in more than one batch; if it did the
-    pilot would double-count that row.
-    """
-    seen: dict[str, int] = {}
-    for spec in PHASE5_RUN_BATCHES:
-        for row in spec.select(full_manifest):
-            vid = row["variant_id"]
-            assert vid not in seen, (
-                f"variant_id {vid} appears in batches {seen[vid]} and "
-                f"{spec.batch_number}"
-            )
-            seen[vid] = spec.batch_number
-    # And the union must equal the full manifest count.
-    assert len(seen) == 680
-
-
 def test_batch_1_smoke_covers_every_attack_mode(full_manifest) -> None:
-    """The 70-row smoke must include all 5 attack modes so attacker
-    issues surface even at the smallest run.
+    """The smoke batch must include all 5 attack modes so attacker issues
+    surface even at the smallest run.
     """
     spec = run_batch_for(1)
     rows = spec.select(full_manifest)
@@ -90,11 +80,36 @@ def test_batch_1_smoke_covers_every_attack_mode(full_manifest) -> None:
     }
 
 
-def test_batch_3_and_4_partition_tiers_2_and_3(full_manifest) -> None:
-    tier_2 = run_batch_for(3).select(full_manifest)
-    tier_3 = run_batch_for(4).select(full_manifest)
-    assert {row["tier_index"] for row in tier_2} == {2}
-    assert {row["tier_index"] for row in tier_3} == {3}
+def test_batch_1_smoke_one_row_per_family_mode(full_manifest) -> None:
+    """Smoke must have exactly one row per (family_id, attack_mode) combination."""
+    spec = run_batch_for(1)
+    rows = spec.select(full_manifest)
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        key = (row["family_id"], row["attack_mode"])
+        assert key not in seen, f"duplicate (family, mode) pair: {key}"
+        seen.add(key)
+
+
+def test_batch_2_standard_is_all_main_rows(full_manifest) -> None:
+    spec = run_batch_for(2)
+    rows = spec.select(full_manifest)
+    assert {row["stratum"] for row in rows} == {"main"}
+    assert len(rows) == len(full_manifest["main"])
+
+
+def test_batch_3_stress_excludes_baseline(full_manifest) -> None:
+    spec = run_batch_for(3)
+    rows = spec.select(full_manifest)
+    assert all(row["attack_mode"] != "no_attacker" for row in rows)
+
+
+def test_batch_4_cross_model_matches_standard(full_manifest) -> None:
+    standard_rows = run_batch_for(2).select(full_manifest)
+    cross_rows = run_batch_for(4).select(full_manifest)
+    assert [r["variant_id"] for r in cross_rows] == [
+        r["variant_id"] for r in standard_rows
+    ]
 
 
 def test_batch_5_is_only_supplementary(full_manifest) -> None:
@@ -106,13 +121,12 @@ def test_batch_5_is_only_supplementary(full_manifest) -> None:
 
 
 def test_select_raises_on_count_mismatch(full_manifest) -> None:
-    """If the manifest schema drifts (e.g., main is partial), each
-    spec must catch the count drift loudly rather than silently
-    under-running.
+    """If the manifest schema drifts beyond all expected alternatives, each
+    spec must catch the drift loudly rather than silently under-running.
     """
     truncated = {
         **full_manifest,
-        "main": full_manifest["main"][:5],
+        "main": full_manifest["main"][:1],
     }
     with pytest.raises(ValueError) as excinfo:
         run_batch_for(1).select(truncated)

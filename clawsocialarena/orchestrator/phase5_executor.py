@@ -59,7 +59,7 @@ class ScenarioResult:
     cell_id: str
     family_id: str
     task_index: int
-    tier_index: int
+    tier_index: int | None  # None on v2 manifests (tier dimension dropped)
     attack_mode: str
     attack_recipe: str | None
     naturalization_success: bool | None
@@ -189,7 +189,7 @@ class MockScenarioExecutor:
             cell_id=row.get("cell_id", ""),
             family_id=row.get("family_id", ""),
             task_index=int(row.get("task_index", 0)),
-            tier_index=int(row.get("tier_index", 0)),
+            tier_index=int(v) if (v := row.get("tier_index")) is not None else None,
             attack_mode=attack_mode,
             attack_recipe=row.get("attack_recipe"),
             naturalization_success=True,
@@ -239,7 +239,7 @@ class FailingMockExecutor:
             cell_id=row.get("cell_id", ""),
             family_id=row.get("family_id", ""),
             task_index=int(row.get("task_index", 0)),
-            tier_index=int(row.get("tier_index", 0)),
+            tier_index=int(v) if (v := row.get("tier_index")) is not None else None,
             attack_mode=row.get("attack_mode", "no_attacker"),
             attack_recipe=row.get("attack_recipe"),
             naturalization_success=None,

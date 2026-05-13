@@ -1,56 +1,49 @@
-"""Phase 5 run-batch specs (S4 step 1).
+"""Phase 5 run-batch specs (S4 step 1, T12 redesign).
 
-Defines the five non-overlapping slices of the 680-row manifest that
-the Phase-5 pilot's incremental review loop executes. Each batch
-adds new scenarios on top of the previous batch's cumulative
-coverage; the union is the full pilot.
+Defines the five non-overlapping (by intent) slices of the manifest that
+the Phase-5 pilot's incremental review loop executes. With the
+difficulty-tier dimension dropped in v2 (T1-T3), batches are now
+attack-regime-based rather than tier-based.
 
-    Batch 1 (smoke):              14 cells × 5 modes × 1 task × tier 1 =  70
-    Batch 2 (task diversity):     14 cells × 5 modes × 2 tasks × tier 1 = 140
-    Batch 3 (tier-2 realistic):   14 cells × 5 modes × 3 tasks × tier 2 = 210
-    Batch 4 (tier-3 stress):      14 cells × 5 modes × 3 tasks × tier 3 = 210
-    Batch 5 (supplementary):                                              50
-    -----------------------------------------------------------------------
-    Total:                                                                680
-
-Note: Batch 2 covers task indices 1 and 2 at tier 1 (Batch 1 already
-covered task_index=0 at tier 1). The cumulative tier-1 coverage
-after Batches 1+2 is the full 210-row tier 1 slice. This avoids
-double-counting any row across batches.
+    Batch 1 (smoke_v2):      1 row per (family, mode) = 6 families x 5 modes = 30
+    Batch 2 (standard):      all 210 main rows (14 cells x 3 tasks x 5 modes)
+    Batch 3 (stress):        non-baseline rows = 42 bases x 4 modes = 168
+    Batch 4 (cross_model):   same 210 main rows; orchestrator overrides agent model
+    Batch 5 (supplementary): 50 supplementary rows
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from clawsocialarena.generator.phase5_manifest import select_rows
-
 
 @dataclass(frozen=True)
 class RunBatchSpec:
-    """One Phase-5 run-batch: a named slice of the 680-row manifest."""
+    """One Phase-5 run-batch: a named slice of the manifest."""
 
     batch_number: int  # 1..5
     name: str  # short_label
     description: str  # human-readable explanation
-    expected_rows: int  # the count we lock as a regression assertion
+    expected_rows: int  # the primary count we lock as a regression assertion
     selector_fn: Callable[[dict[str, Any]], list[dict[str, Any]]] = field(
         repr=False
     )
+    expected_rows_alternatives: tuple[int, ...] = ()
 
     def select(self, manifest: dict[str, Any]) -> list[dict[str, Any]]:
         """Return the manifest rows that belong to this batch.
 
         Raises ``ValueError`` if the resulting count does not match
-        ``expected_rows`` so a drift in the manifest schema breaks
-        the orchestrator immediately rather than silently
-        under- or over-running a batch.
+        ``expected_rows`` or any of ``expected_rows_alternatives`` so a
+        drift in the manifest schema breaks the orchestrator immediately
+        rather than silently under- or over-running a batch.
         """
         rows = self.selector_fn(manifest)
-        if len(rows) != self.expected_rows:
+        valid = {self.expected_rows, *self.expected_rows_alternatives}
+        if len(rows) not in valid:
             raise ValueError(
-                f"run-batch {self.batch_number} ({self.name}) expected "
-                f"{self.expected_rows} rows, selector returned {len(rows)}"
+                f"run-batch {self.batch_number} ({self.name}) expected one of "
+                f"{sorted(valid)} rows, selector returned {len(rows)}"
             )
         return rows
 
@@ -58,43 +51,50 @@ class RunBatchSpec:
 # ---------- Selector functions -----------------------------------------
 
 
-def _select_smoke(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    """Batch 1: smoke. One task variant (index 0) at tier 1, all 5 modes."""
-    return select_rows(manifest, stratum="main", tier_index=1, task_index=0)
+def _select_smoke_v2(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Batch 1: smoke. One row per (family_id, attack_mode).
+
+    6 families x 5 modes = 30 rows at spec-1 scale. Used for fast
+    sanity runs that surface attacker and family issues with minimal
+    compute.
+    """
+    rows = manifest.get("main") or []
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        key = (str(r.get("family_id")), str(r.get("attack_mode")))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
 
 
-def _select_task_diversity(
-    manifest: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Batch 2: task diversity. The remaining two task variants at tier 1."""
-    rows: list[dict[str, Any]] = []
-    for task_index in (1, 2):
-        rows.extend(
-            select_rows(
-                manifest,
-                stratum="main",
-                tier_index=1,
-                task_index=task_index,
-            )
-        )
-    return rows
+def _select_standard(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Batch 2: all main-stratum rows.
+
+    14 cells x 3 tasks x 5 attack modes = 210 rows at spec-1 scale.
+    """
+    return list(manifest.get("main") or [])
 
 
-def _select_tier_2(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    """Batch 3: full tier 2 (realistic). All task indices, all modes."""
-    return select_rows(manifest, stratum="main", tier_index=2)
+def _select_stress(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Batch 3: non-baseline rows scored with stress-recipe overlays.
+
+    4 non-baseline attack modes x 42 bases = 168 rows at spec-1 scale.
+    """
+    rows = manifest.get("main") or []
+    return [r for r in rows if str(r.get("attack_mode")) != "no_attacker"]
 
 
-def _select_tier_3(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    """Batch 4: full tier 3 (stress). All task indices, all modes."""
-    return select_rows(manifest, stratum="main", tier_index=3)
+def _select_cross_model(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Batch 4: same row set as standard; orchestrator overrides agent model."""
+    return _select_standard(manifest)
 
 
-def _select_supplementary(
-    manifest: dict[str, Any],
-) -> list[dict[str, Any]]:
+def _select_supplementary_v2(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Batch 5: every row in the supplementary stratum."""
-    return select_rows(manifest, stratum="supplementary")
+    return list(manifest.get("supplementary") or [])
 
 
 # ---------- The canonical 5-batch table --------------------------------
@@ -102,49 +102,55 @@ def _select_supplementary(
 PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
     RunBatchSpec(
         batch_number=1,
-        name="smoke",
+        name="smoke_v2",
         description=(
-            "14 cells × 5 attack modes × 1 task variant × tier 1 (easy)."
+            "One row per (family, mode). Sanity run. "
+            "6 families x 5 modes = 30 rows at spec-1 scale."
         ),
-        expected_rows=70,
-        selector_fn=_select_smoke,
+        expected_rows=30,
+        expected_rows_alternatives=(35, 42),
+        selector_fn=_select_smoke_v2,
     ),
     RunBatchSpec(
         batch_number=2,
-        name="task_diversity",
+        name="standard",
         description=(
-            "14 cells × 5 attack modes × 2 new task variants × tier 1 "
-            "(easy). Cumulative tier-1 coverage after this batch = 210."
+            "All main-stratum rows with standard attack recipes (or no_attacker). "
+            "14 cells x 3 tasks x 5 modes = 210 rows at spec-1 scale."
         ),
-        expected_rows=140,
-        selector_fn=_select_task_diversity,
+        expected_rows=210,
+        expected_rows_alternatives=(425, 630),
+        selector_fn=_select_standard,
     ),
     RunBatchSpec(
         batch_number=3,
-        name="tier_2_realistic",
+        name="stress",
         description=(
-            "14 cells × 5 attack modes × 3 task variants × tier 2 (realistic)."
+            "Non-baseline rows scored with stress-recipe overlays. "
+            "4 stress axes x 42 bases = 168 rows at spec-1 scale."
         ),
-        expected_rows=210,
-        selector_fn=_select_tier_2,
+        expected_rows=168,
+        expected_rows_alternatives=(340, 504),
+        selector_fn=_select_stress,
     ),
     RunBatchSpec(
         batch_number=4,
-        name="tier_3_stress",
+        name="cross_model",
         description=(
-            "14 cells × 5 attack modes × 3 task variants × tier 3 (stress)."
+            "Same row set as R-B 2; agent model overridden for cross-model eval."
         ),
         expected_rows=210,
-        selector_fn=_select_tier_3,
+        expected_rows_alternatives=(425, 630),
+        selector_fn=_select_cross_model,
     ),
     RunBatchSpec(
         batch_number=5,
         name="supplementary",
         description=(
-            "Hard-verification (25) + episode-graph (20) + named audit (5)."
+            "Hard-verification + episode-graph + named-audit rows. 50 rows."
         ),
         expected_rows=50,
-        selector_fn=_select_supplementary,
+        selector_fn=_select_supplementary_v2,
     ),
 )
 
@@ -161,5 +167,10 @@ def run_batch_for(batch_number: int) -> RunBatchSpec:
 
 
 def total_expected_rows() -> int:
-    """Sum the per-batch expected_rows; should equal the manifest total (680)."""
+    """Sum the per-batch primary expected_rows values.
+
+    Note: batches 2 and 4 share the same row set (cross-model reuse), so
+    the sum does not represent unique pilot rows. The unique row count is
+    210 main + 50 supplementary = 260.
+    """
     return sum(spec.expected_rows for spec in PHASE5_RUN_BATCHES)

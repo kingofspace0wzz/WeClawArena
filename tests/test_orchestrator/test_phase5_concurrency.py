@@ -61,7 +61,7 @@ class _OrderShuffledExecutor:
             cell_id=row.get("cell_id", ""),
             family_id=row.get("family_id", ""),
             task_index=int(row.get("task_index", 0)),
-            tier_index=int(row.get("tier_index", 0)),
+            tier_index=int(v) if (v := row.get("tier_index")) is not None else None,
             attack_mode=row.get("attack_mode", "no_attacker"),
             attack_recipe=row.get("attack_recipe"),
             naturalization_success=True,

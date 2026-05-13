@@ -200,10 +200,10 @@ def smoke_manifest_and_base_dir(
 
 
 def _pick_first_baseline_row(manifest: dict[str, Any]) -> dict[str, Any]:
+    # v2 manifests have tier_index=None; filter by task_index and mode only.
     rows = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode="no_attacker",
     )
@@ -214,10 +214,10 @@ def _pick_first_baseline_row(manifest: dict[str, Any]) -> dict[str, Any]:
 def _pick_first_attack_row(
     manifest: dict[str, Any], *, mode: str
 ) -> dict[str, Any]:
+    # v2 manifests have tier_index=None; filter by task_index and mode only.
     rows = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode=mode,
     )

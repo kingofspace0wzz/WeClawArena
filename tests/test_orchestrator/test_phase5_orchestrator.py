@@ -52,20 +52,21 @@ def test_run_batch_writes_results_jsonl_and_report_json(
         base_dir=base_dir,
         out_dir=tmp_path,
     )
-    assert summary.n_run == 70 == len(results)
+    # Batch 1 is smoke_v2: one row per (family, mode) = 30 rows at spec-1 scale.
+    assert summary.n_run == 30 == len(results)
     assert summary.n_errors == 0
     # The two per-batch artifacts are written.
     results_path = tmp_path / PHASE5_BATCH_RESULTS_FILENAME_TEMPLATE.format(
-        batch=1, name="smoke"
+        batch=1, name="smoke_v2"
     )
     report_path = tmp_path / PHASE5_BATCH_REPORT_FILENAME_TEMPLATE.format(
-        batch=1, name="smoke"
+        batch=1, name="smoke_v2"
     )
     assert results_path.is_file() and report_path.is_file()
     # The JSONL has one row per scenario.
     with results_path.open(encoding="utf-8") as fh:
         lines = [line for line in fh if line.strip()]
-    assert len(lines) == 70
+    assert len(lines) == 30
     # Every line is valid JSON.
     for line in lines:
         json.loads(line)
@@ -91,8 +92,8 @@ def test_summary_rate_fields_are_present_and_well_formed(
         "privacy",
         "governance",
     }
-    # The five per-mode rows sum to the batch total.
-    assert sum(bucket["n"] for bucket in summary.per_mode.values()) == 70
+    # The five per-mode rows sum to the batch total (30 at spec-1 scale).
+    assert sum(bucket["n"] for bucket in summary.per_mode.values()) == 30
     # Per-family breakdown spans every registered family that has a cell.
     assert summary.per_family, "per_family is empty"
 
@@ -115,8 +116,9 @@ def test_failing_executor_counts_errors_separately(
         base_dir=base_dir,
         out_dir=tmp_path,
     )
-    assert summary.n_run == 70
-    assert summary.n_errors == 70
+    # Batch 1 is smoke_v2: 30 rows at spec-1 scale.
+    assert summary.n_run == 30
+    assert summary.n_errors == 30
     assert summary.task_success_count == 0
     assert summary.attack_success_count == 0
     # Every rate must be None because no row contributed a definite outcome.
@@ -157,11 +159,11 @@ def test_raising_executor_is_caught_per_row(
         base_dir=base_dir,
         out_dir=tmp_path,
     )
-    # The batch ran to completion (all 70 rows accounted for) instead
-    # of aborting on the first raise.
-    assert summary.n_run == 70
+    # The batch ran to completion (all 30 rows accounted for) instead
+    # of aborting on the first raise. Batch 1 is smoke_v2 at spec-1 scale.
+    assert summary.n_run == 30
     # Roughly a third of the rows errored.
-    expected_errors = 70 // 3
+    expected_errors = 30 // 3
     assert summary.n_errors == expected_errors
     # Errored rows carry the raised exception's repr.
     errored = [r for r in results if r.error is not None]
@@ -260,8 +262,13 @@ def test_aggregate_combines_all_five_batches(
         )
         summaries.append(summary)
     payload = aggregate_pilot_report(out_dir=tmp_path, batch_summaries=summaries)
-    assert payload["expected_total_rows"] == 680
-    assert payload["total_rows_run"] == 680
+    # Attack-regime-based batches (T12): 30+210+168+210+50 = 668.
+    # R-B 2 (standard) and R-B 4 (cross_model) share the same 210 main rows,
+    # so the sum overestimates unique pilot rows but each batch runs independently.
+    from clawsocialarena.orchestrator.phase5_run_batches import total_expected_rows
+    expected = total_expected_rows()
+    assert payload["expected_total_rows"] == expected
+    assert payload["total_rows_run"] == expected
     assert payload["total_errors"] == 0
     json_path = tmp_path / PHASE5_PILOT_REPORT_JSON
     md_path = tmp_path / PHASE5_PILOT_REPORT_MD

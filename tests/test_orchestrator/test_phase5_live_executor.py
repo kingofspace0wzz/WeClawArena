@@ -132,10 +132,10 @@ def test_live_executor_naturalizes_baseline_row(
     manifest_and_base_dir,
 ) -> None:
     manifest, base_dir = manifest_and_base_dir
+    # v2 manifests have tier_index=None; filter by task_index and mode only.
     smoke = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode="no_attacker",
     )
@@ -167,8 +167,9 @@ def test_live_executor_handles_attack_variant_rows(
     contents (one naturalization call per base, not per variant).
     """
     manifest, base_dir = manifest_and_base_dir
+    # v2 manifests have tier_index=None; filter by task_index only.
     smoke = select_rows(
-        manifest, stratum="main", tier_index=1, task_index=0
+        manifest, stratum="main", task_index=0
     )
     by_base: dict[str, list[dict[str, Any]]] = {}
     for row in smoke:
@@ -213,14 +214,13 @@ def test_live_executor_raises_on_supplementary_rows() -> None:
 
 def test_live_executor_per_family_coverage(manifest_and_base_dir) -> None:
     """Every registered family must naturalize cleanly in Run-Batch 1.
-    Iterate one row per family at task=0, tier=1, no_attacker and
-    confirm none errors.
+    Iterate one row per family at task=0, no_attacker and confirm none errors.
+    v2 manifests have tier_index=None; the tier filter is dropped.
     """
     manifest, base_dir = manifest_and_base_dir
     smoke = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode="no_attacker",
     )
@@ -245,10 +245,10 @@ def test_live_executor_records_metadata_extras(
     manifest_and_base_dir,
 ) -> None:
     manifest, base_dir = manifest_and_base_dir
+    # v2 manifests have tier_index=None; filter by task_index and mode only.
     smoke = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode="no_attacker",
     )
@@ -274,10 +274,10 @@ def test_errored_result_preserves_raw_usage_in_extra(
     from clawsocialarena.llm.costing import TokenUsage
 
     manifest, base_dir = manifest_and_base_dir
+    # v2 manifests have tier_index=None; filter by task_index and mode only.
     smoke = select_rows(
         manifest,
         stratum="main",
-        tier_index=1,
         task_index=0,
         attack_mode="no_attacker",
     )
