@@ -59,6 +59,56 @@ from clawsocialarena.orchestrator.phase5_orchestrator import (  # noqa: E402
     run_run_batch,
 )
 
+_FILTER_KEY_TO_ROW_FIELD = {
+    "family": "family_id",
+    "cell": "cell_id",
+    "task": "task_index",
+    "mode": "attack_mode",
+    "base_id": "base_id",
+}
+
+
+def parse_filter_string(spec: str) -> dict[str, str]:
+    """Parse ``key=value[,key=value...]`` into a dict; empty -> {}.
+
+    Raises ValueError on unknown keys.
+    """
+    spec = (spec or "").strip()
+    if not spec:
+        return {}
+    out: dict[str, str] = {}
+    for pair in spec.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if "=" not in pair:
+            raise ValueError(f"filter spec missing '=' in {pair!r}")
+        k, v = pair.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k not in _FILTER_KEY_TO_ROW_FIELD:
+            raise ValueError(f"unknown filter key {k!r}; "
+                             f"valid: {sorted(_FILTER_KEY_TO_ROW_FIELD)}")
+        out[k] = v
+    return out
+
+
+def apply_filter(rows: list[dict], flt: dict[str, str]) -> list[dict]:
+    """Return rows that match every (filter_key, filter_value) pair."""
+    if not flt:
+        return list(rows)
+    out: list[dict] = []
+    for row in rows:
+        keep = True
+        for k, v in flt.items():
+            field = _FILTER_KEY_TO_ROW_FIELD[k]
+            if str(row.get(field)) != str(v):
+                keep = False
+                break
+        if keep:
+            out.append(row)
+    return out
+
 
 def _truncate_manifest_for_limit(
     *, manifest: dict, batch_number: int, limit: int
@@ -109,11 +159,15 @@ def _select_executor(args: argparse.Namespace) -> ScenarioExecutor:
         return MockScenarioExecutor(seed=args.mock_seed)
     if args.executor == "live":
         mode = _resolve_live_mode(args)
+        store = getattr(args, "store", None)
+        out_dir = getattr(args, "out_dir", None)
         executor = LiveScenarioExecutor(
             naturalization_model=args.naturalization_model,
             agent_model=args.agent_model,
             max_turns=args.max_turns,
             mode=mode,
+            store_dir=store,
+            run_dir=out_dir if store is not None else None,
         )
         return executor
     raise ValueError(f"unknown --executor={args.executor!r}")
@@ -138,8 +192,33 @@ def _resolve_live_mode(args: argparse.Namespace) -> str:
     return "naturalization_only" if args.batch == 1 else "full"
 
 
+def _apply_filter_to_manifest(manifest: dict, filter_spec: str) -> dict:
+    """Return a shallow-copied manifest with rows narrowed by filter_spec.
+
+    Works for both legacy manifests (keys 'main'/'supplementary') and
+    v2 store manifests (key 'rows'). When filter_spec is empty, returns
+    the manifest unchanged.
+    """
+    flt = parse_filter_string(filter_spec)
+    if not flt:
+        return manifest
+    out = dict(manifest)
+    for key in ("main", "supplementary", "rows"):
+        if key in out:
+            out[key] = apply_filter(out[key], flt)
+    return out
+
+
 def _cmd_run_batch(args: argparse.Namespace) -> int:
-    manifest = load_manifest(args.manifest)
+    store: Path | None = getattr(args, "store", None)
+    if store is not None:
+        store_manifest_path = store / "manifest.json"
+        manifest = load_manifest(store_manifest_path)
+    else:
+        manifest = load_manifest(args.manifest)
+    filter_spec: str = getattr(args, "filter", "")
+    if filter_spec:
+        manifest = _apply_filter_to_manifest(manifest, filter_spec)
     if args.limit is not None and args.limit > 0:
         # Truncate the batch's slice in-place so we can do a small live
         # validation before committing to a full batch's cost. The
@@ -264,6 +343,23 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument("--quiet", action="store_true")
+    run.add_argument(
+        "--store",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the v2 naturalized-scenarios store. "
+            "When set, live executor reads from here."
+        ),
+    )
+    run.add_argument(
+        "--filter",
+        default="",
+        help=(
+            "key=value[,key=value...] (keys: family, cell, "
+            "task, mode, base_id). ANDed with --batch."
+        ),
+    )
     run.set_defaults(func=_cmd_run_batch)
 
     agg = sub.add_parser(
