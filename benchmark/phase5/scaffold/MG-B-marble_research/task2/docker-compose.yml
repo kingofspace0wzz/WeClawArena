@@ -69,7 +69,7 @@ services:
       interval: 2s
       retries: 20
 
-  saanvi_pi:
+  alpha_pi:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
       context: /Users/princewang/llm/mas/clawsocialarena
@@ -79,11 +79,11 @@ services:
         condition: service_healthy
     environment:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
-      - CLAWSOCIAL_AGENT_ID=saanvi_pi
-      - CLAWSOCIAL_USER_ID=saanvi
+      - CLAWSOCIAL_AGENT_ID=alpha_pi
+      - CLAWSOCIAL_USER_ID=alpha
     volumes:
-      - ./personas/saanvi_pi.system.md:/workspace/persona.system.md:ro
-      - ./personas/saanvi_pi.tools.json:/workspace/persona.tools.json:ro
+      - ./personas/alpha_pi.system.md:/workspace/persona.system.md:ro
+      - ./personas/alpha_pi.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
     # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
@@ -92,7 +92,7 @@ services:
     entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
     command: []
 
-  tomas_pi:
+  beta_pi:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
       context: /Users/princewang/llm/mas/clawsocialarena
@@ -102,11 +102,11 @@ services:
         condition: service_healthy
     environment:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
-      - CLAWSOCIAL_AGENT_ID=tomas_pi
-      - CLAWSOCIAL_USER_ID=tomas
+      - CLAWSOCIAL_AGENT_ID=beta_pi
+      - CLAWSOCIAL_USER_ID=beta
     volumes:
-      - ./personas/tomas_pi.system.md:/workspace/persona.system.md:ro
-      - ./personas/tomas_pi.tools.json:/workspace/persona.tools.json:ro
+      - ./personas/beta_pi.system.md:/workspace/persona.system.md:ro
+      - ./personas/beta_pi.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
     # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
@@ -115,7 +115,7 @@ services:
     entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
     command: []
 
-  uma_pi:
+  gamma_pi:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
       context: /Users/princewang/llm/mas/clawsocialarena
@@ -125,11 +125,57 @@ services:
         condition: service_healthy
     environment:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
-      - CLAWSOCIAL_AGENT_ID=uma_pi
-      - CLAWSOCIAL_USER_ID=uma
+      - CLAWSOCIAL_AGENT_ID=gamma_pi
+      - CLAWSOCIAL_USER_ID=gamma
     volumes:
-      - ./personas/uma_pi.system.md:/workspace/persona.system.md:ro
-      - ./personas/uma_pi.tools.json:/workspace/persona.tools.json:ro
+      - ./personas/gamma_pi.system.md:/workspace/persona.system.md:ro
+      - ./personas/gamma_pi.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
+    # Override both entrypoint + command here so the scenario bundle
+    # launches the arena agent loop via the in-image entrypoint script.
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  delta_pi:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: /Users/princewang/llm/mas/clawsocialarena
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=delta_pi
+      - CLAWSOCIAL_USER_ID=delta
+    volumes:
+      - ./personas/delta_pi.system.md:/workspace/persona.system.md:ro
+      - ./personas/delta_pi.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
+    # Override both entrypoint + command here so the scenario bundle
+    # launches the arena agent loop via the in-image entrypoint script.
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  epsilon_pi:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: /Users/princewang/llm/mas/clawsocialarena
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=epsilon_pi
+      - CLAWSOCIAL_USER_ID=epsilon
+    volumes:
+      - ./personas/epsilon_pi.system.md:/workspace/persona.system.md:ro
+      - ./personas/epsilon_pi.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
     # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
