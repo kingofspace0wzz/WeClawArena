@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-08
 
-This is the current entry point for project state. Older design specs and plans remain useful as historical records, but they should not be used as execution instructions unless this file points to them.
+This is the current entry point for project state. Older design specs and plans remain useful as historical records, but they should not be used as execution instructions unless this file points to them. Specs earlier than 2026-05-06 are historical and are no longer active Phase 5 design references.
 
 ## Current Branch And Worktrees
 
@@ -23,14 +23,11 @@ Do not remove either worktree or branch without an explicit cleanup review. The 
 |---|---|
 | Project status and branch map | `docs/project_status.md` |
 | Documentation map | `docs/DOCUMENTATION_INDEX.md` |
-| Team-facing system design | `docs/superpowers/specs/2026-04-24-clawsocialarena-v2-team-design.md` |
 | Runtime and SAF design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` |
 | Benchmark construction design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
 | Experimental design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` |
 | Attack vector and stress-attack design | `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md` |
 | Benchmark dataset guide | `docs/benchmark_dataset_guide.md` |
-| Task difficulty design | `docs/superpowers/specs/2026-05-05-task-difficulty-success-calibration-design.md` |
-| LLM naturalization and batch pipeline design | `docs/superpowers/specs/2026-05-02-llm-naturalization-batch-pipeline-design.md` |
 
 The April 17 implementation plan has been archived because it had become a long historical execution log. Its old path now contains a pointer stub.
 

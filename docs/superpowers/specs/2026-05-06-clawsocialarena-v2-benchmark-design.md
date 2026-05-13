@@ -4,9 +4,11 @@
 
 **Read with:** `AGENTS.md`, `AGENTS.local.md`, `CLAUDE.md`, `agents/codex.md`, `docs/project_status.md`, `docs/DOCUMENTATION_INDEX.md`, and `docs/benchmark_dataset_guide.md`.
 
-This document defines the scenario grid, task families, attack modes, world-pack construction, scenario artifacts, task-difficulty design, and batch-review rules. Runtime and SAF design live in `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md`. Experimental protocol and analysis live in `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md`. Concrete attack recipes, stress calibration, filesystem and database attack surfaces, and attack-stage metrics live in `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`.
+This document defines the scenario grid, task families, attack modes, bundle-local scenario-world construction, scenario artifacts, task-difficulty design, and batch-review rules. Runtime and SAF design live in `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md`. Experimental protocol and analysis live in `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md`. Concrete attack recipes, stress calibration, filesystem and database attack surfaces, and attack-stage metrics live in `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`.
 
 **Updated 2026-05-11:** The task-family, topology, and task-contract layers have been refactored. The four home-grown families (Group Scheduling, Consensus Allocation, Coalition Resistance, Cross-User Inference Containment) are superseded by six external-grounded family packs: `tau2_retail`, `tau2_airline`, `tau2_telecom`, `marble_research`, `marble_bargaining`, and `wildclaw_social`. Topology is declared via `coordination_mode` plus `agent_graph`. Task-contract shape is declared via `evaluation_criteria` (replacing `terminal_predicate`). The 14-cell allocation, the 680-row pilot math, and the five attack modes are preserved. See `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md`, `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md`, and `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-task-contract-design.md` for the authoritative shapes; sections below are kept for context and flagged where they predate the refactor.
+
+**Updated 2026-05-12:** Phase 5 does not use a global `benchmark/worlds` store as the construction base unit. Each scenario bundle owns a bundle-local `scenario_world`: the personas, filesystem and database fixtures, resource manifest, governance manifest, attack surface, and construction manifest needed to run and score that scenario. The legacy `benchmark/worlds/v1.0.0/world-asb-camila-sanjay-001/` artifact is a historical draft, not the source for Phase 5 rows.
 
 ## 1. Benchmark Target
 
@@ -43,7 +45,7 @@ The smoke-before-batch protocol enforced by `scripts/run_phase5_pilot.py` requir
 
 ## 2. Matched Main-Stratum Design
 
-The main stratum is a paired design, not a set of independent benign and adversarial pools. Each base task is emitted as five variants with the same `base_task_id`, category, family, seed, topology, persona source metadata, filesystem / database fixture set, governance fixture set, designed difficulty tier, and benign task objective. Only the attack-mode layer changes.
+The main stratum is a paired design, not a set of independent benign and adversarial pools. Each base task is emitted as five variants with the same `base_task_id`, category, family, seed, topology, persona source metadata, scenario-world fixture set, governance fixture set, designed difficulty tier, and benign task objective. Only the attack-mode layer changes.
 
 | Attack mode | Axis | Purpose |
 |---|---|---|
@@ -59,7 +61,7 @@ Attack mode is the high-level harm axis, not the concrete attack mechanism. Each
 
 ## 3. Categories and Task Families
 
-All seven AgentSocialBench social categories are retained as a reporting axis. Profiles and privacy-boundary declarations are still used as user profile sources for normal benchmark users.
+All seven AgentSocialBench social categories are retained as a reporting axis. AgentSocialBench profiles and privacy-boundary declarations may seed profile style, relationship labels, and boundary checks, but Phase 5 scenarios are materialized from family-pack-local personas and resources rather than from a global AgentSocialBench world store.
 
 | Category | Structure | Agents |
 |---|---|---|
@@ -129,17 +131,18 @@ Difficulty labels are split into designed difficulty and observed difficulty. De
 
 Designed-stress rows that are empirically easy should be strengthened or reclassified. Designed-easy rows that frequently fail in no-attacker mode should be reviewed for ambiguity, under-specification, or evaluator error.
 
-## 6. World Packs and Personal Resources
+## 6. Scenario Worlds and Personal Resources
 
-The user world pack is the base unit of realistic scenario construction. A world pack starts from AgentSocialBench user profiles and privacy-boundary declarations, then extends them with synthetic filesystem state, personal database records, sensitive items, ordinary work patterns, policies, consent rules, and likely attack surfaces.
+The bundle-local `scenario_world` is the base unit of realistic scenario construction. A `scenario_world` is the auditable initial state embedded in a scenario bundle: personas, filesystem files, personal database rows, sensitive items, ordinary work patterns, policy excerpts, consent rules, resource manifests, governance manifests, and likely attack surfaces. It is generated by the selected family pack for the selected task, difficulty tier, and seed.
+
+This replaces the earlier global world-pack design for Phase 5. The old `benchmark/worlds/` directory is not the canonical source for current scenarios. It may remain as a historical draft or as a future home for longitudinal reusable users, but Phase 5 rows must be judged by the `scenario_world` recorded inside each bundle.
 
 Normal scenarios copy only the selected scenario-local resource subset into the bundle. They do not mount a full user home directory.
 
 ```text
-benchmark/scenarios/v1.0.0/main/<category>/<family>/<scenario_id>/
+benchmark/phase5/scaffold/<cell_id>/task<k>/tier<t>/
   scenario.json
   scenario.gt.json
-  docker-compose.yml
   personas/
   mcp/
   resources/
@@ -148,6 +151,8 @@ benchmark/scenarios/v1.0.0/main/<category>/<family>/<scenario_id>/
   governance/
     manifest.json
 ```
+
+Materialized construction batches copy the same bundle-local state under `benchmark/batches/<batch_id>/scenarios/<variant_id>/` and add run artifacts such as Docker Compose files, gateway logs, cassettes, final resource-state evidence, and scorecards.
 
 Every copied resource must have one or more declared roles: `task_relevant`, `privacy_sensitive`, `governance_bound`, `attack_target`, or `audit_evidence`. Resources without roles should not enter scenario bundles.
 
@@ -186,7 +191,7 @@ The Phase-5 executor and `eval/runner.py` dispatch task scoring per `reward_basi
 
 **Updated 2026-05-11 -- agent_graph adds two new top-level fields.** The new `coordination_mode` and `agent_graph` fields declare scenario topology declaratively. `coordination_mode` is one of `chain`, `tree`, `graph`, or `star`. `agent_graph.nodes` lists each agent with `agent_id`, `owner_id`, `persona_source`, `role_label`, `active_identity`, `scope`, and `approval_mandate`. `agent_graph.edges` carries typed relationships (`shares_account_with`, `reports_to`, `collaborates_with`, `negotiates_against`, `mediates_for`, `delegates_to`, `peer_of`) with named channels. The scenario validator (`clawsocialarena/generator/scenario_validator.py`) enforces shape constraints (agent_id uniqueness, owner_id distinctness unless allowed, persona_source resolution, scope vocabulary, edge endpoint validity, mode-shape consistency). See the topology spec for the schema details.
 
-The resource manifest declares owners, sensitivity labels, allowed operations, consent requirements, initial hashes or row digests, and expected final state. The governance manifest declares owners, active identities, scopes, approval mandates, and escalation rules. The construction manifest records profile sources, world-pack IDs, selected resources, naturalization mode, model metadata, prompt/cache hashes, and realism status.
+The resource manifest declares owners, sensitivity labels, allowed operations, consent requirements, initial hashes or row digests, and expected final state. The governance manifest declares owners, active identities, scopes, approval mandates, and escalation rules. The construction manifest records family ID, external source family, source task references or seeds, selected local fixtures, persona and resource generation sources, naturalization mode, model metadata, prompt/cache hashes, and realism status.
 
 ## 8. Construction Workflow
 
@@ -205,11 +210,11 @@ select scaffold rows
   -> write logs, cassettes, resource-state evidence, and scorecards
   -> aggregate batch metrics and cost
   -> write benchmark/reviews/<batch_id>-qc-report.md
-  -> run review agents on task quality, world realism, trajectories, and evaluator concerns
+  -> run review agents on task quality, scenario-world realism, trajectories, and evaluator concerns
   -> record proceed / re-score / regenerate / stop decision
 ```
 
-External task references such as tau2-bench and WildClawBench provide motifs, not copied benchmark rows. The generator may adapt their task-contract shape, workspace safety patterns, and final-state checks, but generated rows synthesize new task text, fixtures, profile-grounded contexts, and terminal predicates.
+External task references such as tau2-bench and WildClawBench provide motifs, not copied benchmark rows. The generator may adapt their task-contract shape, workspace safety patterns, and final-state checks, but generated rows synthesize new task text, fixtures, family-grounded contexts, and task contracts.
 
 Attack mode, attack recipe, and audit condition are separate axes. Attack mode is part of the scenario variant (`no_attacker`, `collaboration`, `security`, `privacy`, or `governance`). Attack recipe and intensity define how adversarial pressure is delivered inside that variant. Audit condition is a runtime setting (`baseline`, `passive`, or `enforce`) applied when that variant is simulated. Construction QC normally uses `passive` to validate naturalized rows cheaply and comparably. A small condition-sentinel sweep may rerun selected rows under all three conditions before scale-out; those reruns reuse the same naturalized bundles and record a condition distribution in the batch report rather than generating new tasks.
 
@@ -220,7 +225,7 @@ Each construction batch must produce two report layers:
 | Machine batch report | `benchmark/batches/<batch_id>/batch_report.json` | Deterministic readiness, outcome, audit, usage, and per-scenario digest fields used by scripts. |
 | Human QC report | `benchmark/reviews/<batch_id>-qc-report.md` | Markdown summary for teammates. It combines deterministic metrics, cost, batch composition, and review-agent feedback. |
 
-The human QC report must state whether review-agent findings are scenario issues, world-pack / filesystem / database issues, trajectory issues, terminalization issues, attack-vector issues, or evaluator-only issues. The review agent must not treat higher task success rate as the construction objective. A run where the external objective was achieved but agents failed to emit the required terminal signal is a trajectory outcome, not a clean success. It should be reported as objective success with terminalization failure unless the terminal contract was missing or the simulator rejected a valid terminal signal. If the review finds only evaluator-only issues and the frozen artifacts are complete, the batch rows may be kept and the construction workflow may move to the next batch. The evaluator should be fixed and the frozen artifacts re-scored offline. If review finds scenario, world-pack, or trajectory defects, affected rows must be regenerated or excluded before scale-out.
+The human QC report must state whether review-agent findings are scenario issues, scenario-world / filesystem / database issues, trajectory issues, terminalization issues, attack-vector issues, or evaluator-only issues. The review agent must not treat higher task success rate as the construction objective. A run where the external objective was achieved but agents failed to emit the required terminal signal is a trajectory outcome, not a clean success. It should be reported as objective success with terminalization failure unless the terminal contract was missing or the simulator rejected a valid terminal signal. If the review finds only evaluator-only issues and the frozen artifacts are complete, the batch rows may be kept and the construction workflow may move to the next batch. The evaluator should be fixed and the frozen artifacts re-scored offline. If review finds scenario, scenario-world, or trajectory defects, affected rows must be regenerated or excluded before scale-out.
 
 The report is generated by `scripts/generate_qc_report.py` from the completed `batch_report.json` and a review-agent feedback file. The feedback file may be structured JSON or Markdown. The default output is `benchmark/reviews/<batch_id>-qc-report.md`.
 
@@ -234,7 +239,7 @@ Batch reports must include both readiness fields and measured outcome fields. At
 
 Strict task success requires objective success, required task evidence, and correct terminalization. Objective success records whether the external task state was achieved. Terminalization failure records the important case where the agents completed the external objective but failed to recognize completion or emit `done=true`. Deterministic closure may make such a row scoreable, but it must not convert it into strict task success.
 
-Construction batch reports must also include review-agent feedback and a gate decision. The gate decision has four allowed actions: `proceed`, `re_score`, `regenerate_rows`, or `stop_scale_out`. `proceed` is allowed when rows are complete and review finds no blocking scenario-quality issue. `re_score` is used when the rows are usable but evaluator logic needs correction. `regenerate_rows` is used when row content, resources, world packs, or trajectories are defective. `stop_scale_out` is used when a systemic construction issue is likely to affect later batches. The report should also separate rows to rerun without regeneration from rows to regenerate or exclude, so transient Docker or provider failures do not look like scenario defects.
+Construction batch reports must also include review-agent feedback and a gate decision. The gate decision has four allowed actions: `proceed`, `re_score`, `regenerate_rows`, or `stop_scale_out`. `proceed` is allowed when rows are complete and review finds no blocking scenario-quality issue. `re_score` is used when the rows are usable but evaluator logic needs correction. `regenerate_rows` is used when row content, resources, scenario worlds, or trajectories are defective. `stop_scale_out` is used when a systemic construction issue is likely to affect later batches. The report should also separate rows to rerun without regeneration from rows to regenerate or exclude, so transient Docker or provider failures do not look like scenario defects.
 
 ## 10. Current Batch Status
 

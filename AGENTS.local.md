@@ -15,7 +15,7 @@ Before making benchmark, runtime, evaluation, or documentation changes, use thes
 | Current branch, retained batch, and benchmark target status | `docs/project_status.md` |
 | Documentation map | `docs/DOCUMENTATION_INDEX.md` |
 | Runtime, policy hooks, Multi-Party Social World Model, and Social Auditability Framework design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` |
-| Benchmark construction, scenario grid, task difficulty, world packs, and batch gates | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
+| Benchmark construction, scenario grid, task difficulty, bundle-local scenario worlds, and batch gates | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
 | Experimental protocol, run validation, metrics, batch reports, and compute planning | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` |
 | Attack modes, concrete attack recipes, stress calibration, and attack-stage metrics | `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md` |
 | Topology layer, coordination modes, agent_graph schema, and scenario validation | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md` |

@@ -8,7 +8,7 @@ This document defines the topology layer that controls how scenarios are compose
 
 ## 1. Motivation
 
-Construction batch 0074 surfaced two structural defects that are not bugs in any single template but properties of the per-category template approach itself. The HS and MG coalition templates duplicated the same persona across multiple agents with the same owner identity, weakening identity-boundary realism for `hs-coalition-stress-task-01314-*` and `mg-coalition-stress-task-01305-*`. The MC, CD, and CU rows carried personal resources unrelated to the task domain because resource selection in `world_pack_instantiation.py:66-92` was keyed off category labels rather than the actual scenario shape. Each category had its own way to break.
+Construction batch 0074 surfaced two structural defects that are not bugs in any single template but properties of the per-category template approach itself. The HS and MG coalition templates duplicated the same persona across multiple agents with the same owner identity, weakening identity-boundary realism for `hs-coalition-stress-task-01314-*` and `mg-coalition-stress-task-01305-*`. The MC, CD, and CU rows carried personal resources unrelated to the task domain because resource selection in the legacy world-pack instantiation path was keyed off category labels rather than the actual scenario shape. Each category had its own way to break.
 
 Adding ad-hoc guards inside each template would patch instances. The deeper repair is to move topology from Python templates into declarative config, validate the config against shape constraints, and have the emitters consume the config. This eliminates the class of bug rather than fixing instances.
 
@@ -37,7 +37,7 @@ Each scenario declares an `agent_graph` field in `scenario.json`. The graph is a
       {
         "agent_id": "alice_assistant",
         "owner_id": "alice",
-        "persona_source": "world_pack/alice/persona.md",
+        "persona_source": "personas/alice.system.md",
         "role_label": "primary_account_holder",
         "active_identity": "alice@household",
         "scope": ["read:household_orders", "write:household_orders"],
@@ -46,7 +46,7 @@ Each scenario declares an `agent_graph` field in `scenario.json`. The graph is a
       {
         "agent_id": "bob_assistant",
         "owner_id": "bob",
-        "persona_source": "world_pack/bob/persona.md",
+        "persona_source": "personas/bob.system.md",
         "role_label": "secondary_account_holder",
         "active_identity": "bob@household",
         "scope": ["read:household_orders"],
@@ -99,7 +99,7 @@ family-pack loader
   -> emits coordination_mode + agent_graph + family_id + family_inputs
 scenario_validator
   -> blocks invalid graphs
-world_pack_instantiation
+scenario_world_builder
   -> resolves persona_source for each node
   -> selects task-relevant resources via family_id, not category_label
 governance_emitter
@@ -116,9 +116,9 @@ persona_emitter
 
 The emitters become thinner because the agent count, channel topology, and persona-to-agent mapping are read from one place (`agent_graph`) rather than reconstructed from category-specific Python in each template module.
 
-## 6. Resource Selection
+## 6. Scenario-World Resource Selection
 
-Resource selection (filesystem files, personal-database rows) is rekeyed from category to family. Each family-pack entry declares which resource categories are task-relevant. The world-pack instantiation module queries the family entry rather than the scenario's category label.
+Resource selection (filesystem files, personal-database rows) is rekeyed from category to family. Each family-pack entry declares which resource categories are task-relevant. The scenario-world builder queries the family entry rather than the scenario's category label, then writes only the selected resources into the bundle-local `scenario_world`.
 
 ```python
 # Old (broken in batch 0074): keyed off category, no domain check
@@ -147,7 +147,8 @@ Files retired:
 
 Files refactored:
 
-- `clawsocialarena/generator/world_pack_instantiation.py` consumes `family_id` instead of category-specific paths
+- `clawsocialarena/generator/world_pack_instantiation.py` is retired or kept only as a compatibility wrapper around the scenario-world builder
+- `clawsocialarena/generator/scenario_world_builder.py` consumes `family_id` and family resource declarations instead of category-specific paths
 - `clawsocialarena/generator/compose_emitter.py` consumes `agent_graph.nodes`
 - `clawsocialarena/generator/governance_emitter.py` consumes `agent_graph` for owner / identity / scope fields
 - `clawsocialarena/generator/persona_emitter.py` consumes `agent_graph.nodes[].persona_source`
@@ -156,6 +157,7 @@ Files added:
 
 - `clawsocialarena/generator/scenario_validator.py` (new)
 - `clawsocialarena/generator/coordination_modes.py` (mode-shape validation helpers)
+- `clawsocialarena/generator/scenario_world_builder.py` (bundle-local persona, filesystem, database, and governance fixture assembly)
 
 Files unchanged:
 

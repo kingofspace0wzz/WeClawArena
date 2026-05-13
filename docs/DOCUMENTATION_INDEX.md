@@ -1,6 +1,6 @@
 # ClawSocialArena Documentation Index
 
-Use this file to decide what to read first. Older files remain in the repository for audit history, but current execution should start from the files marked current.
+Use this file to decide what to read first. Older files remain in the repository for audit history, but current execution should start from the files marked current. Specs earlier than 2026-05-06 are historical and should not be used as active Phase 5 design references.
 
 ## Current Entry Points
 
@@ -8,7 +8,6 @@ Use this file to decide what to read first. Older files remain in the repository
 |---|---|
 | Current branch, batch, and benchmark status | `docs/project_status.md` |
 | Benchmark data layout, metrics, and construction QC reports | `docs/benchmark_dataset_guide.md` |
-| Team design overview | `docs/superpowers/specs/2026-04-24-clawsocialarena-v2-team-design.md` |
 | Runtime and SAF design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` |
 | Benchmark construction design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
 | Experimental design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` |
@@ -16,7 +15,6 @@ Use this file to decide what to read first. Older files remain in the repository
 | Topology design (coordination modes, agent_graph, validation) | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md` |
 | Task-contract design (evaluation_criteria, reward_basis, predicate registry) | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-task-contract-design.md` |
 | Family pack design (six families, allocation table, per-family detail) | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md` |
-| Task-difficulty calibration design | `docs/superpowers/specs/2026-05-05-task-difficulty-success-calibration-design.md` |
 
 ## Current Implementation Plans
 
@@ -27,14 +25,14 @@ Use this file to decide what to read first. Older files remain in the repository
 | `docs/superpowers/plans/2026-05-02-benchmark-orchestration.md` | Current scaffold orchestration plan. |
 | `docs/superpowers/plans/2026-05-02-llm-naturalization-batch-pipeline.md` | Current LLM naturalization and Docker simulation batch plan. |
 | `docs/superpowers/plans/2026-05-02-resource-coverage-matrix.md` | Current resource-coverage plan. |
-| `docs/superpowers/plans/2026-05-02-user-world-pack-scenario.md` | Current world-pack and profile-source construction plan. |
+| `docs/superpowers/plans/2026-05-02-user-world-pack-scenario.md` | Historical plan superseded by bundle-local scenario-world and family-pack specs; do not use for Phase 5 execution. |
 
 ## Architecture References
 
 | Spec | Role |
 |---|---|
 | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` | Current harms-first motivation, threat model, runtime architecture, policy-hook, MSWM, and SAF reference. |
-| `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` | Current benchmark construction, scenario grid, attack-mode, world-pack, task-difficulty, and construction batch-gate reference. |
+| `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` | Current benchmark construction, scenario grid, attack-mode, bundle-local scenario-world, task-difficulty, and construction batch-gate reference. |
 | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` | Current experimental protocol, run-validation, deterministic and LLM-judge metric layers, batch-report, aggregation, and compute-planning reference. |
 | `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md` | Current attack-mode contract, stress-attack recipes, filesystem and database attack surfaces, attack-stage metrics, and calibration targets. |
 | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md` | Current topology and scenario-composition reference. Coordination modes adopted from MARBLE, agent_graph schema, validation rules, construction pipeline changes. Replaces per-category template references in earlier specs. |
@@ -42,9 +40,9 @@ Use this file to decide what to read first. Older files remain in the repository
 | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md` | Current six-family pack reference. Per-family external source, multi-partying approach, fixtures, evaluation_criteria shape, phase schedule, governance manifest sourcing, and attack-recipe payloads. Includes the 14-cell allocation table that preserves the 680-variant pilot math. |
 | `docs/superpowers/specs/2026-04-17-clawsocialarena-v2-design.md` | Superseded monolith pointer retained for old links. |
 | `docs/superpowers/specs/2026-04-27-mswm-transaction-refactor-design.md` | MSWM tentative-state and transaction design. |
-| `docs/superpowers/specs/2026-05-02-user-world-pack-scenario-design.md` | User world-pack, filesystem, and personal database design. |
+| `docs/superpowers/specs/2026-05-02-user-world-pack-scenario-design.md` | Superseded historical user world-pack draft. Phase 5 uses bundle-local scenario worlds from family packs. |
 | `docs/superpowers/specs/2026-05-02-llm-naturalization-batch-pipeline-design.md` | LLM naturalization and batch simulation design. |
-| `docs/superpowers/specs/2026-05-05-task-difficulty-success-calibration-design.md` | Task difficulty and task-success calibration design. |
+| `docs/superpowers/specs/2026-05-05-task-difficulty-success-calibration-design.md` | Superseded historical task-difficulty draft. Current difficulty rules live in the benchmark and experimental specs. |
 
 ## Archived Historical Docs
 

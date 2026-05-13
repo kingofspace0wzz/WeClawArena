@@ -141,7 +141,7 @@ The previous retained batch reports did not include audit-score summaries becaus
 
 Every construction batch must also write a teammate-facing Markdown report at `benchmark/reviews/<batch_id>-qc-report.md`. The report must include the deterministic metrics above, usage/cost, category and attack-mode distribution, review-agent findings, rows to keep, rows to rerun without regeneration, rows to regenerate, evaluator fixes needed, and the final gate decision.
 
-If review-agent findings are limited to evaluator-only issues, the construction loop should keep the frozen artifacts, proceed to the next batch when cost and readiness are acceptable, and re-score the affected batch after the evaluator fix. If findings point to scenario, resource, world-pack, attack-vector, or trajectory defects, the construction loop should regenerate or exclude affected rows before moving on.
+If review-agent findings are limited to evaluator-only issues, the construction loop should keep the frozen artifacts, proceed to the next batch when cost and readiness are acceptable, and re-score the affected batch after the evaluator fix. If findings point to scenario, scenario-world resource, attack-vector, or trajectory defects, the construction loop should regenerate or exclude affected rows before moving on.
 
 The standard report command is `scripts/generate_qc_report.py --batch-dir benchmark/batches/<batch_id> --review-feedback benchmark/reviews/<batch_id>-review-feedback.json`. The command writes the Markdown report to `benchmark/reviews/<batch_id>-qc-report.md` unless an explicit `--out` path is provided.
 

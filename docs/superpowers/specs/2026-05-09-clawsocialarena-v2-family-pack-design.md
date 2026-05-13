@@ -4,7 +4,9 @@
 
 **Read with:** `AGENTS.md`, `AGENTS.local.md`, `CLAUDE.md`, `agents/codex.md`, `docs/project_status.md`, `docs/DOCUMENTATION_INDEX.md`, `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md`, `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`, `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md`, and `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-task-contract-design.md`.
 
-This document defines the six task families that populate the v2 benchmark. Each family entry specifies its external source, multi-partying approach, fixtures, evaluation_criteria shape, phase schedule, governance manifest sourcing, and attack-recipe payloads. Topology shape is declared via `coordination_mode` and `agent_graph` per the topology spec. Task-contract shape (`reward_basis`, `env_assertions`, predicate registry) is declared per the task-contract spec.
+This document defines the six task families that populate the v2 benchmark. Each family entry specifies its external source, multi-partying approach, bundle-local scenario-world fixtures, evaluation_criteria shape, phase schedule, governance manifest sourcing, and attack-recipe payloads. Topology shape is declared via `coordination_mode` and `agent_graph` per the topology spec. Task-contract shape (`reward_basis`, `env_assertions`, predicate registry) is declared per the task-contract spec.
+
+**Updated 2026-05-12:** Phase 5 scenarios do not depend on a global `benchmark/worlds` store. Each family pack emits the bundle-local `scenario_world` for its scenarios: personas, filesystem and database fixtures, resource manifests, governance manifests, and attack surfaces. The legacy AgentSocialBench world-pack scaffold is historical for Phase 5.
 
 ## 1. Family List
 
@@ -56,6 +58,8 @@ The hybrid category model from the benchmark-design spec applies. Categories rem
 This matches the 680-variant pilot target from the benchmark-design spec. The release-grid expansion to 1100 variants stays gated on pilot validation.
 
 ## 4. Per-Family Detail
+
+Each per-family fixture set below is emitted into the scenario bundle. Family packs may draw structure from their external source datasets and may use AgentSocialBench-style profile boundaries as user-modeling seeds, but the scoreable state for a Phase 5 row is the `scenario_world` inside that row's bundle.
 
 ### 4.1 marble_research
 
@@ -191,7 +195,7 @@ This matches the 680-variant pilot target from the benchmark-design spec. The re
 
 ## 5. Naturalization Approach
 
-Each family declares a naturalization template at `clawsocialarena/generator/naturalization_templates/<family_id>.j2`. The template takes the structured family inputs (db rows, persona profiles, policy excerpts) and emits naturalized scenario text, persona prompts, and message seeds. The naturalization pipeline (`gpt-5.2` by default per the experimental-design spec) consumes the same template machinery as today.
+Each family declares a naturalization template at `clawsocialarena/generator/naturalization_templates/<family_id>.j2`. The template takes the structured family inputs (database rows, persona profiles, policy excerpts, and selected scenario-world resources) and emits naturalized scenario text, persona prompts, and message seeds. The naturalization pipeline (`gpt-5.2` by default per the experimental-design spec) consumes the same template machinery as today.
 
 The structured inputs differ per family but the output shape is identical: a naturalization patch that fills in fields of the scenario bundle. This keeps the existing batch runner (`scripts/naturalize_and_run_batch.py`) unchanged.
 
@@ -205,6 +209,7 @@ Before a family enters a batch, it must pass per-family validation:
 | Multi-party coverage | At least 2 distinct `agent_graph` shapes are realizable for the family |
 | Predicate registry resolution | Every name referenced in `evaluation_criteria` resolves to a registered predicate |
 | Governance manifest completeness | Every node in `agent_graph` has owner / identity / scope / approval populated |
+| Scenario-world completeness | Each bundle-local `scenario_world` declares persona, resource, governance, and construction manifests for every active owner |
 | Phase schedule completeness | Every policy in the manifest is reachable in at least one declared phase |
 | Attack-recipe surface | Each of the four attack modes has at least one payload defined for the family |
 
