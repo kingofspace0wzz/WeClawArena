@@ -1858,6 +1858,62 @@ After this push, the v2.0.0 store and its initial smoke results are both pushed 
 
 ---
 
+---
+
+## Phase B Followups (post-v2.0.0)
+
+The v2.0.0 base scaffold preserves the original Phase 5 family-pack
+shape: three task variants per cell, where each variant differs from
+its siblings only by actor-name swaps. A per-scenario smoke on
+CD-A-marble_research__t0 vs CD-A-marble_research__t1 revealed that the
+"three variants" are functionally one task replicated three times with
+cosmetic relabeling. Real task diversity requires per-variant content,
+party-count, and parameter changes.
+
+The marble_research and marble_bargaining family packs are redesigned
+to inject substantive diversity in
+**docs/superpowers/specs/2026-05-13-marble-task-diversity-redesign.md**
+(8 marble_research tasks across 3 MARBLE-profile seeds with party
+counts 3-5; 3 marble_bargaining tasks with distinct items and
+progressively narrower price windows). That spec is queued for
+implementation as the marble-task-diversity work.
+
+After the marble redesign lands, the remaining four family packs need
+the same treatment. The followup spec list:
+
+### B1: Task-diversity redesign for tau2_retail, tau2_airline, tau2_telecom, wildclaw_social
+
+Each family pack currently produces three actor-permuted clones per
+cell. Each needs substantive per-task diversity drawn from the
+upstream tau2-bench / wildclaw-bench seed content. Roughly the same
+scope as the marble redesign per family. Owner-TBD; would benefit
+from a dedicated spec analogous to the 2026-05-13 marble spec.
+
+### B2: Multi-party marble_bargaining
+
+Original MARBLE has only a 2-party bargaining example. To support 3+
+party bargaining (1 buyer + 2 competing sellers, 2 buyers + 1 seller,
+auction-style), the tool semantics need extending: `accept_offer`
+takes a `counterparty_id` argument, the `agreement` dict records
+which counterparty the deal is with, `private_constraints` becomes
+per-counterparty, the `offers` log gets a per-counterparty lane, and
+a new `chosen_counterparty_window_respected` predicate replaces or
+augments `agreed_price_within_window`. Plus tests.
+
+### B3: Multi-party extensions to all families
+
+Once B2 lands the multi-party pattern, apply it to other families
+where multi-party is structurally meaningful (wildclaw_social already
+supports 4 parties; tau2 families may not need it).
+
+### B4: Additional MARBLE-derived family packs
+
+The upstream MARBLE benchmark includes other environments
+(werewolf_env, db_env, web_env, etc.) that could become new family
+packs in a future release. Out of scope for v2.0.0.
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage**: each requirement in the spec maps to a task:

@@ -1,24 +1,27 @@
 """Phase-5 manifest assembly (S3 step 7).
 
-Aggregates the 210 main attack-variants and the 50 supplementary
+Aggregates the 285 main attack-variants and the 50 supplementary
 descriptors into a single ``phase5_manifest.json`` index. The
 orchestrator's Run-Batch 1..5 selectors consult this file by stratum,
 attack_mode, and cell to determine which rows belong to a given
 batch.
 
-v2 math (difficulty-tier dim dropped):
+v2 math (difficulty-tier dim dropped, marble_research redesigned to 8 tasks):
 
-    14 cells × 3 tasks × 5 attack modes = 210 main variants
+    3 marble_research cells × 8 tasks × 5 attack modes = 120
+    2 marble_bargaining cells × 3 tasks × 5 attack modes = 30
+    9 other cells × 3 tasks × 5 attack modes = 135
+    Total main: 285 main variants
     + 50 supplementary descriptors
-    = 260 total rows
+    = 335 total rows
 
 Manifest schema (top level):
 
     {
       "phase5_version": 1,
-      "n_main": 210,
+      "n_main": 285,
       "n_supplementary": 50,
-      "n_total": 260,
+      "n_total": 335,
       "main": [<MainManifestRow>...],
       "supplementary": [<SupplementaryManifestRow>...]
     }
@@ -51,9 +54,12 @@ from clawsocialarena.generator.phase5_supplementary import (
 
 
 PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
-# v2 counts: 14 cells × 3 tasks × 5 attack modes = 210 main variants
-# (the difficulty-tier dimension was dropped).
-EXPECTED_MAIN_VARIANTS = 210
+# v2 counts (difficulty-tier dim dropped, marble_research redesigned to 8 tasks):
+#   3 marble_research cells × 8 × 5 = 120
+#   2 marble_bargaining cells × 3 × 5 = 30
+#   9 other cells × 3 × 5 = 135
+#   Total: 285 main variants
+EXPECTED_MAIN_VARIANTS = 285
 EXPECTED_SUPPLEMENTARY_VARIANTS = 50
 EXPECTED_TOTAL_VARIANTS = (
     EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
@@ -62,7 +68,7 @@ EXPECTED_TOTAL_VARIANTS = (
 
 @dataclass(frozen=True)
 class MainManifestRow:
-    """One row of the 210-row main stratum manifest.
+    """One row of the 285-row main stratum manifest.
 
     Mirrors :class:`VariantRecord` fields plus a canonical_index for
     stable ordering. ``attack_mode`` is the spec section 2 axis

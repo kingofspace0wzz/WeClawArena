@@ -12,6 +12,9 @@ the generator and the orchestrator produces the same scenarios. Each
 variant uses a tier-1-compatible scenario_id that the difficulty-tier
 overlay then refines.
 
+marble_research is an exception: it has 8 task variants, one per
+MarbleResearchTaskSpec in marble_seed_data.ALL_TASKS.
+
 Tests in :mod:`tests.test_generator.test_phase5_task_variants`
 exercise this module against every registered family.
 """
@@ -19,6 +22,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+from clawsocialarena.generator.family_packs.marble_research.marble_seed_data import (
+    ALL_TASKS as _MARBLE_RESEARCH_ALL_TASKS,
+)
 
 
 @dataclass(frozen=True)
@@ -117,69 +124,86 @@ def _kwargs_tau2_telecom() -> tuple[dict[str, Any], dict[str, Any], dict[str, An
     )
 
 
-def _kwargs_marble_research() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    return (
+def _kwargs_marble_research() -> tuple[dict[str, Any], ...]:
+    """Return 8 task-variant kwarg dicts, one per MarbleResearchTaskSpec.
+
+    Each dict drives the marble_research loader with the full task context:
+    the seed, proposal, convener, participating PI subset, and topic text.
+    The participating_owners tuple drives variable-N PI graph construction
+    inside the loader.
+    """
+    return tuple(
         {
-            "scenario_id": "marble_research_collaboration_phase5_v0",
-            "convener_id": "alice_pi",
-            "peer_one_id": "bob_pi",
-            "peer_two_id": "carol_pi",
-            "convener_owner": "alice",
-            "peer_one_owner": "bob",
-            "peer_two_owner": "carol",
-        },
-        {
-            "scenario_id": "marble_research_collaboration_phase5_v1",
-            "convener_id": "priya_pi",
-            "peer_one_id": "quentin_pi",
-            "peer_two_id": "rosa_pi",
-            "convener_owner": "priya",
-            "peer_one_owner": "quentin",
-            "peer_two_owner": "rosa",
-        },
-        {
-            "scenario_id": "marble_research_collaboration_phase5_v2",
-            "convener_id": "saanvi_pi",
-            "peer_one_id": "tomas_pi",
-            "peer_two_id": "uma_pi",
-            "convener_owner": "saanvi",
-            "peer_one_owner": "tomas",
-            "peer_two_owner": "uma",
-        },
+            "scenario_id": (
+                f"marble_research_collaboration_phase5_v{task.task_index}"
+            ),
+            "seed_id": task.seed_id,
+            "proposal_id": task.proposal_id,
+            "convener_owner": task.convener_owner,
+            "convener_id": f"{task.convener_owner}_pi",
+            "participating_owners": task.participating_owners,
+            "proposal_topic_title": task.proposal_topic_title,
+            "proposal_topic_intro": task.proposal_topic_intro,
+        }
+        for task in _MARBLE_RESEARCH_ALL_TASKS
     )
 
 
 def _kwargs_marble_bargaining() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return 3 task-variant kwarg dicts for marble_bargaining.
+
+    Each variant uses a distinct real item with realistic market pricing,
+    rather than scaled multiples of the same anonymous commodity. The
+    buyer/seller pairs are also distinct across variants.
+    """
     return (
+        # ITEM-7: used Toyota Corolla (private seller)
         {
             "scenario_id": "marble_bargaining_phase5_v0",
             "buyer_id": "alice_buyer",
             "seller_id": "bob_seller",
             "buyer_owner": "alice",
             "seller_owner": "bob",
-            "buyer_budget_ceiling": 60.0,
-            "seller_reservation": 40.0,
-            "market_reference_price": 50.0,
+            "item_id": "ITEM-7",
+            "item_description": (
+                "2018 Toyota Corolla SE sedan, 62,000 miles, one previous owner, "
+                "no accidents on record, needs new tyres"
+            ),
+            "buyer_budget_ceiling": 13_500.0,
+            "seller_reservation": 10_500.0,
+            "market_reference_price": 12_000.0,
         },
+        # ITEM-12: used Apple MacBook Pro (private seller)
         {
             "scenario_id": "marble_bargaining_phase5_v1",
             "buyer_id": "vera_buyer",
             "seller_id": "william_seller",
             "buyer_owner": "vera",
             "seller_owner": "william",
-            "buyer_budget_ceiling": 120.0,
-            "seller_reservation": 80.0,
-            "market_reference_price": 100.0,
+            "item_id": "ITEM-12",
+            "item_description": (
+                "2021 Apple MacBook Pro 14-inch, M1 Pro chip, 16 GB RAM, "
+                "512 GB SSD, space grey, minor scuff on lid"
+            ),
+            "buyer_budget_ceiling": 1_400.0,
+            "seller_reservation": 1_050.0,
+            "market_reference_price": 1_200.0,
         },
+        # ITEM-21: vintage vinyl record collection (private seller)
         {
             "scenario_id": "marble_bargaining_phase5_v2",
             "buyer_id": "xenia_buyer",
             "seller_id": "yusuf_seller",
             "buyer_owner": "xenia",
             "seller_owner": "yusuf",
-            "buyer_budget_ceiling": 240.0,
-            "seller_reservation": 160.0,
-            "market_reference_price": 200.0,
+            "item_id": "ITEM-21",
+            "item_description": (
+                "Collection of 120 classic rock vinyl records from the 1970s-80s, "
+                "including several first pressings; condition ranges from VG to NM"
+            ),
+            "buyer_budget_ceiling": 700.0,
+            "seller_reservation": 480.0,
+            "market_reference_price": 580.0,
         },
     )
 
@@ -242,14 +266,12 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
             f"{kwargs['group_id']}"
         )
     if family_id == "marble_research":
-        return (
-            f"{kwargs['convener_owner']}_"
-            f"{kwargs['peer_one_owner']}_{kwargs['peer_two_owner']}"
-        )
+        owners = kwargs["participating_owners"]
+        return "_".join(owners) + f"_{kwargs['proposal_id']}"
     if family_id == "marble_bargaining":
         return (
             f"{kwargs['buyer_owner']}_{kwargs['seller_owner']}_"
-            f"ref{int(kwargs['market_reference_price'])}"
+            f"{kwargs['item_id']}"
         )
     if family_id == "wildclaw_social":
         return (
@@ -273,8 +295,9 @@ _FAMILY_KWARG_BUILDERS = {
 
 
 def task_variants_for(family_id: str) -> tuple[TaskVariantSpec, ...]:
-    """Return the three frozen task-variant specs for ``family_id``.
+    """Return the frozen task-variant specs for ``family_id``.
 
+    Most families return 3 variants; marble_research returns 8.
     Raises ``KeyError`` for an unknown family with a helpful message.
     """
     if family_id not in _FAMILY_KWARG_BUILDERS:

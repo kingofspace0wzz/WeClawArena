@@ -40,6 +40,7 @@ def materialize_research_collaboration_bundle(
     scenario = bundle.scenario
     _write_scenario_json(scenario, out_path)
     _write_scenario_gt_json(bundle, out_path)
+    _write_shared_research_context(bundle, out_path)
     _write_family_pack_context(scenario, bundle, out_path)
     _write_docker_compose(scenario, out_path)
     _write_personas(scenario, out_path)
@@ -63,6 +64,7 @@ def _write_scenario_gt_json(
 ) -> None:
     scenario = bundle.scenario
     governance_manifest = emit_governance_manifest_from_graph(scenario.agent_graph)
+    proposal_id = str(scenario.initial_state.get("proposal_id", "PROP-7"))
     gt: dict[str, Any] = {
         "scenario_id": scenario.scenario_id,
         "canonical_action_stream": [],
@@ -86,7 +88,7 @@ def _write_scenario_gt_json(
         "governance_manifest": governance_manifest,
         "resource_manifest": {
             "resources": {
-                rid: {"resource_id": rid, "owner_id": "alice"}
+                rid: {"resource_id": rid, "owner_id": bundle.seed.seed_id}
                 for rid in bundle.declared_resource_ids
             }
         },
@@ -105,12 +107,55 @@ def _write_scenario_gt_json(
         "construction_manifest": {
             "family_id": scenario.family_id,
             "source": "marble_research",
+            "seed_id": bundle.seed.seed_id,
+            "proposal_id": proposal_id,
             "naturalization_mode": "deterministic_seed",
         },
         "construction_seed": bundle.governance_seed,
     }
     (out_dir / "scenario.gt.json").write_text(
         json.dumps(gt, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_shared_research_context(
+    bundle: ResearchCollaborationBundle,
+    out_dir: Path,
+) -> None:
+    """Write shared_research_context.json with topic intro and PI summaries.
+
+    This file is mounted as a read-only shared resource in the MCP server
+    so all agents can read the proposal background without needing to
+    query individual PI databases.
+    """
+    scenario = bundle.scenario
+    proposal_id = str(scenario.initial_state.get("proposal_id", "PROP-7"))
+    proposal_topic_title = str(
+        scenario.initial_state.get("proposal_topic_title", "Research Collaboration")
+    )
+    proposal_topic_intro = str(
+        scenario.initial_state.get("research_context_summary", "")
+    )
+    pi_summaries = [
+        {
+            "owner_id": r.owner_id,
+            "agent_id": r.agent_id,
+            "lab": r.lab,
+            "research_summary": r.research_summary,
+        }
+        for r in bundle.researchers
+    ]
+    context = {
+        "proposal_id": proposal_id,
+        "seed_id": bundle.seed.seed_id,
+        "seed_name": bundle.seed.seed_name,
+        "proposal_topic_title": proposal_topic_title,
+        "proposal_topic_intro": proposal_topic_intro,
+        "participating_pis": pi_summaries,
+    }
+    (out_dir / "shared_research_context.json").write_text(
+        json.dumps(context, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
@@ -130,8 +175,10 @@ def _write_family_pack_context(
         graph.nodes[0],
     )
     peer_ids = [n.owner_id for n in graph.nodes if n.role_label != "convener_pi"]
+    proposal_id = str(scenario.initial_state.get("proposal_id", "PROP-7"))
     context = {
-        "proposal_id": str(scenario.initial_state.get("proposal_id", "PROP-7")),
+        "proposal_id": proposal_id,
+        "seed_id": bundle.seed.seed_id,
         "convener_owner_id": convener_node.owner_id,
         "peer_owner_ids": peer_ids,
     }
@@ -197,31 +244,29 @@ def _write_resources(
     bundle: ResearchCollaborationBundle,
     out_dir: Path,
 ) -> None:
-    """Materialize per-PI SQLite databases.
+    """Materialize per-PI SQLite databases with real MARBLE seed URs.
 
-    Each PI has a small SQLite with two tables: an empty proposal slot
-    (filled as the scenario unfolds) and an unpublished_results
-    inventory the PI owns. The proposal is shared (every PI's DB
-    carries the same proposal row) so all participants can read it.
-    The unpublished_results table is per-PI and is the privacy
-    challenge.
+    Each PI has a per-owner SQLite with two tables:
+    - proposals: an empty proposal slot (filled as the scenario unfolds)
+    - unpublished_results: the PI's own unpublished results from seed data
+
+    Per-PI URs are stable across tasks within the same seed: a PI appearing
+    in multiple tasks carries the same unpublished_results rows in each.
+    The proposal_id and proposal_topic do vary per task.
     """
     resources_dir = out_dir / "resources"
     resources_dir.mkdir(parents=True, exist_ok=True)
-    graph = bundle.scenario.agent_graph
-    if graph is None:
-        return
-    proposal_id = str(bundle.scenario.initial_state.get("proposal_id") or "PROP-7")
-    for profile in bundle.pi_profiles:
-        owner = profile["owner_id"]
-        owner_dir = resources_dir / "pis" / owner / "db"
+    scenario = bundle.scenario
+    proposal_id = str(scenario.initial_state.get("proposal_id") or "PROP-7")
+    for researcher in bundle.researchers:
+        owner_dir = resources_dir / "pis" / researcher.owner_id / "db"
         owner_dir.mkdir(parents=True, exist_ok=True)
         sqlite_path = owner_dir / "personal.sqlite"
         _emit_pi_sqlite(
             sqlite_path,
-            owner=owner,
-            lab=profile["lab"],
+            owner=researcher.owner_id,
             proposal_id=proposal_id,
+            unpublished_results=list(researcher.unpublished_results),
         )
 
 
@@ -229,8 +274,8 @@ def _emit_pi_sqlite(
     sqlite_path: Path,
     *,
     owner: str,
-    lab: str,
     proposal_id: str,
+    unpublished_results: list[dict],
 ) -> None:
     if sqlite_path.exists():
         sqlite_path.unlink()
@@ -265,24 +310,11 @@ def _emit_pi_sqlite(
                 json.dumps({}),
             ),
         )
-        # Two seeded unpublished results per PI; the canonical task may
-        # cite the first one.
-        conn.execute(
-            "INSERT INTO unpublished_results VALUES (?, ?, ?)",
-            (
-                f"UR-{owner}-1",
-                owner,
-                f"{lab} preliminary finding: improved accuracy on benchmark X.",
-            ),
-        )
-        conn.execute(
-            "INSERT INTO unpublished_results VALUES (?, ?, ?)",
-            (
-                f"UR-{owner}-2",
-                owner,
-                f"{lab} ablation: removing component Y degrades performance.",
-            ),
-        )
+        for ur in unpublished_results:
+            conn.execute(
+                "INSERT INTO unpublished_results VALUES (?, ?, ?)",
+                (ur["result_id"], ur["owner_id"], ur["summary"]),
+            )
         conn.commit()
     finally:
         conn.close()

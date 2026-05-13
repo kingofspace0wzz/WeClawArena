@@ -1,12 +1,16 @@
 """MARBLE research-collaboration family pack.
 
-Source: ``knowledge/MARBLE/multiagentbench/research/research_main.jsonl``.
-The native MARBLE research scenarios put 3-5 agents in a collaboration
-graph; this v2 pack caps at 3 PI nodes (one per lab) and reframes the
-multi-agent proposal task with explicit citation-authorization rules.
+Eight tasks across three MARBLE-seeded research domains (interdisciplinary_tech,
+cybersec_ml, rl_snn). Each task has 3, 4, or 5 participating PIs drawn from
+seed-specific researcher pools. Profiles, lab names, and unpublished results
+come from ``marble_seed_data.ALL_TASKS`` and ``marble_seed_data.ALL_SEEDS``.
 
-See ``docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md``
-section 4.1 for the full design.
+The multi-agent proposal task enforces explicit citation-authorization rules
+and requires the convener PI to obtain approval before citing any other PI's
+unpublished result.
+
+See ``docs/superpowers/specs/2026-05-13-marble-task-diversity-redesign.md``
+for the full design.
 """
 
 from clawsocialarena.generator.family_packs.marble_research.loader import (

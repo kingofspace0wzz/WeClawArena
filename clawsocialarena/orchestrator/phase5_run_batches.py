@@ -5,10 +5,16 @@ the Phase-5 pilot's incremental review loop executes. With the
 difficulty-tier dimension dropped in v2 (T1-T3), batches are now
 attack-regime-based rather than tier-based.
 
+marble_research redesign (8 tasks per cell) changes main counts:
+    3 × 8 × 5 = 120  (marble_research)
+    2 × 3 × 5 = 30   (marble_bargaining)
+    9 × 3 × 5 = 135  (other families)
+    Total: 285 main rows
+
     Batch 1 (smoke_v2):      1 row per (family, mode) = 6 families x 5 modes = 30
-    Batch 2 (standard):      all 210 main rows (14 cells x 3 tasks x 5 modes)
-    Batch 3 (stress):        non-baseline rows = 42 bases x 4 modes = 168
-    Batch 4 (cross_model):   same 210 main rows; orchestrator overrides agent model
+    Batch 2 (standard):      all 285 main rows
+    Batch 3 (stress):        non-baseline rows = 57 bases x 4 modes = 228
+    Batch 4 (cross_model):   same 285 main rows; orchestrator overrides agent model
     Batch 5 (supplementary): 50 supplementary rows
 """
 from __future__ import annotations
@@ -116,10 +122,10 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         name="standard",
         description=(
             "All main-stratum rows with standard attack recipes (or no_attacker). "
-            "14 cells x 3 tasks x 5 modes = 210 rows at spec-1 scale."
+            "57 base bundles x 5 modes = 285 rows."
         ),
-        expected_rows=210,
-        expected_rows_alternatives=(425, 630),
+        expected_rows=285,
+        expected_rows_alternatives=(210, 425, 630),
         selector_fn=_select_standard,
     ),
     RunBatchSpec(
@@ -127,10 +133,10 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         name="stress",
         description=(
             "Non-baseline rows scored with stress-recipe overlays. "
-            "4 stress axes x 42 bases = 168 rows at spec-1 scale."
+            "4 stress axes x 57 bases = 228 rows."
         ),
-        expected_rows=168,
-        expected_rows_alternatives=(340, 504),
+        expected_rows=228,
+        expected_rows_alternatives=(168, 340, 504),
         selector_fn=_select_stress,
     ),
     RunBatchSpec(
@@ -139,8 +145,8 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         description=(
             "Same row set as R-B 2; agent model overridden for cross-model eval."
         ),
-        expected_rows=210,
-        expected_rows_alternatives=(425, 630),
+        expected_rows=285,
+        expected_rows_alternatives=(210, 425, 630),
         selector_fn=_select_cross_model,
     ),
     RunBatchSpec(
@@ -171,6 +177,6 @@ def total_expected_rows() -> int:
 
     Note: batches 2 and 4 share the same row set (cross-model reuse), so
     the sum does not represent unique pilot rows. The unique row count is
-    210 main + 50 supplementary = 260.
+    285 main + 50 supplementary = 335.
     """
     return sum(spec.expected_rows for spec in PHASE5_RUN_BATCHES)

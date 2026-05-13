@@ -41,7 +41,7 @@ from clawsocialarena.generator.phase5_task_variants import (
 PHASE5_METADATA_FILENAME = "phase5_metadata.json"
 PHASE5_BASE_INDEX_FILENAME = "phase5_base_index.json"
 
-TASK_INDICES: tuple[int, ...] = (0, 1, 2)
+_TASK_INDICES_LEGACY: tuple[int, ...] = (0, 1, 2)
 TIER_INDICES: tuple[int, ...] = (1, 2, 3)
 
 
@@ -211,7 +211,7 @@ def generate_base_bundles(
     *,
     out_dir: Path | str,
     cells: tuple[CellSpec, ...] | None = None,
-    task_indices: tuple[int, ...] = TASK_INDICES,
+    task_indices: tuple[int, ...] | None = None,
     tier_indices: tuple[int, ...] | None = None,
 ) -> list[BaseBundleRecord]:
     """Materialize the (cell × task) base bundles to ``out_dir``.
@@ -221,6 +221,14 @@ def generate_base_bundles(
     difficulty-tier dimension was collapsed in v2; ``tier_indices`` is
     accepted for backward compatibility but ignored. Each (cell, task)
     pair always materializes the easy/tier-1 baseline.
+
+    When ``task_indices`` is ``None`` (the default), each family uses
+    the full range of its declared variants, i.e.
+    ``tuple(range(len(task_variants_for(family_id))))``. Families with
+    different variant counts therefore produce different numbers of
+    records. When an explicit tuple is passed (legacy behaviour), that
+    same tuple is applied to every family; an :exc:`IndexError` is
+    raised if any family has fewer variants than required.
 
     Also writes ``phase5_base_index.json`` at the top of ``out_dir``
     so downstream tools can load the index without re-running the
@@ -236,15 +244,22 @@ def generate_base_bundles(
 
     target_cells = cells if cells is not None else all_cells()
     records: list[BaseBundleRecord] = []
-    # Per-family variant tables are cached so we do not rebuild them
-    # 14*3 times.
+    # Per-family variant tables are cached so we do not rebuild them on
+    # every cell iteration.
     variants_cache: dict[str, tuple[TaskVariantSpec, ...]] = {}
 
     for cell in target_cells:
         if cell.family_id not in variants_cache:
             variants_cache[cell.family_id] = task_variants_for(cell.family_id)
         variants = variants_cache[cell.family_id]
-        for task_index in task_indices:
+        # Derive the per-family index range when the caller passes None.
+        if task_indices is None:
+            family_task_indices: tuple[int, ...] = tuple(range(len(variants)))
+        else:
+            # Legacy callers pass an explicit tuple; apply it to every
+            # family and raise IndexError when the family is too small.
+            family_task_indices = task_indices
+        for task_index in family_task_indices:
             if not 0 <= task_index < len(variants):
                 raise IndexError(
                     f"task_index {task_index} out of range for "
@@ -306,7 +321,11 @@ def generate_base_bundles(
             {
                 "phase5_version": 1,
                 "n_cells": len(target_cells),
-                "n_task_indices": len(task_indices),
+                # ``n_task_indices`` is omitted when per-family counts
+                # vary (task_indices=None path). Consumers should read
+                # ``n_records`` from the file rather than assuming a
+                # uniform per-family count.
+                "n_task_indices": len(task_indices) if task_indices is not None else None,
                 # ``n_tier_indices`` stays in the schema for one
                 # release at 0 so consumers can detect the v2 layout
                 # without immediate code changes.

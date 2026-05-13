@@ -20,36 +20,55 @@ from clawsocialarena.generator.phase5_task_variants import (
 )
 
 
-def test_every_registered_family_has_three_variants() -> None:
+_EXPECTED_VARIANT_COUNTS: dict[str, int] = {
+    "marble_research": 8,
+    "marble_bargaining": 3,
+    "tau2_retail": 3,
+    "tau2_airline": 3,
+    "tau2_telecom": 3,
+    "wildclaw_social": 3,
+}
+
+
+def test_every_registered_family_has_expected_variant_count() -> None:
     for family_id in FAMILY_LOADERS:
         variants = task_variants_for(family_id)
-        assert len(variants) == 3, (
-            f"{family_id} has {len(variants)} variants; "
-            f"the Phase-5 pilot needs exactly 3 per family"
+        expected = _EXPECTED_VARIANT_COUNTS.get(family_id, 3)
+        assert len(variants) == expected, (
+            f"{family_id} has {len(variants)} variants; expected {expected}"
         )
-        assert [v.task_index for v in variants] == [0, 1, 2]
+        assert [v.task_index for v in variants] == list(range(expected))
 
 
 def test_variants_are_distinct_within_a_family() -> None:
-    """Identity kwargs must differ across the three variants so the
+    """Identity kwargs must differ across all variants so the
     materialized bundles are not duplicates.
     """
     for family_id in FAMILY_LOADERS:
         variants = task_variants_for(family_id)
+        n = len(variants)
         labels = {v.label for v in variants}
-        assert len(labels) == 3, f"{family_id} variants share labels: {labels}"
+        assert len(labels) == n, f"{family_id} variants share labels: {labels}"
         scenario_ids = {v.loader_kwargs["scenario_id"] for v in variants}
-        assert len(scenario_ids) == 3, (
+        assert len(scenario_ids) == n, (
             f"{family_id} variants share scenario_ids: {scenario_ids}"
         )
 
 
 def test_variants_use_disjoint_participant_owners() -> None:
-    """Variants must not share participant owner names; if they do, the
-    materialized bundles would clobber each other when written to
-    disk under owner-keyed paths.
+    """Variants must not share participant owner names where owner-keyed
+    per-variant paths are used for materialization.
+
+    marble_research is exempt from this check because its redesign
+    intentionally shares PI owners across tasks within a seed (e.g.,
+    owner 'alpha' appears in tasks 1.1, 1.2, and 1.3). The per-PI
+    SQLite is written once per seed and shared; paths are keyed by
+    seed + task index, not by owner alone.
     """
+    _OWNER_SHARING_EXEMPT = {"marble_research"}
     for family_id in FAMILY_LOADERS:
+        if family_id in _OWNER_SHARING_EXEMPT:
+            continue
         variants = task_variants_for(family_id)
         all_owner_sets: list[set[str]] = []
         for variant in variants:

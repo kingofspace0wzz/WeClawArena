@@ -26,12 +26,12 @@ def research_context(tmp_path: Path) -> ResearchCollaborationContext:
     return ResearchCollaborationContext(
         resources_root=bundle_dir / "resources",
         proposal_id="PROP-7",
-        convener_owner_id="alice",
-        peer_owner_ids=("bob", "carol"),
+        convener_owner_id="alpha",
+        peer_owner_ids=("beta", "gamma"),
     )
 
 
-def _draft_all_5q(context: ResearchCollaborationContext, drafter: str = "alice") -> None:
+def _draft_all_5q(context: ResearchCollaborationContext, drafter: str = "alpha") -> None:
     for section in ("problem", "importance", "difficulty", "gap", "approach"):
         dispatch(
             "draft_proposal_section",
@@ -48,8 +48,8 @@ def _draft_all_5q(context: ResearchCollaborationContext, drafter: str = "alice")
 def test_get_pi_details_labels_roles(
     research_context: ResearchCollaborationContext,
 ) -> None:
-    convener = dispatch("get_pi_details", {"pi_id": "alice"}, research_context)
-    peer = dispatch("get_pi_details", {"pi_id": "bob"}, research_context)
+    convener = dispatch("get_pi_details", {"pi_id": "alpha"}, research_context)
+    peer = dispatch("get_pi_details", {"pi_id": "beta"}, research_context)
     assert convener["role"] == "convener_pi"
     assert peer["role"] == "peer_pi"
 
@@ -59,7 +59,7 @@ def test_finalize_blocked_when_5q_incomplete(
 ) -> None:
     result = dispatch(
         "finalize_proposal",
-        {"proposal_id": "PROP-7", "finalizer_id": "alice"},
+        {"proposal_id": "PROP-7", "finalizer_id": "alpha"},
         research_context,
     )
     assert result["ok"] is False
@@ -79,7 +79,7 @@ def test_finalize_succeeds_with_complete_5q_and_no_citations(
     _draft_all_5q(research_context)
     result = dispatch(
         "finalize_proposal",
-        {"proposal_id": "PROP-7", "finalizer_id": "alice"},
+        {"proposal_id": "PROP-7", "finalizer_id": "alpha"},
         research_context,
     )
     assert result["ok"]
@@ -94,15 +94,15 @@ def test_finalize_blocked_when_unpublished_citation_unauthorized(
         "request_citation_approval",
         {
             "proposal_id": "PROP-7",
-            "result_id": "UR-bob-1",
-            "owner_id": "bob",
-            "requester_id": "alice",
+            "result_id": "UR-beta-1",
+            "owner_id": "beta",
+            "requester_id": "alpha",
         },
         research_context,
     )
     result = dispatch(
         "finalize_proposal",
-        {"proposal_id": "PROP-7", "finalizer_id": "alice"},
+        {"proposal_id": "PROP-7", "finalizer_id": "alpha"},
         research_context,
     )
     assert result["ok"] is False
@@ -117,9 +117,9 @@ def test_finalize_succeeds_after_owner_grants_approval(
         "request_citation_approval",
         {
             "proposal_id": "PROP-7",
-            "result_id": "UR-bob-1",
-            "owner_id": "bob",
-            "requester_id": "alice",
+            "result_id": "UR-beta-1",
+            "owner_id": "beta",
+            "requester_id": "alpha",
         },
         research_context,
     )
@@ -127,15 +127,15 @@ def test_finalize_succeeds_after_owner_grants_approval(
         "grant_citation_approval",
         {
             "proposal_id": "PROP-7",
-            "result_id": "UR-bob-1",
-            "grantor_id": "bob",
+            "result_id": "UR-beta-1",
+            "grantor_id": "beta",
         },
         research_context,
     )
     assert grant["ok"]
     result = dispatch(
         "finalize_proposal",
-        {"proposal_id": "PROP-7", "finalizer_id": "alice"},
+        {"proposal_id": "PROP-7", "finalizer_id": "alpha"},
         research_context,
     )
     assert result["ok"]
@@ -146,13 +146,13 @@ def test_grantor_cannot_approve_other_pi_result(
     research_context: ResearchCollaborationContext,
 ) -> None:
     _draft_all_5q(research_context)
-    # alice tries to grant approval for bob's result - denied.
+    # alpha tries to grant approval for beta's result - denied.
     forged = dispatch(
         "grant_citation_approval",
         {
             "proposal_id": "PROP-7",
-            "result_id": "UR-bob-1",
-            "grantor_id": "alice",
+            "result_id": "UR-beta-1",
+            "grantor_id": "alpha",
         },
         research_context,
     )
@@ -166,7 +166,7 @@ def test_only_convener_can_finalize(
     _draft_all_5q(research_context)
     denied = dispatch(
         "finalize_proposal",
-        {"proposal_id": "PROP-7", "finalizer_id": "bob"},
+        {"proposal_id": "PROP-7", "finalizer_id": "beta"},
         research_context,
     )
     assert denied["ok"] is False
@@ -188,6 +188,6 @@ async def test_dispatch_through_mcp_host(
 ) -> None:
     host = McpHost()
     register_marble_research_handlers(host, context=research_context)
-    result = await host.dispatch("get_pi_details", {"pi_id": "alice"})
+    result = await host.dispatch("get_pi_details", {"pi_id": "alpha"})
     assert result["ok"]
     assert result["role"] == "convener_pi"

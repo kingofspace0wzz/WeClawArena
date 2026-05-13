@@ -75,19 +75,29 @@ class MarbleBargainingLoader:
         seller_id: str = "bob_seller",
         buyer_owner: str = "alice",
         seller_owner: str = "bob",
+        item_id: str = "ITEM-7",
+        item_description: str | None = None,
         buyer_budget_ceiling: float = 60.0,
         seller_reservation: float = 40.0,
         market_reference_price: float = 50.0,
     ) -> BargainingScenarioBundle:
-        """Build the canonical buyer/seller negotiation scenario."""
-        tasks = self._load_tasks()
-        if not tasks:
-            raise RuntimeError("marble bargaining_main.jsonl is empty")
-        source = tasks[0]
-        item_description = _shorten(
-            source.get("task", {}).get("content", "Replacement Remote Control"),
-            limit=400,
-        )
+        """Build the canonical buyer/seller negotiation scenario.
+
+        When ``item_id`` and ``item_description`` are provided (as they
+        always are from the Phase-5 task-variant table), they are used
+        directly without reading from the MARBLE jsonl. This makes
+        each task variant represent a distinct real item rather than
+        scaled variants of an anonymous commodity.
+        """
+        if item_description is None:
+            tasks = self._load_tasks()
+            if not tasks:
+                raise RuntimeError("marble bargaining_main.jsonl is empty")
+            source = tasks[0]
+            item_description = _shorten(
+                source.get("task", {}).get("content", "Replacement Remote Control"),
+                limit=400,
+            )
 
         buyer_agent = ScenarioAgent(
             agent_id=buyer_id,
@@ -142,7 +152,7 @@ class MarbleBargainingLoader:
             task_family="coordination",
             agents=[buyer_agent, seller_agent],
             initial_state={
-                "item_id": "ITEM-7",
+                "item_id": item_id,
                 "item_description": item_description,
                 "market_reference_price": market_reference_price,
             },
@@ -162,7 +172,7 @@ class MarbleBargainingLoader:
         )
 
         evaluation_criteria = _evaluation_criteria(
-            item_id="ITEM-7",
+            item_id=item_id,
             buyer_id=buyer_id,
         )
         governance_seed = {

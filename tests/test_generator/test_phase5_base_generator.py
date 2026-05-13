@@ -2,8 +2,11 @@
 
 These tests use a slice of cells to keep runtime manageable; one
 parametrized test covers every family to catch loader-kwarg drift.
-A full 42-bundle materialization sanity test runs once at the end
-with a short tmp_path (14 cells x 3 tasks, tier dim dropped).
+A full materialization sanity test runs once at the end across all 14
+cells (tier dim dropped):
+
+    3 marble_research cells * 8 tasks + 2 marble_bargaining cells * 3 tasks
+    + 9 other cells * 3 tasks = 24 + 6 + 27 = 57
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from clawsocialarena.generator.cell_allocation import all_cells, cell_by_index
+from clawsocialarena.generator.cell_allocation import all_cells
 from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
 from clawsocialarena.generator.phase5_base_generator import (
     PHASE5_BASE_INDEX_FILENAME,
@@ -23,26 +26,43 @@ from clawsocialarena.generator.phase5_base_generator import (
 )
 
 
-def test_generate_base_bundles_for_one_cell_produces_three_records(
+def test_generate_base_bundles_for_marble_research_cell_produces_eight_records(
     tmp_path: Path,
 ) -> None:
-    """One cell × 3 task variants = 3 base bundles (tier dim dropped)."""
-    cell = cell_by_index(0)  # CD-A-marble_research
+    """One marble_research cell now produces 8 task variants (not 3)."""
+    cell = next(c for c in all_cells() if c.family_id == "marble_research")
     records = generate_base_bundles(
         out_dir=tmp_path,
         cells=(cell,),
     )
-    assert len(records) == 3
-    # Three task indices, no tier dimension.
+    assert len(records) == 8
+    # Eight task indices, no tier dimension.
     task_indices = {r.task_index for r in records}
-    assert task_indices == {0, 1, 2}
+    assert task_indices == set(range(8))
     # Legacy tier fields are emitted as None on v2 records.
     assert all(r.tier_index is None for r in records)
     assert all(r.tier_name is None for r in records)
 
 
+def test_generate_base_bundles_for_three_task_family_produces_three_records(
+    tmp_path: Path,
+) -> None:
+    """A non-marble family cell (tau2_airline) still produces 3 base bundles."""
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
+    records = generate_base_bundles(
+        out_dir=tmp_path,
+        cells=(cell,),
+    )
+    assert len(records) == 3
+    task_indices = {r.task_index for r in records}
+    assert task_indices == {0, 1, 2}
+    assert all(r.tier_index is None for r in records)
+
+
 def test_each_bundle_has_phase5_metadata_sidecar(tmp_path: Path) -> None:
-    cell = cell_by_index(0)
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     for record in records:
         sidecar = tmp_path / record.bundle_dir / PHASE5_METADATA_FILENAME
@@ -55,7 +75,8 @@ def test_each_bundle_has_phase5_metadata_sidecar(tmp_path: Path) -> None:
 
 
 def test_base_scenario_ids_are_unique(tmp_path: Path) -> None:
-    cell = cell_by_index(0)
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     ids = [r.base_scenario_id for r in records]
     assert len(set(ids)) == len(ids)
@@ -70,7 +91,8 @@ def test_attack_intensity_matches_easy_tier_default(tmp_path: Path) -> None:
     easy/tier-1 baseline. The attack_intensity carried into the record
     must match what the difficulty-tier table declares for tier 1.
     """
-    cell = cell_by_index(0)
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     assert {r.attack_intensity for r in records} == {0.4}
 
@@ -79,7 +101,8 @@ def test_easy_tier_scenario_json_keeps_full_turn_budget(tmp_path: Path) -> None:
     """At the easy/tier-1 baseline, max_turns must equal the loader's
     default (no tier multiplier shrinks it).
     """
-    cell = cell_by_index(0)
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     seen_max_turns: set[int] = set()
     for record in records:
@@ -128,12 +151,13 @@ def test_bargaining_cell_keeps_full_window_on_disk(tmp_path: Path) -> None:
 
 
 def test_index_file_is_written_and_round_trips(tmp_path: Path) -> None:
-    cell = cell_by_index(0)
-    generate_base_bundles(out_dir=tmp_path, cells=(cell,))
+    from clawsocialarena.generator.cell_allocation import all_cells
+    cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
+    records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     index_path = tmp_path / PHASE5_BASE_INDEX_FILENAME
     assert index_path.is_file()
     reloaded = load_base_index(index_path)
-    assert len(reloaded) == 3
+    assert len(reloaded) == len(records)
     assert all(isinstance(r, BaseBundleRecord) for r in reloaded)
 
 
@@ -141,12 +165,17 @@ def test_index_file_is_written_and_round_trips(tmp_path: Path) -> None:
 def test_generator_works_for_one_cell_per_family(
     family_id: str, tmp_path: Path
 ) -> None:
-    """Pick the first cell using each family and confirm 3 bundles
-    (one per task variant) materialize without errors.
+    """Pick the first cell using each family and confirm the right number
+    of bundles (one per task variant declared by that family) materialize
+    without errors.
     """
+    from clawsocialarena.generator.phase5_task_variants import task_variants_for
     cell = next(c for c in all_cells() if c.family_id == family_id)
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
-    assert len(records) == 3
+    expected = len(task_variants_for(family_id))
+    assert len(records) == expected, (
+        f"{family_id}: expected {expected} records, got {len(records)}"
+    )
     for record in records:
         bundle_dir = tmp_path / record.bundle_dir
         assert (bundle_dir / "scenario.json").is_file()
@@ -154,12 +183,16 @@ def test_generator_works_for_one_cell_per_family(
 
 
 @pytest.mark.slow
-def test_generator_full_run_produces_42_bundles(tmp_path: Path) -> None:
+def test_n_records_after_tier_drop(tmp_path: Path) -> None:
     """End-to-end materialization across every cell with tier dimension dropped.
     Marked slow so the default `pytest -q` run skips it via `-m "not slow"`; CI can
     flip on the marker when the full benchmark scaffolding lands.
-    14 cells × 3 tasks (tier dim dropped) = 42 base bundles.
+
+    Cell allocation: 3 marble_research cells (8 tasks each) + 2 marble_bargaining
+    cells (3 tasks each) + 9 other cells (3 tasks each):
+
+        3 * 8 + 2 * 3 + 9 * 3 = 24 + 6 + 27 = 57 base bundles
     """
     records = generate_base_bundles(out_dir=tmp_path)
-    assert len(records) == 42
-    assert len({r.base_scenario_id for r in records}) == 42
+    assert len(records) == 57
+    assert len({r.base_scenario_id for r in records}) == 57

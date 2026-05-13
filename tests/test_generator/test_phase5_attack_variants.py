@@ -229,7 +229,7 @@ def test_opening_message_attack_retargets_recipient(tmp_path: Path) -> None:
 
 
 def test_variant_index_round_trips(tmp_path: Path) -> None:
-    cell = cell_by_index(0)
+    cell = cell_by_index(0)  # CD-A-marble_research (8 tasks)
     base_records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     expand_base_records_to_variants(
         base_records=base_records, base_dir=tmp_path
@@ -237,8 +237,9 @@ def test_variant_index_round_trips(tmp_path: Path) -> None:
     index_path = tmp_path / PHASE5_VARIANT_INDEX_FILENAME
     assert index_path.is_file()
     reloaded = load_variant_index(index_path)
-    # 3 base bundles (3 tasks, tier dim dropped) × 5 attack modes = 15.
-    assert len(reloaded) == 3 * 5
+    # len(base_records) tasks × 5 attack modes (marble_research: 8 × 5 = 40).
+    expected = len(base_records) * len(ATTACK_MODES_ALL)
+    assert len(reloaded) == expected
     assert all(isinstance(v, VariantRecord) for v in reloaded)
     # Confirm recipe / surface / control round-trip too.
     sample = next(v for v in reloaded if v.attack_mode == "privacy")
@@ -258,5 +259,7 @@ def test_expand_works_for_one_cell_per_family(
     variants = expand_base_records_to_variants(
         base_records=base_records, base_dir=tmp_path
     )
-    # 3 base bundles per cell (tier dim dropped) × 5 attack modes = 15.
-    assert len(variants) == 3 * 5
+    # len(base_records) tasks per family × 5 attack modes.
+    # marble_research: 8 × 5 = 40; all others: 3 × 5 = 15.
+    expected = len(base_records) * len(ATTACK_MODES_ALL)
+    assert len(variants) == expected
