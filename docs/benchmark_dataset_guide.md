@@ -4,31 +4,33 @@ This document explains the current benchmark design and the data generated so fa
 
 ## 1. Current Status
 
-Read `docs/project_status.md` for the latest branch, batch, and benchmark state. This guide explains the dataset layout and the current benchmark design.
+Read `docs/project_status.md` for the latest branch, batch, and benchmark state. This guide explains the Phase 5 dataset layout and the current benchmark design.
 
-The current canonical scaffold path is `benchmark/scenarios/v1.0.0`. The active scaffold target is the 680-variant balanced difficulty pilot:
+The current canonical scaffold path is `benchmark/phase5/scaffold`. The Phase 5 scaffold has been generated for the 680-row balanced pilot. Scenario naturalization has not finished yet, so `benchmark/phase5/scaffold` is not release-ready benchmark data. The expected release directory is `benchmark/phase5/v2.0.0`.
+
+The active Phase 5 target is:
 
 | Stratum | Count | Current role |
 |---|---:|---|
-| Main matched variants | 630 | Balanced difficulty pilot. 126 base tasks, each expanded into five attack modes. |
+| Main matched variants | 630 | Balanced Phase 5 pilot. 126 base tasks, each expanded into five attack modes. |
 | Hard-verification rows | 25 | Supplementary code-review and document-editing tasks. |
 | Episode-graph rows | 20 | Five linked 4-episode graphs for cumulative memory and privacy analysis. |
 | Audit challenge cases | 5 | Hand-authored cases for targeted SAF failures. |
 
-The scaffold is not by itself final benchmark data. It is a structured input to LLM naturalization, Docker simulation, scoring, and human review. Build reports that mark `realism_status: worldpack_draft` and `release_ready: false` should be treated as readiness artifacts, not release claims.
+The scaffold is not by itself final benchmark data. It is a structured input to LLM naturalization, Docker simulation, scoring, and human review. A row becomes release-ready only after the naturalized bundle, run evidence, scorecard, and QC decision are present in the release tree.
 
-The earlier 550-variant tree is a pre-calibration scaffold. The later recommended release grid may expand to 1100 total variants, including 1050 main variants, if the 680-variant pilot shows useful separation between designed and observed difficulty.
+The earlier 550-variant tree is a pre-calibration scaffold. The later recommended release grid may expand to 1100 total variants, including 1050 main variants, if the 680-variant pilot validates task quality, trajectory quality, attack pressure, and audit evidence coverage.
 
 | Stage | Main base tasks | Main variants | Total variants | Status |
 |---|---:|---:|---:|---|
-| Balanced difficulty pilot | 126 | 630 | 680 | Active target. |
-| Conditional release grid | 210 | 1050 | 1100 | Proceed only after pilot task-quality and observed-difficulty review. |
+| Phase 5 balanced pilot | 126 | 630 | 680 | Active target. |
+| Conditional release grid | 210 | 1050 | 1100 | Proceed only after pilot task-quality, trajectory, attack-pressure, and audit-evidence review. |
 
-The paid smoke data lives under `benchmark/batches/`. Corrected construction gates use `gpt-5.2` for construction naturalization and `gpt-4.1-mini` for all simulated agents. Older retained batches may report `gpt-5` when that model was passed explicitly in the batch command. Those retained batches are diagnostic only because evaluator and construction fixes changed score semantics.
+Phase 5 smoke and pilot diagnostics may appear under `benchmark/phase5/pilot`; older construction diagnostics may appear under `benchmark/batches/`. Corrected construction gates use `gpt-5.2` for construction naturalization and `gpt-4.1-mini` for all simulated agents. Older retained batches may report `gpt-5` when that model was passed explicitly in the batch command. Those retained batches are diagnostic only because evaluator and construction fixes changed score semantics.
 
 ## 2. Main Scenario Layout
 
-The main stratum is a matched design. Each base task has five variants with the same `base_task_id`, category, task family, users, resources, governance fixtures, and benign task objective. Only the attack mode changes.
+The main stratum is a matched design. Each base task has five variants with the same base scenario ID, category, family pack, scenario-world fixtures, governance fixtures, topology, scaffold-tier slot, and benign task objective. Only the attack-mode overlay changes.
 
 | Attack mode | Meaning |
 |---|---|
@@ -38,58 +40,150 @@ The main stratum is a matched design. Each base task has five variants with the 
 | `privacy` | Cross-user inference, social engineering, sensitive-file read, or database exfiltration. |
 | `governance` | Owner, identity, scope, approval, mandate, consent, or audit-channel failure. |
 
-Attack mode is the matched harm axis. Concrete attack delivery should be recorded separately as `attack_recipe`, `attack_intensity`, `delivery_surface`, and `attacker_control`, following `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`.
+Attack mode is the matched harm axis. Concrete attack delivery is recorded separately as `attack_recipe`, `attack_intensity`, `delivery_surface`, and `attacker_control`, following `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md`.
 
 The 14 main category/family cells are:
 
-| Family | Categories |
-|---|---|
-| Scheduling | Cross-User agent-to-agent, Mediated Communication, Affinity-Modulated |
-| Consensus | Cross-Domain, Multi-Party Group, Hub-and-Spoke, Competitive |
-| Inference containment | Cross-Domain, Mediated Communication, Affinity-Modulated |
-| Coalition resistance | Cross-User agent-to-agent, Multi-Party Group, Hub-and-Spoke, Competitive |
+| Category | Family A | Family B | Base tasks | Main variants |
+|---|---|---|---:|---:|
+| Cross-Domain | `marble_research` | `tau2_airline` | 18 | 90 |
+| Mediated Communication | `wildclaw_social` | `tau2_airline` | 18 | 90 |
+| Cross-User agent-to-agent | `marble_bargaining` | `tau2_retail` | 18 | 90 |
+| Multi-Party Group | `tau2_telecom` | `marble_research` | 18 | 90 |
+| Hub-and-Spoke | `marble_research` | `tau2_telecom` | 18 | 90 |
+| Competitive | `marble_bargaining` | `wildclaw_social` | 18 | 90 |
+| Affinity-Modulated | `tau2_retail` | `tau2_telecom` | 18 | 90 |
+| **Total** | 14 cells | | **126** | **630** |
 
-The 680-variant pilot uses 126 main base tasks. The `main variants` column counts the five attack-mode variants generated from each base task.
+The per-family distribution in the generated scaffold is:
 
-| Category | Included families | Main base tasks | Main variants |
-|---|---|---:|---:|
-| Cross-User agent-to-agent | Scheduling, Coalition resistance | 18 | 90 |
-| Mediated Communication | Scheduling, Inference containment | 18 | 90 |
-| Cross-Domain | Consensus, Inference containment | 18 | 90 |
-| Multi-Party Group | Consensus, Coalition resistance | 18 | 90 |
-| Hub-and-Spoke | Consensus, Coalition resistance | 18 | 90 |
-| Competitive | Consensus, Coalition resistance | 18 | 90 |
-| Affinity-Modulated | Scheduling, Inference containment | 18 | 90 |
-| **Total** | 14 category/family cells | **126** | **630** |
+| Family pack | Base tasks | Main variants |
+|---|---:|---:|
+| `marble_research` | 27 | 135 |
+| `tau2_telecom` | 27 | 135 |
+| `marble_bargaining` | 18 | 90 |
+| `tau2_airline` | 18 | 90 |
+| `tau2_retail` | 18 | 90 |
+| `wildclaw_social` | 18 | 90 |
 
-If the pilot validates the difficulty tiers, the release grid expands the same layout to 210 main base tasks by increasing each category/family/tier cell from three base tasks to five. This produces 1050 main matched variants. The expansion is conditional, not part of the current paid gate run.
+If the pilot validates the current task quality and coverage, the release grid expands the same layout to 210 main base tasks by increasing each category/family/scaffold-tier cell from three base tasks to five. This produces 1050 main matched variants. The expansion is conditional, not part of the current paid gate run.
 
 This layout supports matched comparisons such as `security - no_attacker` inside the same base task, rather than comparing unrelated tasks.
 
-## 3. Scenario Bundle Contents
+## 3. Phase 5 Scaffold Contents
 
-Each generated bundle contains the inputs needed to run one scenario:
+`benchmark/phase5/scaffold` contains three top-level indexes:
 
 ```text
-scenario.json
-scenario.gt.json
-docker-compose.yml
-personas/<agent_id>.system.md
-personas/<agent_id>.tools.json
-mcp/<tool>.json
-resources/
-governance/manifest.json
+benchmark/phase5/scaffold/
+  phase5_base_index.json
+  phase5_variants_index.json
+  phase5_manifest.json
 ```
 
-`scenario.json` defines the social topology, agent IDs, task family, opening message, allowed tools, and turn cap.
+`phase5_base_index.json` indexes the 126 base bundles. Each record carries `base_scenario_id`, `cell_id`, full category, `family_id`, task index, scaffold-tier fields, `bundle_dir`, and loader arguments. The on-disk fields `tier_index` and `tier_name` are legacy scaffold fields; use them as stable identifiers, not as validated task-complexity labels.
 
-`scenario.gt.json` defines the scoring target: terminal predicate, invariants, resource manifest, governance manifest, attack plan, tool manifest, phase schedule, attribution DAG inputs, and construction manifest.
+`phase5_variants_index.json` indexes the 630 main variants. Each base task has one `no_attacker` row and four adversarial rows: `collaboration`, `security`, `privacy`, and `governance`. Adversarial records include recipe metadata such as target agent, delivery surface, attacker control, and attack intensity when available.
 
-`resources/` stores scenario-local filesystem and SQLite fixtures. These resources are mounted through audited `fs.*` and `db.*` tools, not directly exposed to agents as unaudited files.
+`phase5_manifest.json` is the combined 680-row pilot manifest. It contains `main`, `supplementary`, `n_main`, `n_supplementary`, `n_total`, and `phase5_version`.
 
-`governance/manifest.json` records owners, identities, scopes, approval rules, and consent state used by governance attacks and scoring.
+Each base bundle lives at:
 
-## 4. Construction Workflow
+```text
+benchmark/phase5/scaffold/<cell_id>/task<task_index>/tier<tier_index>/
+  scenario.json
+  scenario.gt.json
+  phase5_metadata.json
+  family_pack_context.json
+  docker-compose.yml
+  personas/
+    <agent_id>.system.md
+    <agent_id>.tools.json
+  mcp/
+    <tool_name>.json
+  governance/
+    manifest.json
+  attack_variants/
+    collaboration/
+      scenario.json
+      phase5_variant_metadata.json
+    security/
+      scenario.json
+      phase5_variant_metadata.json
+    privacy/
+      scenario.json
+      phase5_variant_metadata.json
+    governance/
+      scenario.json
+      phase5_variant_metadata.json
+```
+
+`scenario.json` defines the social topology, agent IDs, family pack, opening state, allowed tools, and turn cap.
+
+`scenario.gt.json` defines the scoreable contract: `evaluation_criteria`, invariants, resource manifest, governance manifest, phase schedule, attribution inputs, construction manifest, and attack plan where applicable.
+
+`phase5_metadata.json` records the base scenario ID, category/family cell, task variant metadata, scaffold-tier metadata, and Phase 5 version.
+
+`family_pack_context.json` records the family-pack-local source context used to build the bundle.
+
+`personas/`, `mcp/`, and `governance/` are bundle-local scenario-world fixtures. They replace the older global world-pack design. Filesystem and database resources should also be bundle-local when declared by a scenario; they should be mounted through audited `fs.*` and `db.*` tools, not exposed as unaudited files.
+
+`attack_variants/<attack_mode>/` contains the attack overlay for each adversarial matched variant. The benign `no_attacker` variant uses the base bundle without an attack overlay.
+
+Some scaffold directories may contain `phase5_session/` artifacts from smoke or debugging runs. Treat those as local run artifacts, not as part of the release dataset unless they are copied into the formal release tree with a scorecard and QC decision.
+
+## 4. Expected `benchmark/phase5/v2.0.0` Release Layout
+
+After scenario naturalization finishes, the accepted release dataset should be materialized under:
+
+```text
+benchmark/phase5/v2.0.0/
+  README.md
+  MANIFEST.json
+  indexes/
+    base_index.json
+    variants_index.json
+    release_manifest.json
+  scenarios/
+    main/
+      <cell_id>/task<task_index>/tier<tier_index>/
+        base/
+          scenario.json
+          scenario.gt.json
+          phase5_metadata.json
+          family_pack_context.json
+          naturalization_patch.json
+          personas/
+          mcp/
+          resources/
+          governance/
+        variants/
+          no_attacker/
+          collaboration/
+          security/
+          privacy/
+          governance/
+    supplementary/
+      hard_verification/
+      episode_graph/
+      audit_challenges/
+  runs/
+    <condition>/<model>/<variant_id>/
+      simulation_result.json
+      bundle/run/simulation_report.json
+      bundle/run/run_scorecard.json
+      bundle/run/cassette.jsonl
+      bundle/run/action_log.db
+      bundle/run/action_log.shadow.db
+      bundle/run/baseline_transcript.jsonl
+  reports/
+    qc/
+    aggregate/
+```
+
+The release tree should only include naturalized bundles and scoreable runs that pass readiness checks. If a row fails because of malformed scenario content, missing resources, invalid governance state, or unusable trajectory evidence, it should be regenerated or excluded rather than silently copied into `v2.0.0`.
+
+## 5. Construction Workflow
 
 The current paid workflow is a construction quality-control loop. It builds and validates benchmark rows before final benchmark evaluation. LLM-as-a-judge is disabled by default in this loop to control cost; construction decisions use deterministic metrics plus review-agent feedback.
 
@@ -97,15 +191,16 @@ The current paid workflow is:
 
 ```text
 select scaffold rows
-  -> build skeleton payloads with scenario, GT, resources, and governance data
+  -> read scaffold bundle with scenario, ground truth, scenario-world fixtures, and governance data
   -> run GPT-5.2 naturalization
   -> validate the naturalization patch
-  -> materialize a bundle under benchmark/batches/<batch_id>/scenarios/<scenario_id>/
+  -> materialize accepted naturalized bundles under benchmark/phase5/v2.0.0/scenarios/
+  -> materialize construction run bundles under benchmark/phase5/v2.0.0/runs/ or benchmark/batches/
   -> run Docker Compose with one container per simulated user plus the gateway
   -> run GPT-4.1-mini agents through the audited gateway
   -> write logs, cassettes, resource-state evidence, and scorecards
   -> aggregate batch metrics and cost
-  -> write benchmark/reviews/<batch_id>-qc-report.md
+  -> write a QC report under benchmark/phase5/v2.0.0/reports/qc/ and, during construction, benchmark/reviews/
   -> run review agents on scenario quality and trajectory quality
   -> decide whether to proceed, re-score, regenerate rows, or stop scale-out
 ```
@@ -114,7 +209,7 @@ For main matched variants, GPT-5.2 naturalizes the base task once and reuses the
 
 Attack mode, attack recipe, and audit condition are different fields. The five attack modes are scenario variants. Attack recipe and intensity define the concrete delivery mechanism inside an adversarial variant. The three audit conditions are runtime modes applied when a variant is simulated. Construction batches default to `passive` so scenario quality can be reviewed without tripling cost. Before scale-out, a small condition-sentinel sweep should rerun selected naturalized bundles under `baseline`, `passive`, and `enforce`; the batch report should then show both `condition` and `condition_counts`.
 
-Before GPT-5.2 naturalization, each base task should carry task schema v0. This schema records actors, visibility, initialization data/actions/message history, consensus or role rules, required evidence, evaluator bases, audit events, designed difficulty tier, and source-pattern metadata. tau2-bench contributes the contract pattern for setup, actions, assertions, and reward bases. WildClawBench contributes workspace and safety motifs such as filesystem preservation, secret leakage, semantic authority, prompt injection, unsafe operations, and draft-vs-send constraints. These sources are used as motifs only; generated benchmark rows synthesize new text, fixtures, profiles, and final-state predicates.
+Before GPT-5.2 naturalization, each base bundle already carries `scenario.json`, `scenario.gt.json`, `phase5_metadata.json`, `family_pack_context.json`, and bundle-local fixtures. `scenario.gt.json` uses `evaluation_criteria`, not the older terminal-predicate-only shape. tau2-bench contributes the contract pattern for setup, actions, assertions, and reward bases. WildClawBench contributes workspace and safety motifs such as filesystem preservation, secret leakage, semantic authority, prompt injection, unsafe operations, and draft-vs-send constraints. These sources are used as motifs only; generated benchmark rows synthesize new text, fixtures, profiles, and final-state predicates.
 
 Each construction batch has two reports:
 
@@ -122,6 +217,7 @@ Each construction batch has two reports:
 |---|---|---|
 | JSON batch report | `benchmark/batches/<batch_id>/batch_report.json` | Machine-readable readiness, deterministic metrics, audit scores, usage, and per-scenario digests. |
 | Markdown QC report | `benchmark/reviews/<batch_id>-qc-report.md` | Teammate-facing construction review with metrics, cost, scenario-quality feedback, trajectory feedback, and the gate decision. |
+| Release QC report | `benchmark/phase5/v2.0.0/reports/qc/<batch_id>-qc-report.md` | Release-tree copy for accepted Phase 5 construction gates. |
 
 The Markdown QC report should classify findings into scenario issues, scenario-world filesystem/database issues, trajectory issues, attack-vector issues, and evaluator-only issues. Evaluator-only issues do not require regenerating good scenarios. In that case, keep the frozen artifacts, fix the evaluator, re-score offline, and continue construction. Scenario, scenario-world resource, or trajectory issues should block or regenerate affected rows. The reviewer should not treat task success rate as the objective of construction quality control. If the external objective was completed but agents failed to emit the required terminal signal, the report should classify the row as objective success plus terminalization failure, not as clean strict task success.
 
@@ -134,7 +230,7 @@ Generate the Markdown QC report after review-agent feedback is available:
   --next-batch-command ".venv/bin/python scripts/naturalize_and_run_batch.py ..."
 ```
 
-The review feedback file may be structured JSON or Markdown. Structured JSON can set `recommended_decision`, `scenario_realism_issues`, `filesystem_database_realism_issues`, `task_difficulty_issues`, `simulation_trajectory_issues`, `terminalization_issues`, `attack_vector_quality_issues`, `evaluation_only_issues`, `rows_for_deeper_inspection`, `rows_to_keep`, `rows_to_rerun`, `rows_to_regenerate`, and `evaluator_fixes_needed`.
+The review feedback file may be structured JSON or Markdown. Structured JSON can set `recommended_decision`, `scenario_realism_issues`, `filesystem_database_realism_issues`, `task_calibration_issues`, `simulation_trajectory_issues`, `terminalization_issues`, `attack_vector_quality_issues`, `evaluation_only_issues`, `rows_for_deeper_inspection`, `rows_to_keep`, `rows_to_rerun`, `rows_to_regenerate`, and `evaluator_fixes_needed`.
 
 Use this Markdown outline for each construction QC report:
 
@@ -145,7 +241,7 @@ Use this Markdown outline for each construction QC report:
 - Scaffold index window, scenario count, accepted runs, audit condition, condition distribution, readiness failures, models, total tokens, observed cost, and projected pilot cost.
 
 ## Batch Composition
-- Category distribution, task-family distribution, designed-difficulty distribution, attack-mode distribution, attack-recipe distribution, attack-intensity distribution, and base-task coverage.
+- Category distribution, task-family distribution, scaffold-tier distribution, attack-mode distribution, attack-recipe distribution, attack-intensity distribution, and base-task coverage.
 
 ## Deterministic Metrics
 - Strict task success count and rate.
@@ -162,7 +258,7 @@ Use this Markdown outline for each construction QC report:
 ## Review-Agent Feedback
 - Scenario realism issues.
 - Filesystem and database realism issues.
-- Task difficulty issues.
+- Task calibration issues.
 - Simulation trajectory issues.
 - Terminalization issues.
 - Attack-vector quality issues.
@@ -178,9 +274,9 @@ Use this Markdown outline for each construction QC report:
 - Next batch command, if proceeding.
 ```
 
-## 5. Simulation Artifacts
+## 6. Simulation Artifacts
 
-Each simulated scenario in `benchmark/batches/<batch_id>/scenarios/<scenario_id>/` has a copied bundle plus run outputs. The most useful files are:
+Each simulated scenario has a copied bundle plus run outputs. During construction these may live under `benchmark/batches/<batch_id>/scenarios/<scenario_id>/`; in the Phase 5 release tree they should live under `benchmark/phase5/v2.0.0/runs/<condition>/<model>/<variant_id>/`. The most useful files are:
 
 | File | Purpose |
 |---|---|
@@ -195,7 +291,7 @@ Each simulated scenario in `benchmark/batches/<batch_id>/scenarios/<scenario_id>
 
 The Docker run is accepted only if teardown completes and all required evidence exists for deterministic scoring.
 
-## 6. Evaluation Metrics
+## 7. Evaluation Metrics
 
 The benchmark separates run readiness from measured outcomes.
 
@@ -227,52 +323,25 @@ During construction, these deterministic metrics are the gate metrics. Review ag
 
 After construction, final benchmark evaluation may run LLM-as-a-judge on every accepted scenario as a supplementary semantic scoring layer. That final judge pass should be cached, versioned, and reported separately from deterministic metrics. It is not required for construction-batch progress unless explicitly enabled for a special audit.
 
-## 7. Retained Batch Checkpoint
+## 8. Phase 5 Pilot Artifacts And Historical Batches
 
-The old `batch-002x` smoke directories were debugging artifacts and are not retained. Older retained paid runs are diagnostic only:
+`benchmark/phase5/pilot` contains smoke and pilot-run artifacts from Phase 5 debugging. Treat these as construction diagnostics until copied into `benchmark/phase5/v2.0.0` with a release manifest, scorecards, and QC decisions.
 
-| Batch | Retained rows | Current use |
-|---|---:|---|
-| `batch-0061-resource-label-sanitized-25` | 25 | Diagnostic only. Metrics changed under corrected evaluator semantics. |
-| `batch-0064-construction-metrics-fixes-50` | 50 | Diagnostic only. Metrics changed under corrected evaluator semantics. |
-| `batch-0065-scale-gate-50-idx075` | 50 | Diagnostic only. Metrics changed under evaluator fixes and AM scheduling/naturalization construction fixes. |
-| `batch-0067-category-sweep-000-postcommit` | 70 | Diagnostic only. Superseded by later category-sweep gates and evaluator corrections. |
-| `batch-0068-category-sweep-001` and reruns | mixed | Diagnostic only except for targeted trajectory inspection. Superseded by the corrected batch-0069 re-score. |
+Older `benchmark/batches/batch-006x` and `batch-007x` runs are also diagnostic only. They remain useful for regression diagnosis, but they predate the Phase 5 family-pack scaffold and should not be used as release benchmark evidence.
 
-Do not use these retained scorecards as final benchmark evidence. They remain useful for trajectory inspection and regression diagnosis. The latest corrected passive construction gate is `batch-0073-category-sweep-004`, which ran 70 scoreable rows with strict structured-message evidence and SAF applicability-aware reporting.
+## 9. Known Caveats
 
-| Current gate | Accepted | Task successes | Accepted task failures | Attack successes | SAF failures | Resource/tool violations | Condition | QC report |
-|---|---:|---:|---:|---:|---:|---:|---|---|
-| `batch-0069-category-sweep-002` | 70 / 70 | 57 | 13 | 3 | 0 | 0 | `passive` | `benchmark/reviews/batch-0069-category-sweep-002-rescored-qc-report.md` |
-| `batch-0071-condition-sentinel-0069` | 9 / 9 | 4 | 5 | 4 | 0 | 0 | `mixed` | `benchmark/reviews/batch-0071-condition-sentinel-0069-qc-report.md` |
-| `batch-0072-category-sweep-003-merged-rerun1` | 70 / 70 | 64 | 6 | 5 | 0 | 0 | `passive` | `benchmark/reviews/batch-0072-category-sweep-003-merged-rerun1-qc-report.md` |
-| `batch-0073-category-sweep-004` | 70 / 70 | 66 | 4 | 4 | 0 | 0 | `passive` | `benchmark/reviews/batch-0073-category-sweep-004-qc-report.md` |
+The Phase 5 scaffold is structurally generated, but scenario naturalization is not complete. Do not describe `benchmark/phase5/scaffold` as the final benchmark dataset.
 
-The corrected condition-sentinel sweep reused naturalized bundles and reran three rows under `baseline`, `passive`, and `enforce`. All nine rows are scoreable. `baseline` rows use `baseline_transcript.jsonl` instead of action/shadow logs and mark SAF dimensions as not applicable in `run_scorecard.json`.
+`benchmark/phase5/v2.0.0` is the expected release-tree path. If it does not exist or lacks a release manifest, accepted naturalized bundles, simulation runs, scorecards, and QC reports, the Phase 5 benchmark is not release-ready.
 
-The retained runs match the planned replacement-gate index windows below. The table shows how task variants are distributed inside each batch. Attack modes are balanced within every complete base-task block: each listed base task contributes one `no_attacker`, one `collaboration`, one `security`, one `privacy`, and one `governance` variant.
+The 50 supplementary rows are represented in `phase5_manifest.json`, but their final naturalized bundles and paid runtime evidence still need release gating.
 
-| Retained batch / replacement gate | Index window | Variants | Base tasks | Category and family cells | Designed difficulty mix | Attack-mode mix |
-|---|---:|---:|---:|---|---|---|
-| `batch-0061-resource-label-sanitized-25` / rerun `start-index 0`, `batch-size 25` | 0-24 | 25 | 5 | Cross-User agent-to-agent Scheduling: 25 variants / 5 bases | easy: 15; realistic: 10 | 5 per mode |
-| `batch-0064-construction-metrics-fixes-50` / rerun `start-index 25`, `batch-size 50` | 25-74 | 50 | 10 | Cross-User agent-to-agent Scheduling: 20 variants / 4 bases; Mediated Communication Scheduling: 30 variants / 6 bases | easy: 15; realistic: 20; stress: 15 | 10 per mode |
-| `batch-0065-scale-gate-50-idx075` / rerun `start-index 75`, `batch-size 50` | 75-124 | 50 | 10 | Affinity-Modulated Scheduling: 35 variants / 7 bases; Mediated Communication Scheduling: 15 variants / 3 bases | easy: 15; realistic: 15; stress: 20 | 10 per mode |
-
-## 8. Known Caveats
-
-The retained checkpoint proves that the pipeline can generate, run, and score representative rows. It does not prove that the retained scorecards are release-ready, and it does not yet validate the 680-variant balanced difficulty pilot.
-
-The low passive attack-success rate in recent corrected gates is now a design issue to resolve before ordinary scale-out. The next gate should run a passive attack-calibration batch with stress recipes and attack-stage metrics.
-
-The hard-stratum rows currently pass task and readiness gates but fail SAF. The team should inspect whether this is expected weak auditability, missing hard-row SAF GT, or scorer calibration.
-
-Episode graphs have not yet received a paid runtime smoke in the current checkpoint.
-
-The five named audit challenge cases are scaffolded and validated structurally, but they still need hand review and paid runtime validation.
+Episode graphs and named audit challenge cases need the same readiness checks as main variants before they can be included in release analysis.
 
 Human review is still required before any row is labeled `human_reviewed` or release-ready.
 
-## 9. How To Inspect A Run
+## 10. How To Inspect A Run
 
 For a batch-level summary, open:
 
@@ -306,22 +375,6 @@ When reviewing a run, check these items in order:
 4. `run_scorecard.json.diagnostics.task_tool_evidence` shows whether required tool operations were observed.
 5. Batch-level `objective_success_ids`, `terminalization_failure_ids`, `attack_success_ids`, `saf_failure_ids`, and `accepted_task_failure_details` explain measured negative outcomes.
 
-## 10. Recommended Next Step
+## 11. Recommended Next Step
 
-Run the first passive attack-calibration batch before any larger ordinary scale-out:
-
-```bash
-.venv/bin/python scripts/naturalize_and_run_batch.py \
-  --batch-id batch-0074-attack-calibration-000 \
-  --batch-strategy attack-calibration \
-  --batch-size 28 \
-  --out benchmark/batches \
-  --max-cost-usd 25 \
-  --construction-model gpt-5.2 \
-  --agent-model gpt-4.1-mini \
-  --naturalization-attempts 3 \
-  --simulation-attempts 2 \
-  --condition passive
-```
-
-Use `--batch-size 28` for the first calibration gate because it covers seven categories times four adversarial modes.
+Finish Phase 5 scenario naturalization and publish accepted naturalized bundles under `benchmark/phase5/v2.0.0`. After the release tree exists, run representative smoke rows through the same Docker, gateway, scoring, and QC path that will be used for the 680-row pilot. Only then should the project scale to the full pilot simulation pass or consider the conditional 1100-row release grid.
