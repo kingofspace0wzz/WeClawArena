@@ -172,7 +172,21 @@ def _apply_naturalization_patch(*, store_base: Path, patch: dict[str, Any]) -> N
     if overrides:
         scenario_path = store_base / "scenario.json"
         scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
-        scenario.update(overrides)
+        for key, value in overrides.items():
+            # opening_message keeps its existing {from, to, content} envelope
+            # when the override is a bare string (the rendered prose). Replacing
+            # only `content` preserves routing fields the executor relies on.
+            if (
+                key == "opening_message"
+                and isinstance(scenario.get("opening_message"), dict)
+                and isinstance(value, str)
+            ):
+                scenario["opening_message"] = {
+                    **scenario["opening_message"],
+                    "content": value,
+                }
+            else:
+                scenario[key] = value
         scenario_path.write_text(
             json.dumps(scenario, indent=2, sort_keys=True), encoding="utf-8"
         )

@@ -216,13 +216,28 @@ class LiveScenarioExecutor:
                 scenario_dict_raw.get("scenario_id") or row.get("variant_id") or "store"
             )
             opening_msg = scenario_dict_raw.get("opening_message") or {}
-            opening_text = str(opening_msg.get("content") or "Proceed.")
+            if isinstance(opening_msg, dict):
+                opening_text = str(opening_msg.get("content") or "Proceed.")
+            else:
+                opening_text = str(opening_msg or "Proceed.")
+            # Load persona notes from the store's personas/ dir so agents
+            # run with the naturalized prose, not the bare scenario template.
+            persona_dir = variant_dir / "personas"
+            persona_notes_store: dict[str, str] = {}
+            if persona_dir.is_dir():
+                for agent in scenario_dict_raw.get("agents") or []:
+                    agent_id = str(agent.get("agent_id") or "")
+                    note_path = persona_dir / f"{agent_id}.system.md"
+                    if note_path.is_file():
+                        persona_notes_store[agent_id] = note_path.read_text(
+                            encoding="utf-8"
+                        )
             patch = NaturalizationPatch(
                 scenario_id=scenario_id_for_patch,
                 world_patch=NaturalizedWorldPatch(files={}, databases={}),
                 scenario_patch=NaturalizedScenarioPatch(
                     opening_message=opening_text,
-                    persona_notes={},
+                    persona_notes=persona_notes_store,
                 ),
                 construction_metadata=NaturalizationMetadata(
                     naturalization_mode="store",
