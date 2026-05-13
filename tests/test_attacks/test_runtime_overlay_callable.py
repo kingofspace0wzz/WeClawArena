@@ -87,3 +87,104 @@ def test_materialize_runtime_variant_missing_base_raises(tmp_path: Path) -> None
             attack_mode="no_attacker",
             run_dir=tmp_path / "pilot" / "run1",
         )
+
+
+def test_apply_recipe_to_variant_dir_security_applies(tmp_path: Path) -> None:
+    """apply_recipe_to_variant_dir returns applied=True and expected keys for security axis."""
+    from clawsocialarena.attacks.runtime_overlay import (
+        apply_recipe_to_variant_dir,
+        _load_base_bundle_for_recipe,
+        materialize_runtime_variant,
+    )
+
+    base = _make_minimal_base(tmp_path)
+    # Materialize a no_attacker variant dir so the files exist.
+    variant_dir = materialize_runtime_variant(
+        store_dir=tmp_path / "store",
+        base_id="MG-A-tau2_telecom__t0",
+        attack_mode="no_attacker",
+        run_dir=tmp_path / "pilot" / "run1",
+    )
+    base_bundle = _load_base_bundle_for_recipe(variant_dir)
+    outcome = apply_recipe_to_variant_dir(
+        variant_dir=variant_dir,
+        attack_mode="security",
+        base_bundle=base_bundle,
+        family_id="tau2_telecom",
+        seed=42,
+    )
+    assert outcome["applied"] is True
+    assert outcome["recipe"] == "indirect_resource_prompt_injection"
+    assert "_artifacts" in outcome
+
+
+def test_apply_recipe_to_variant_dir_unknown_axis_returns_noop(tmp_path: Path) -> None:
+    """apply_recipe_to_variant_dir returns the no-op sentinel for unknown attack modes."""
+    from clawsocialarena.attacks.runtime_overlay import apply_recipe_to_variant_dir
+
+    base = _make_minimal_base(tmp_path)
+    variant_dir = tmp_path / "store" / "MG-A-tau2_telecom__t0"
+
+    files_before = set(variant_dir.rglob("*"))
+    outcome = apply_recipe_to_variant_dir(
+        variant_dir=variant_dir,
+        attack_mode="no_attacker",
+        base_bundle={},
+        family_id="tau2_telecom",
+        seed=42,
+    )
+    files_after = set(variant_dir.rglob("*"))
+
+    assert outcome == {"recipe": None, "applied": False}
+    assert files_before == files_after, "no files should be written for a no-op axis"
+
+
+def test_load_base_bundle_promotes_family_id_from_construction_manifest(
+    tmp_path: Path,
+) -> None:
+    """_load_base_bundle_for_recipe surfaces family_id from construction_manifest."""
+    from clawsocialarena.attacks.runtime_overlay import _load_base_bundle_for_recipe
+
+    # Build a variant dir whose scenario.gt.json nests family_id under
+    # construction_manifest only (no top-level family_id).
+    variant_dir = tmp_path / "variant"
+    variant_dir.mkdir()
+    (variant_dir / "scenario.json").write_text(json.dumps({
+        "scenario_id": "test",
+    }))
+    (variant_dir / "scenario.gt.json").write_text(json.dumps({
+        "construction_manifest": {"family_id": "tau2_telecom"},
+    }))
+
+    bundle = _load_base_bundle_for_recipe(variant_dir)
+    assert bundle["family_id"] == "tau2_telecom"
+
+
+def test_materialize_runtime_variant_default_seed_is_deterministic(
+    tmp_path: Path,
+) -> None:
+    """Calling materialize_runtime_variant twice with no explicit seed produces identical scenario.json."""
+    from clawsocialarena.attacks.runtime_overlay import materialize_runtime_variant
+
+    _make_minimal_base(tmp_path)
+    store_dir = tmp_path / "store"
+
+    variant_dir1 = materialize_runtime_variant(
+        store_dir=store_dir,
+        base_id="MG-A-tau2_telecom__t0",
+        attack_mode="security",
+        run_dir=tmp_path / "run1",
+    )
+    variant_dir2 = materialize_runtime_variant(
+        store_dir=store_dir,
+        base_id="MG-A-tau2_telecom__t0",
+        attack_mode="security",
+        run_dir=tmp_path / "run2",
+    )
+
+    content1 = (variant_dir1 / "scenario.json").read_bytes()
+    content2 = (variant_dir2 / "scenario.json").read_bytes()
+    assert content1 == content2, (
+        "Default seed must be deterministic: two calls with the same "
+        "(base_id, attack_mode) must produce identical scenario.json bytes."
+    )
