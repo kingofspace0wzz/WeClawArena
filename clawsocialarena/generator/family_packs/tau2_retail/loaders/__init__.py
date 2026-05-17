@@ -15,6 +15,11 @@ from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_cross_acc
     CrossAccountScenarioBundle,
     load_cross_account_scenario,
 )
+from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_store_rep_dyad import (
+    StoreRepDyadLoader,
+    StoreRepDyadScenarioBundle,
+    load_store_rep_dyad_scenario,
+)
 
 __all__ = [
     "SharedAccountLoader",
@@ -22,4 +27,7 @@ __all__ = [
     "CrossAccountLoader",
     "CrossAccountScenarioBundle",
     "load_cross_account_scenario",
+    "StoreRepDyadLoader",
+    "StoreRepDyadScenarioBundle",
+    "load_store_rep_dyad_scenario",
 ]

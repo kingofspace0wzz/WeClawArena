@@ -4,8 +4,11 @@ from clawsocialarena.generator.family_packs.tau2_retail.loaders import (
     CrossAccountLoader,
     CrossAccountScenarioBundle,
     SharedAccountLoader,
+    StoreRepDyadLoader,
+    StoreRepDyadScenarioBundle,
     load_cross_account_scenario,
     load_shared_account_scenario,
+    load_store_rep_dyad_scenario,
 )
 from clawsocialarena.generator.family_packs.tau2_retail.materialize import (
     materialize_cross_account_bundle,
@@ -46,6 +49,9 @@ __all__ = [
     "CrossAccountScenarioBundle",
     "load_cross_account_scenario",
     "materialize_cross_account_bundle",
+    "StoreRepDyadLoader",
+    "StoreRepDyadScenarioBundle",
+    "load_store_rep_dyad_scenario",
     "Tau2RetailLoader",  # compatibility alias
     "load_household_exchange_scenario",  # compatibility alias
     "materialize_household_bundle",  # compatibility alias
