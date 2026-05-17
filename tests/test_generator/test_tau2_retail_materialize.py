@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 
 from clawsocialarena.generator.family_packs.tau2_retail import (
+    load_cross_account_scenario,
     load_shared_account_scenario,
+    materialize_cross_account_bundle,
     materialize_shared_account_bundle,
 )
 
@@ -174,3 +176,28 @@ def test_materialized_personal_files_present(tmp_path: Path) -> None:
     assert (out_dir / "resources" / "agents" / "alice" / "files" / "secondary_spending_cap.md").is_file()
     # Secondary owner has untrusted shopping notes file
     assert (out_dir / "resources" / "agents" / "bob" / "files").is_dir()
+
+
+def test_materialize_all_six_cross_account_tasks(tmp_path: Path) -> None:
+    for i in range(6):
+        bundle = load_cross_account_scenario(task_index=i)
+        out_dir = materialize_cross_account_bundle(bundle, tmp_path / f"t{i}")
+        assert (out_dir / "scenario.json").is_file()
+        assert (out_dir / "scenario.gt.json").is_file()
+        assert (out_dir / "family_pack_context.json").is_file()
+        # cross_account has NO shared/ dir
+        assert not (out_dir / "resources" / "shared").exists()
+        # both owners have personal DBs
+        assert (out_dir / "resources" / "agents" / "carla" / "db" / "personal.sqlite").is_file()
+        assert (out_dir / "resources" / "agents" / "diego" / "db" / "personal.sqlite").is_file()
+        # representative untrusted and protected files
+        assert (out_dir / "resources" / "agents" / "carla" / "files" / "gift_message.md").is_file()
+        assert (out_dir / "resources" / "agents" / "diego" / "files" / "address_consent_policy.md").is_file()
+
+
+def test_materialized_cross_account_family_pack_context_has_no_shared_account(tmp_path: Path) -> None:
+    bundle = load_cross_account_scenario(task_index=0)
+    out_dir = materialize_cross_account_bundle(bundle, tmp_path / "t0")
+    ctx = json.loads((out_dir / "family_pack_context.json").read_text())
+    assert ctx["archetype"] == "cross_account"
+    assert ctx["no_shared_account"] is True

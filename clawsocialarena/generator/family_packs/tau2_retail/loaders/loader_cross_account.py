@@ -36,6 +36,7 @@ class CrossAccountScenarioBundle:
     phase_schedule: list[dict[str, Any]]
     family_pack_context: dict[str, Any]
     owner_workspaces: dict[str, Any]
+    shared_resources: tuple[dict[str, Any], ...] = ()
 
 
 class CrossAccountLoader:

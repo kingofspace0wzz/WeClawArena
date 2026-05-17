@@ -86,7 +86,33 @@ def materialize_shared_account_bundle(
     return out_path
 
 
-def _write_family_pack_context(bundle: SharedAccountScenarioBundle, out_dir: Path) -> None:
+def materialize_cross_account_bundle(
+    bundle: Any,  # CrossAccountScenarioBundle (forward-declare to avoid circular imports)
+    out_dir: Path | str,
+) -> Path:
+    """Materialize a CrossAccountScenarioBundle to disk.
+
+    Same on-disk layout as materialize_shared_account_bundle, minus the
+    shared resources tree (cross_account has no shared cross-owner state).
+    """
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    scenario = bundle.scenario
+
+    _write_scenario_json(scenario, out_path)
+    _write_scenario_gt_json(bundle, out_path)
+    _write_family_pack_context(bundle, out_path)
+    _write_docker_compose(scenario, out_path)
+    _write_personas(scenario, out_path)
+    _write_mcp_stubs(out_path)
+    _write_governance(scenario, out_path)
+    _write_resources(bundle, out_path)  # already handles empty shared_resources
+
+    return out_path
+
+
+def _write_family_pack_context(bundle: Any, out_dir: Path) -> None:
     """Write family_pack_context.json from the bundle's context dict."""
     (out_dir / "family_pack_context.json").write_text(
         json.dumps(bundle.family_pack_context, indent=2, ensure_ascii=False) + "\n",
@@ -103,7 +129,7 @@ def _write_scenario_json(scenario: Scenario, out_dir: Path) -> None:
 
 
 def _write_scenario_gt_json(
-    bundle: SharedAccountScenarioBundle,
+    bundle: Any,
     out_dir: Path,
 ) -> None:
     """Assemble scenario.gt.json from the bundle's auxiliary data.
@@ -229,7 +255,7 @@ def _write_governance(scenario: Scenario, out_dir: Path) -> None:
         (governance_dir / filename).write_text(contents, encoding="utf-8")
 
 
-def _write_resources(bundle: SharedAccountScenarioBundle, out_dir: Path) -> None:
+def _write_resources(bundle: Any, out_dir: Path) -> None:
     """Materialize per-agent files and SQLite DBs plus shared resources.
 
     Layout:
