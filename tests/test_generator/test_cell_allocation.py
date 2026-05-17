@@ -1,4 +1,4 @@
-"""Tests for the 14-cell allocation (Phase 5 Batch A)."""
+"""Tests for the Phase-5 family allocation."""
 from __future__ import annotations
 
 import pytest
@@ -18,6 +18,7 @@ from clawsocialarena.generator.cell_allocation import (
 _EXPECTED_PER_FAMILY_COUNTS = {
     "marble_research": 3,
     "marble_bargaining": 2,
+    "marble_bidding": 2,
     "wildclaw_social": 2,
     "tau2_retail": 2,
     "tau2_telecom": 3,
@@ -25,35 +26,38 @@ _EXPECTED_PER_FAMILY_COUNTS = {
 }
 
 
-def test_allocation_has_exactly_fourteen_cells() -> None:
-    assert len(CELL_ALLOCATION) == 14
-    assert len(all_cells()) == 14
+def test_allocation_has_expected_cell_count() -> None:
+    assert len(CELL_ALLOCATION) == 16
+    assert len(all_cells()) == 16
 
 
-def test_cell_indexes_are_zero_through_thirteen_in_order() -> None:
+def test_cell_indexes_are_contiguous_in_order() -> None:
     for expected, cell in enumerate(CELL_ALLOCATION):
         assert cell.cell_index == expected
 
 
-def test_every_category_appears_exactly_twice() -> None:
+def test_every_category_appears_expected_number_of_times() -> None:
+    expected_counts = {category: 2 for category in CATEGORIES}
+    expected_counts["CM"] = 3
+    expected_counts["CU"] = 3
     counts: dict[str, int] = {}
     for cell in CELL_ALLOCATION:
         counts[cell.category] = counts.get(cell.category, 0) + 1
-    for category in CATEGORIES:
-        assert counts.get(category) == 2, f"category {category} has {counts.get(category)} cells"
+    assert counts == expected_counts
 
 
-def test_every_cell_has_slot_a_or_b() -> None:
+def test_every_cell_has_known_slot() -> None:
     for cell in CELL_ALLOCATION:
-        assert cell.slot in {"A", "B"}
+        assert cell.slot in {"A", "B", "C"}
 
 
-def test_each_category_uses_both_slots() -> None:
+def test_each_category_uses_expected_slots() -> None:
     by_category: dict[str, set[str]] = {}
     for cell in CELL_ALLOCATION:
         by_category.setdefault(cell.category, set()).add(cell.slot)
     for category, slots in by_category.items():
-        assert slots == {"A", "B"}, f"{category} slots = {slots}"
+        expected = {"A", "B", "C"} if category in {"CM", "CU"} else {"A", "B"}
+        assert slots == expected, f"{category} slots = {slots}"
 
 
 def test_per_family_cell_counts_match_spec_section_2() -> None:
@@ -99,14 +103,15 @@ def test_cell_for_raises_on_unknown_coordinate() -> None:
 
 def test_cell_by_index_returns_the_right_cell() -> None:
     assert cell_by_index(0).cell_id == "CD-A-marble_research"
-    assert cell_by_index(13).cell_id == "AM-B-tau2_telecom"
+    assert cell_by_index(14).cell_id == "CM-C-marble_bidding"
+    assert cell_by_index(15).cell_id == "CU-C-marble_bidding"
 
 
 def test_cell_by_index_out_of_range_raises() -> None:
     with pytest.raises(IndexError):
         cell_by_index(-1)
     with pytest.raises(IndexError):
-        cell_by_index(14)
+        cell_by_index(16)
 
 
 def test_cell_id_format_is_stable() -> None:
@@ -117,10 +122,13 @@ def test_cell_id_format_is_stable() -> None:
 
 
 def test_total_base_task_count_matches_pilot_math() -> None:
-    # 14 cells x 3 base tasks x 3 difficulty tiers = 126 base tasks.
-    # This sentinel keeps the spec math honest if the allocation
-    # table ever drifts.
-    assert len(CELL_ALLOCATION) * 3 * 3 == 126
+    from clawsocialarena.generator.phase5_task_variants import task_variants_for
+
+    total = sum(
+        len(task_variants_for(cell.family_id, cell_id=cell.cell_id))
+        for cell in CELL_ALLOCATION
+    )
+    assert total == 87
 
 
 def test_cellspec_is_frozen() -> None:
