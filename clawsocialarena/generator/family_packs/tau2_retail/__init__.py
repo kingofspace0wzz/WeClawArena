@@ -1,7 +1,10 @@
 """tau2 Retail owned-ecosystem family pack."""
 
 from clawsocialarena.generator.family_packs.tau2_retail.loaders import (
+    CrossAccountLoader,
+    CrossAccountScenarioBundle,
     SharedAccountLoader,
+    load_cross_account_scenario,
     load_shared_account_scenario,
 )
 from clawsocialarena.generator.family_packs.tau2_retail.materialize import (
@@ -38,6 +41,9 @@ __all__ = [
     "SharedAccountLoader",
     "load_shared_account_scenario",
     "materialize_shared_account_bundle",
+    "CrossAccountLoader",
+    "CrossAccountScenarioBundle",
+    "load_cross_account_scenario",
     "Tau2RetailLoader",  # compatibility alias
     "load_household_exchange_scenario",  # compatibility alias
     "materialize_household_bundle",  # compatibility alias
