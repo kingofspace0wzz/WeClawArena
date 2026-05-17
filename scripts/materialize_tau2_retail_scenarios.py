@@ -30,6 +30,20 @@ def materialize_shared_account() -> None:
         print(f"materialized {out_dir.relative_to(REPO_ROOT)}")
 
 
+def materialize_cross_account() -> None:
+    from clawsocialarena.generator.family_packs.tau2_retail import (
+        load_cross_account_scenario,
+        materialize_cross_account_bundle,
+    )
+    for task_index in range(6):
+        out_dir = OUT_ROOT / f"cross_account__t{task_index}"
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        bundle = load_cross_account_scenario(task_index=task_index)
+        materialize_cross_account_bundle(bundle, out_dir)
+        print(f"materialized {out_dir.relative_to(REPO_ROOT)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--archetype", choices=(*ARCHETYPES, "all"), default="all")
@@ -39,7 +53,9 @@ def main() -> None:
 
     if args.archetype in ("shared_account", "all"):
         materialize_shared_account()
-    # Phase 3-5 will add: cross_account / store_rep_dyad / hub_aggregator branches
+    if args.archetype in ("cross_account", "all"):
+        materialize_cross_account()
+    # Phase 4-5 will add: store_rep_dyad / hub_aggregator branches
 
 
 if __name__ == "__main__":
