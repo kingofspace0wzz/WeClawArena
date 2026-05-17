@@ -58,6 +58,20 @@ def materialize_store_rep_dyad() -> None:
         print(f"materialized {out_dir.relative_to(REPO_ROOT)}")
 
 
+def materialize_hub_aggregator() -> None:
+    from clawsocialarena.generator.family_packs.tau2_retail import (
+        load_hub_aggregator_scenario,
+        materialize_hub_aggregator_bundle,
+    )
+    for task_index in range(6):
+        out_dir = OUT_ROOT / f"hub_aggregator__t{task_index}"
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        bundle = load_hub_aggregator_scenario(task_index=task_index)
+        materialize_hub_aggregator_bundle(bundle, out_dir)
+        print(f"materialized {out_dir.relative_to(REPO_ROOT)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--archetype", choices=(*ARCHETYPES, "all"), default="all")
@@ -71,7 +85,9 @@ def main() -> None:
         materialize_cross_account()
     if args.archetype in ("store_rep_dyad", "all"):
         materialize_store_rep_dyad()
-    # Phase 5 will add: hub_aggregator branch
+    if args.archetype in ("hub_aggregator", "all"):
+        materialize_hub_aggregator()
+    # All 4 archetypes wired.
 
 
 if __name__ == "__main__":
