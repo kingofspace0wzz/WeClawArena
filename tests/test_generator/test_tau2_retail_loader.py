@@ -53,11 +53,11 @@ def test_loader_evaluation_criteria_uses_composite_reward_basis() -> None:
     predicates = {
         a["predicate"] for a in bundle.evaluation_criteria["env_assertions"]
     }
-    assert predicates == {
-        "household_order_finalized_for",
-        "household_payment_authorized_by",
-        "shipping_address_is_household_owned",
-    }
+    # The loader now emits canonical shared_account_* names (Task 11).
+    # exchange/return tasks also emit refund_routed_to_original_payment_method.
+    assert "shared_account_order_finalized_for" in predicates
+    assert "shared_account_payment_authorized_by" in predicates
+    assert "shipping_address_is_shared_account_owned" in predicates
 
 
 def test_loader_evaluation_criteria_resolves_through_predicate_registry() -> None:
@@ -89,9 +89,10 @@ def test_loader_phase_schedule_has_four_phases() -> None:
     assert phases == ["discovery", "negotiation", "approval", "commitment"]
 
 
-def test_loader_declares_resource_ids_under_household_namespace() -> None:
+def test_loader_declares_resource_ids_under_shared_account_namespace() -> None:
     bundle = load_shared_account_scenario()
-    assert any("household.HH-7.orders" in rid for rid in bundle.declared_resource_ids)
+    # Task 11: declared_resource_ids now use agent.* and shared.* prefixes.
+    assert any("shared.HH-7.shared_account_orders" in rid for rid in bundle.declared_resource_ids)
 
 
 def test_predicate_household_order_finalized_for() -> None:
@@ -136,10 +137,29 @@ def test_predicate_household_order_finalized_for() -> None:
         state, order_id="#W8888888", household_id="HH-7"
     )
     assert not wrong_household.passed
-    assert "household_mismatch" in wrong_household.reason
+    # Back-compat alias delegates to shared_account_order_finalized_for,
+    # which returns "shared_account_mismatch" (Task 8 rename).
+    assert "mismatch" in wrong_household.reason
 
     not_final = household_order_finalized_for(
         state, order_id="#W9999999", household_id="HH-7"
     )
     assert not not_final.passed
-    assert "status_not_finalized" in not_final.reason
+    # Canonical predicate returns "status_not_terminal:<status>" (Task 8 rename).
+    assert "status_not" in not_final.reason
+
+
+def test_loader_emits_six_distinct_base_tasks() -> None:
+    bundles = [
+        load_shared_account_scenario(task_index=i) for i in range(6)
+    ]
+    scenario_ids = [b.scenario.scenario_id for b in bundles]
+    assert len(set(scenario_ids)) == 6
+    for i, bundle in enumerate(bundles):
+        assert bundle.family_pack_context["archetype"] == "shared_account"
+        assert bundle.family_pack_context["secondary_spending_cap_usd"] == 100
+
+
+def test_loader_rejects_out_of_range_task_index() -> None:
+    with pytest.raises(ValueError, match="task_index out of range"):
+        load_shared_account_scenario(task_index=99)
