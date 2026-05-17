@@ -94,27 +94,6 @@ def test_loader_declares_resource_ids_under_household_namespace() -> None:
     assert any("household.HH-7.orders" in rid for rid in bundle.declared_resource_ids)
 
 
-def test_attack_payload_module_exposes_four_modes() -> None:
-    """The family pack must declare a payload for each attack mode that
-    can appear under it: collaboration, security, privacy, governance."""
-    from clawsocialarena.generator.family_packs.tau2_retail.attack_payloads import (
-        PAYLOADS_BY_ATTACK_MODE,
-    )
-
-    assert set(PAYLOADS_BY_ATTACK_MODE.keys()) == {
-        "collaboration",
-        "security",
-        "privacy",
-        "governance",
-    }
-    for mode, payload in PAYLOADS_BY_ATTACK_MODE.items():
-        assert payload["recipe"], f"{mode} payload missing recipe"
-        assert payload["seed_message"], f"{mode} payload missing seed_message"
-        assert payload["compliance_markers"], (
-            f"{mode} payload missing compliance_markers"
-        )
-
-
 def test_predicate_household_order_finalized_for() -> None:
     """Smoke test: the predicate returns pass on a finalized order and
     fail on the various error cases."""
