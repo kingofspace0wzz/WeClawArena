@@ -79,11 +79,13 @@ All seven AgentSocialBench social categories are retained as a reporting axis. A
 |---|---|---|---:|
 | `marble_research` | MARBLE research-collaboration tasks | Multi-agent (3-5, graph) | 3 |
 | `marble_bargaining` | MARBLE bargaining-negotiation tasks | Multi-agent (2-4, graph) | 2 |
+| `marble_bidding` | MARBLE bidding (owned-ecosystem expansion) | Multi-agent (3-5, graph) | 2 |
 | `wildclaw_social` | WildClawBench Social-Interaction tasks | Single-agent + mocked participants promoted to OpenClaw agents | 2 |
 | `tau2_retail` | tau2-bench retail domain | Dyadic, reframed as household | 2 |
 | `tau2_telecom` | tau2-bench telecom domain | Dyadic, reframed as family plan | 3 |
 | `tau2_airline` | tau2-bench airline domain | Dyadic, reframed as group booking | 2 |
-| Total | | | 14 |
+| `travel` | TravelBench (ACL 2026) | Single-agent + tool use, reframed as triad (CU-D) and group (MG-C) | 2 |
+| Total | | | 18 |
 
 The verification basis for each family is now declared per scenario through the `evaluation_criteria` block (see Section 7). The hybrid category model is retained: categories remain a reporting axis, while `coordination_mode` and `agent_graph` are the structural drivers. The (category, family) cell mapping is fixed in Section 4 below.
 
@@ -91,20 +93,25 @@ Resolution. Earlier drafts described four home-grown families with bespoke predi
 
 ## 4. Main Task Allocation
 
-The 680-variant pilot uses three designed difficulty tiers and three base tasks per (category, family) cell. Because each category appears in two family cells, every category contributes 18 main base tasks and 90 attack-mode variants. The (category, family) assignment now uses the six external-grounded family packs from Section 3.
+The 680-variant pilot uses three designed difficulty tiers and three base tasks per (category, family) cell. The matched-grid baseline assigns one family per slot (A or B) per category; every category contributes 18 main base tasks and 90 attack-mode variants in the baseline. Additive expansions (marble_bidding in slot C; travel in slot D for CU and slot C for MG) ship under their own dated implementation plans and contribute additional batches outside the matched baseline.
 
-| Category | Family A | Family B | Main base tasks | Main variants |
-|---|---|---|---:|---:|
-| Cross-Domain (CD) | `marble_research` (multi-domain research) | `tau2_airline` (multi-itinerary booking) | 18 | 90 |
-| Mediated Communication (MC) | `wildclaw_social` (timezone meeting) | `tau2_airline` (mediator booking agent) | 18 | 90 |
-| Cross-User agent-to-agent (CU) | `marble_bargaining` (price negotiation) | `tau2_retail` (cross-user shared cart) | 18 | 90 |
-| Multi-Party Group (MG) | `tau2_telecom` (family plan members) | `marble_research` (research team) | 18 | 90 |
-| Hub-and-Spoke (HS) | `marble_research` (PI hub) | `tau2_telecom` (primary holder hub) | 18 | 90 |
-| Competitive (CM) | `marble_bargaining` (zero-sum) | `wildclaw_social` (slot competition) | 18 | 90 |
-| Affinity-Modulated (AM) | `tau2_retail` (primary / secondary) | `tau2_telecom` (primary holder authority) | 18 | 90 |
-| Total | | | 126 | 630 |
+| Category | Family A | Family B | Family C | Family D | Main base tasks | Main variants |
+|---|---|---|---|---|---:|---:|
+| Cross-Domain (CD) | `marble_research` (multi-domain research) | `tau2_airline` (multi-itinerary booking) | | | 18 | 90 |
+| Mediated Communication (MC) | `wildclaw_social` (timezone meeting) | `tau2_airline` (mediator booking agent) | | | 18 | 90 |
+| Cross-User agent-to-agent (CU) | `marble_bargaining` (price negotiation) | `tau2_retail` (cross-user shared cart) | `marble_bidding` (owned-ecosystem bidding) | `travel` (traveler vs partner_hotel + approver) | 18 | 90 |
+| Multi-Party Group (MG) | `tau2_telecom` (family plan members) | `marble_research` (research team) | `travel` (organizer + 3 co-travelers + partner_hotel) | | 18 | 90 |
+| Hub-and-Spoke (HS) | `marble_research` (PI hub) | `tau2_telecom` (primary holder hub) | | | 18 | 90 |
+| Competitive (CM) | `marble_bargaining` (zero-sum) | `wildclaw_social` (slot competition) | `marble_bidding` (owned-ecosystem bidding) | | 18 | 90 |
+| Affinity-Modulated (AM) | `tau2_retail` (primary / secondary) | `tau2_telecom` (primary holder authority) | | | 18 | 90 |
+| Total (matched-grid baseline) | | | | | 126 | 630 |
 
-The cell math (14 cells × 3 task variants × 3 difficulty tiers = 126 base tasks; × 5 attack modes = 630 main matched variants; + 25 hard-verification + 20 episode-graph + 5 named audit = 680 pilot rows) is preserved. The release-grid expansion to 1100 variants keeps the same 14 (category, family) cells and raises the per-cell count from 3 base tasks to 5 base tasks.
+| Additive expansion | Cells | Base tasks per cell | Attack modes | Variants |
+|---|---:|---:|---:|---:|
+| `marble_bidding` (CU-C, CM-C) | 2 | 6 | 5 | 60 |
+| `travel` (CU-D, MG-C) first ship | 2 | 3 | 5 | 30 |
+
+The matched-grid cell math (14 cells × 3 task variants × 3 difficulty tiers = 126 base tasks; × 5 attack modes = 630 main matched variants; + 25 hard-verification + 20 episode-graph + 5 named audit = 680 pilot rows) is preserved as the baseline. The release-grid expansion to 1100 variants keeps the same 14 (category, family) baseline cells and raises the per-cell count from 3 base tasks to 5 base tasks; release math for additive expansions is decided after each lands its calibration smoke.
 
 | Category | Family A | Family B | Release base tasks | Release main variants |
 |---|---|---|---:|---:|
@@ -205,14 +212,16 @@ select scaffold rows
   -> run GPT-5.2 naturalization
   -> validate the naturalization patch
   -> materialize a bundle under benchmark/batches/<batch_id>/scenarios/<scenario_id>/
-  -> run Docker Compose with one container per simulated user plus the gateway
-  -> run GPT-4.1-mini agents through the audited gateway
+  -> run Docker Compose under the driver_orchestrated_docker substrate
+  -> run GPT-4.1-mini-backed agents through the live gateway and per-owner OpenClaw/plugin containers
   -> write logs, cassettes, resource-state evidence, and scorecards
   -> aggregate batch metrics and cost
   -> write benchmark/reviews/<batch_id>-qc-report.md
   -> run review agents on task quality, scenario-world realism, trajectories, and evaluator concerns
   -> record proceed / re-score / regenerate / stop decision
 ```
+
+Rows produced by `host_session` execution are useful for development, but they are not benchmark-accepted construction rows. A row can enter the release denominator only after it passes the `driver_orchestrated_docker` readiness rule defined in the runtime and experimental specs. `containerized_multi_agent` is retained as a stronger demonstration substrate and future engineering target.
 
 External task references such as tau2-bench and WildClawBench provide motifs, not copied benchmark rows. The generator may adapt their task-contract shape, workspace safety patterns, and final-state checks, but generated rows synthesize new task text, fixtures, family-grounded contexts, and task contracts.
 

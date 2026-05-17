@@ -272,6 +272,19 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
     return f"task{kwargs.get('scenario_id', 'unknown')}"
 
 
+def _kwargs_travel() -> tuple[dict, ...]:
+    """Stub for the travel family.
+
+    Task 0 of the travel first-ship plan registers the two new cells
+    `CU-D-travel` and `MG-C-travel` in `cell_allocation.py`. The real
+    cell-aware seed builder lands in Task 2 (`travel_seed_data.py`) and
+    is wired through here in Task 6. Until then this stub returns an
+    empty tuple so `task_variants_for('travel')` does not raise and the
+    pilot-math test continues to pass.
+    """
+    return ()
+
+
 _FAMILY_KWARG_BUILDERS = {
     "tau2_retail": _kwargs_tau2_retail,
     "tau2_airline": _kwargs_tau2_airline,
@@ -281,6 +294,7 @@ _FAMILY_KWARG_BUILDERS = {
     "marble_bidding": _kwargs_marble_bidding,
     "swebench_workspace": _kwargs_swebench_workspace,
     "wildclaw_social": _kwargs_wildclaw_social,
+    "travel": _kwargs_travel,
 }
 
 

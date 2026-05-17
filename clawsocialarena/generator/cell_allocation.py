@@ -5,9 +5,10 @@ Encodes the table from
 section 2 ("Family-to-Category Allocation (Default A)") as a single
 canonical structure.
 
-The current v2.0.0 expansion has 16 cells. Cross-user (CU) and
-competitive (CM) both have a third slot for MARBLE bidding; the other
-categories keep slots A/B.
+The current v2.0.0 expansion has 18 cells. Cross-user (CU) and
+competitive (CM) both have a third slot for MARBLE bidding. Cross-user
+adds a fourth slot (D) for `travel`, and Multi-Party Group (MG) adds a
+third slot (C) for `travel`. The other categories keep slots A/B.
 """
 
 from __future__ import annotations
@@ -60,6 +61,8 @@ CELL_ALLOCATION: tuple[CellSpec, ...] = (
     CellSpec(13, "AM", "B", "tau2_telecom"),
     CellSpec(14, "CM", "C", "marble_bidding"),
     CellSpec(15, "CU", "C", "marble_bidding"),
+    CellSpec(16, "CU", "D", "travel"),
+    CellSpec(17, "MG", "C", "travel"),
 )
 
 
@@ -95,7 +98,7 @@ def cell_for(category: str, slot: str) -> CellSpec:
             return cell
     raise KeyError(
         f"no cell at category={category!r} slot={slot!r}; "
-        f"categories={CATEGORIES} slots=('A', 'B', 'C')"
+        f"categories={CATEGORIES} slots=('A', 'B', 'C', 'D')"
     )
 
 
