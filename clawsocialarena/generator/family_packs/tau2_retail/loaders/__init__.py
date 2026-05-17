@@ -20,6 +20,11 @@ from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_store_rep
     StoreRepDyadScenarioBundle,
     load_store_rep_dyad_scenario,
 )
+from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_hub_aggregator import (
+    HubAggregatorLoader,
+    HubAggregatorScenarioBundle,
+    load_hub_aggregator_scenario,
+)
 
 __all__ = [
     "SharedAccountLoader",
@@ -30,4 +35,7 @@ __all__ = [
     "StoreRepDyadLoader",
     "StoreRepDyadScenarioBundle",
     "load_store_rep_dyad_scenario",
+    "HubAggregatorLoader",
+    "HubAggregatorScenarioBundle",
+    "load_hub_aggregator_scenario",
 ]

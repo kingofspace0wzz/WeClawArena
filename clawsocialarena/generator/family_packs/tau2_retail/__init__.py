@@ -3,10 +3,13 @@
 from clawsocialarena.generator.family_packs.tau2_retail.loaders import (
     CrossAccountLoader,
     CrossAccountScenarioBundle,
+    HubAggregatorLoader,
+    HubAggregatorScenarioBundle,
     SharedAccountLoader,
     StoreRepDyadLoader,
     StoreRepDyadScenarioBundle,
     load_cross_account_scenario,
+    load_hub_aggregator_scenario,
     load_shared_account_scenario,
     load_store_rep_dyad_scenario,
 )
@@ -54,6 +57,9 @@ __all__ = [
     "StoreRepDyadScenarioBundle",
     "load_store_rep_dyad_scenario",
     "materialize_store_rep_dyad_bundle",
+    "HubAggregatorLoader",
+    "HubAggregatorScenarioBundle",
+    "load_hub_aggregator_scenario",
     "Tau2RetailLoader",  # compatibility alias
     "load_household_exchange_scenario",  # compatibility alias
     "materialize_household_bundle",  # compatibility alias
