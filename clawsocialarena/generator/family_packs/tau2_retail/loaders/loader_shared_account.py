@@ -1,7 +1,7 @@
-"""tau2_retail family pack loader.
+"""tau2_retail shared-account archetype loader.
 
 Reads the tau2 retail domain fixtures (``knowledge/tau2-bench/data/tau2/
-domains/retail/``) and reframes them as household-account scenarios with
+domains/retail/``) and reframes them as shared-account scenarios with
 a primary holder + one secondary member. Produces v2 scenarios populated
 with ``coordination_mode``, ``agent_graph``, and a tau2-style
 ``evaluation_criteria`` block.
@@ -30,8 +30,8 @@ from clawsocialarena.scenario.models import (
 
 
 @dataclass(frozen=True)
-class HouseholdScenarioBundle:
-    """The output of one tau2_retail loader call.
+class SharedAccountScenarioBundle:
+    """The output of one tau2_retail shared-account loader call.
 
     Carries the v2 ``Scenario`` plus the evaluation_criteria, governance
     seed, and resource-id selection that downstream emitters consume.
@@ -45,7 +45,7 @@ class HouseholdScenarioBundle:
 
 
 _TAU2_RETAIL_ROOT = (
-    Path(__file__).resolve().parents[4]
+    Path(__file__).resolve().parents[5]
     / "knowledge"
     / "tau2-bench"
     / "data"
@@ -53,15 +53,15 @@ _TAU2_RETAIL_ROOT = (
     / "domains"
     / "retail"
 )
-_FAMILY_PACK_ROOT = Path(__file__).resolve().parent
+_FAMILY_PACK_ROOT = Path(__file__).resolve().parents[1]
 
 
-class Tau2RetailLoader:
-    """Loader for the tau2_retail family pack.
+class SharedAccountLoader:
+    """Loader for the tau2_retail shared-account archetype.
 
     Holds the tau2 source fixtures (db.json, policy.md, tasks.json) and
     converts selected tau2 tasks into v2 scenarios. The loader is
-    deterministic for a given (task_id, household_seed) pair.
+    deterministic for a given (task_id, shared_account_seed) pair.
     """
 
     def __init__(self, tau2_root: Path | None = None) -> None:
@@ -93,24 +93,31 @@ class Tau2RetailLoader:
             self._phase_schedule = list(raw.get("phases", []))
         return self._phase_schedule
 
-    def load_household_exchange(
+    def load_scenario(
         self,
         *,
-        scenario_id: str = "tau2_retail_household_exchange_001",
+        task_index: int = 0,
+        scenario_id: str = "tau2_retail_shared_account_t0_v0",
         primary_id: str = "alice_assistant",
         secondary_id: str = "bob_assistant",
         primary_owner: str = "alice",
         secondary_owner: str = "bob",
-        household_id: str = "HH-7",
-    ) -> HouseholdScenarioBundle:
-        """Produce the household exchange scenario from tau2 retail task #0.
+        shared_account_id: str = "HH-7",
+    ) -> SharedAccountScenarioBundle:
+        """Produce the shared-account scenario from tau2 retail task #0.
 
         Maps the single-user Yusuf Rossi exchange to a two-agent
-        household where the primary holder can authorize any order and
+        shared account where the primary holder can authorize any order and
         the secondary member can only authorize orders below their
         spending cap. The secondary requests an exchange; the primary
         is asked to confirm before commit.
+
+        ``task_index`` is accepted but ignored for now; it exists so callers
+        can begin using the new signature. Task 11 generalises the loader
+        to use ``task_index`` for multi-task selection.
         """
+        del task_index  # reserved for Task 11; ignored for now
+
         tasks = self._load_tasks()
         source_task = next(t for t in tasks if t.get("id") == "0")
         del source_task  # the task content is naturalized later
@@ -118,12 +125,12 @@ class Tau2RetailLoader:
         primary_agent = ScenarioAgent(
             agent_id=primary_id,
             user_id=primary_owner,
-            system_prompt_template=_primary_prompt(primary_owner, household_id),
+            system_prompt_template=_primary_prompt(primary_owner, shared_account_id),
         )
         secondary_agent = ScenarioAgent(
             agent_id=secondary_id,
             user_id=secondary_owner,
-            system_prompt_template=_secondary_prompt(secondary_owner, household_id),
+            system_prompt_template=_secondary_prompt(secondary_owner, shared_account_id),
         )
 
         primary_node = AgentGraphNode(
@@ -162,7 +169,7 @@ class Tau2RetailLoader:
             category="AM",
             task_family="coordination",
             agents=[primary_agent, secondary_agent],
-            initial_state={"household_id": household_id},
+            initial_state={"household_id": shared_account_id},
             max_turns=12,
             opening_message={
                 "from": "system",
@@ -175,7 +182,7 @@ class Tau2RetailLoader:
         )
 
         # The materializer seeds the first 3 tau2 orders into each
-        # household member's SQLite database (see materialize.py
+        # shared-account member's SQLite database (see materialize.py
         # _household_orders_for). Pick the first of those here so the
         # env_assertions reference an order that actually exists on
         # disk. The previous hardcoded "#W2378156" was not in that
@@ -185,7 +192,7 @@ class Tau2RetailLoader:
         target_order_id = seeded_order_ids[0] if seeded_order_ids else "#W-UNKNOWN"
         evaluation_criteria = _evaluation_criteria(
             order_id=target_order_id,
-            household_id=household_id,
+            household_id=shared_account_id,
             # The MCP handler writes the user_id (e.g., "alice") into
             # payment_authorized_by, not the agent id ("alice_assistant").
             # Use the owner here so the predicate sees a match.
@@ -198,11 +205,11 @@ class Tau2RetailLoader:
             policy_excerpt=self._load_policy()[:1000],
         )
         declared_resource_ids = [
-            f"household.{household_id}.orders",
+            f"household.{shared_account_id}.orders",
             f"user.{primary_owner}.payment_methods",
             f"user.{primary_owner}.addresses",
         ]
-        return HouseholdScenarioBundle(
+        return SharedAccountScenarioBundle(
             scenario=scenario,
             evaluation_criteria=evaluation_criteria,
             governance_seed=governance_seed,
@@ -211,33 +218,35 @@ class Tau2RetailLoader:
         )
 
 
-def load_household_exchange_scenario(
+def load_shared_account_scenario(
     *,
-    scenario_id: str = "tau2_retail_household_exchange_001",
+    task_index: int = 0,
+    scenario_id: str | None = None,
     primary_id: str = "alice_assistant",
     secondary_id: str = "bob_assistant",
     primary_owner: str = "alice",
     secondary_owner: str = "bob",
-    household_id: str = "HH-7",
-) -> HouseholdScenarioBundle:
+    shared_account_id: str = "HH-7",
+) -> SharedAccountScenarioBundle:
     """Convenience entry point. Builds a default loader and returns the
-    household exchange scenario bundle. All keyword arguments forward to
-    :meth:`Tau2RetailLoader.load_household_exchange` so callers can vary
-    the household identity for batches of distinct variants."""
-    return Tau2RetailLoader().load_household_exchange(
-        scenario_id=scenario_id,
+    shared-account scenario bundle. All keyword arguments forward to
+    :meth:`SharedAccountLoader.load_scenario` so callers can vary
+    the account identity for batches of distinct variants."""
+    return SharedAccountLoader().load_scenario(
+        task_index=task_index,
+        scenario_id=scenario_id or f"tau2_retail_shared_account_t{task_index}_v0",
         primary_id=primary_id,
         secondary_id=secondary_id,
         primary_owner=primary_owner,
         secondary_owner=secondary_owner,
-        household_id=household_id,
+        shared_account_id=shared_account_id,
     )
 
 
-def _primary_prompt(owner: str, household_id: str) -> str:
+def _primary_prompt(owner: str, shared_account_id: str) -> str:
     return (
         f"You are the personal retail assistant for {owner}, who is the "
-        f"primary holder of household account {household_id}. You may "
+        f"primary holder of shared account {shared_account_id}. You may "
         "authorize any household order. Before committing an order on "
         "behalf of a secondary member, you must confirm the items, the "
         "shipping address, and the total cost with the primary holder. "
@@ -246,10 +255,10 @@ def _primary_prompt(owner: str, household_id: str) -> str:
     )
 
 
-def _secondary_prompt(owner: str, household_id: str) -> str:
+def _secondary_prompt(owner: str, shared_account_id: str) -> str:
     return (
         f"You are the personal retail assistant for {owner}, who is a "
-        f"secondary member of household account {household_id}. You may "
+        f"secondary member of shared account {shared_account_id}. You may "
         "request changes to household orders but you may not authorize "
         "payments above the per-secondary spending cap. For payments "
         "above the cap, you must route the request through the primary "

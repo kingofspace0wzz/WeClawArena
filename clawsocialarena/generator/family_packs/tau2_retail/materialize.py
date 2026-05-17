@@ -1,6 +1,6 @@
 """Bundle materialization adapter for the tau2_retail family pack.
 
-Converts the in-memory ``HouseholdScenarioBundle`` produced by the
+Converts the in-memory ``SharedAccountScenarioBundle`` produced by the
 loader into the on-disk bundle layout the rest of the construction
 pipeline (docker simulation, eval runner) expects.
 
@@ -34,9 +34,9 @@ from pathlib import Path
 from typing import Any
 
 from clawsocialarena.generator.compose_emitter import emit_compose_yaml
-from clawsocialarena.generator.family_packs.tau2_retail.loader import (
-    HouseholdScenarioBundle,
-    Tau2RetailLoader,
+from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_shared_account import (
+    SharedAccountLoader,
+    SharedAccountScenarioBundle,
 )
 from clawsocialarena.generator.governance_emitter import (
     emit_governance_manifest_files,
@@ -61,13 +61,13 @@ _RETAIL_TOOLS = (
 )
 
 
-def materialize_household_bundle(
-    bundle: HouseholdScenarioBundle,
+def materialize_shared_account_bundle(
+    bundle: SharedAccountScenarioBundle,
     out_dir: Path | str,
     *,
-    tau2_loader: Tau2RetailLoader | None = None,
+    tau2_loader: SharedAccountLoader | None = None,
 ) -> Path:
-    """Write the household scenario bundle to disk.
+    """Write the shared-account scenario bundle to disk.
 
     Returns the materialized ``out_dir`` path. Overwrites any existing
     bundle files; does not touch unrelated entries in ``out_dir``.
@@ -87,7 +87,7 @@ def materialize_household_bundle(
     _write_resources(
         bundle,
         out_path,
-        tau2_loader=tau2_loader or Tau2RetailLoader(),
+        tau2_loader=tau2_loader or SharedAccountLoader(),
     )
 
     return out_path
@@ -138,7 +138,7 @@ def _write_scenario_json(scenario: Scenario, out_dir: Path) -> None:
 
 
 def _write_scenario_gt_json(
-    bundle: HouseholdScenarioBundle,
+    bundle: SharedAccountScenarioBundle,
     out_dir: Path,
 ) -> None:
     """Assemble scenario.gt.json from the bundle's auxiliary data.
@@ -265,10 +265,10 @@ def _write_governance(scenario: Scenario, out_dir: Path) -> None:
 
 
 def _write_resources(
-    bundle: HouseholdScenarioBundle,
+    bundle: SharedAccountScenarioBundle,
     out_dir: Path,
     *,
-    tau2_loader: Tau2RetailLoader,
+    tau2_loader: SharedAccountLoader,
 ) -> None:
     """Materialize the per-user SQLite databases and household JSON.
 

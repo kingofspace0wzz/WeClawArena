@@ -14,6 +14,7 @@ Adding a new pack requires (a) the pack itself (loader + materializer)
 and (b) one new dict entry below; the rest of the pipeline picks it up
 automatically.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,7 +23,9 @@ from typing import Any, Callable
 
 from clawsocialarena.generator.family_packs import (
     marble_bargaining as _marble_bargaining_pack,
+    marble_bidding as _marble_bidding_pack,
     marble_research as _marble_research_pack,
+    swebench_workspace as _swebench_workspace_pack,
     tau2_airline as _tau2_airline_pack,
     tau2_retail as _tau2_retail_pack,
     tau2_telecom as _tau2_telecom_pack,
@@ -33,17 +36,25 @@ from clawsocialarena.generator.family_packs.marble_bargaining import (
     load_bargaining_scenario,
     materialize_bargaining_bundle,
 )
+from clawsocialarena.generator.family_packs.marble_bidding import (
+    load_bidding_scenario,
+    materialize_bidding_bundle,
+)
 from clawsocialarena.generator.family_packs.marble_research import (
     load_research_collaboration_scenario,
     materialize_research_collaboration_bundle,
+)
+from clawsocialarena.generator.family_packs.swebench_workspace import (
+    load_workspace_coding_scenario,
+    materialize_workspace_coding_bundle,
 )
 from clawsocialarena.generator.family_packs.tau2_airline import (
     load_group_seat_change_scenario,
     materialize_group_booking_bundle,
 )
 from clawsocialarena.generator.family_packs.tau2_retail import (
-    load_household_exchange_scenario,
-    materialize_household_bundle,
+    load_shared_account_scenario,
+    materialize_shared_account_bundle,
 )
 from clawsocialarena.generator.family_packs.tau2_telecom import (
     load_family_plan_roaming_scenario,
@@ -85,9 +96,13 @@ class FamilyPackEntry:
 FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
     "tau2_retail": FamilyPackEntry(
         family_id="tau2_retail",
-        load_fn=load_household_exchange_scenario,
-        materialize_fn=materialize_household_bundle,
-        session_context_keys=("household_id", "primary_owner_id", "secondary_owner_ids"),
+        load_fn=load_shared_account_scenario,
+        materialize_fn=materialize_shared_account_bundle,
+        session_context_keys=(
+            "household_id",
+            "primary_owner_id",
+            "secondary_owner_ids",
+        ),
         naturalization_hints=_tau2_retail_pack.NATURALIZATION_HINTS,
     ),
     "tau2_airline": FamilyPackEntry(
@@ -116,20 +131,64 @@ FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
         load_fn=load_bargaining_scenario,
         materialize_fn=materialize_bargaining_bundle,
         session_context_keys=(
+            "transaction_id",
+            "resource_profile",
             "item_id",
+            "quantity",
+            "target_price",
             "buyer_owner_id",
             "seller_owner_id",
-            "buyer_budget_ceiling",
-            "seller_reservation",
-            "market_reference_price",
+            "approver_owner_id",
+            "buyer_agent_id",
+            "seller_agent_id",
+            "approver_agent_id",
         ),
         naturalization_hints=_marble_bargaining_pack.NATURALIZATION_HINTS,
+    ),
+    "marble_bidding": FamilyPackEntry(
+        family_id="marble_bidding",
+        load_fn=load_bidding_scenario,
+        materialize_fn=materialize_bidding_bundle,
+        session_context_keys=(
+            "auction_id",
+            "resource_profile",
+            "item_id",
+            "quantity",
+            "required_terms",
+            "seller_owner_id",
+            "buyer_owner_ids",
+            "seller_agent_id",
+            "buyer_agent_ids",
+            "market_reference_price",
+            "seller_minimum_unit_price",
+            "buyer_budget_ceiling_by_owner",
+        ),
+        naturalization_hints=_marble_bidding_pack.NATURALIZATION_HINTS,
+    ),
+    "swebench_workspace": FamilyPackEntry(
+        family_id="swebench_workspace",
+        load_fn=load_workspace_coding_scenario,
+        materialize_fn=materialize_workspace_coding_bundle,
+        session_context_keys=(
+            "instance_id",
+            "repo_name",
+            "base_commit",
+            "implementer_owner_id",
+            "reviewer_owner_id",
+            "code_owner_id",
+            "ci_owner_id",
+        ),
+        naturalization_hints=_swebench_workspace_pack.NATURALIZATION_HINTS,
     ),
     "wildclaw_social": FamilyPackEntry(
         family_id="wildclaw_social",
         load_fn=load_meeting_negotiation_scenario,
         materialize_fn=materialize_meeting_negotiation_bundle,
-        session_context_keys=("meeting_id", "organizer_owner_id", "participant_owner_ids"),
+        session_context_keys=(
+            "meeting_id",
+            "organizer_owner_id",
+            "participant_owner_ids",
+        ),
         naturalization_hints=_wildclaw_social_pack.NATURALIZATION_HINTS,
     ),
     "travel": FamilyPackEntry(
@@ -192,7 +251,7 @@ def load_and_materialize(
 
     Returns a ``(bundle_dir, bundle)`` pair. The ``bundle`` instance is
     the pack-specific frozen dataclass produced by the loader (e.g.
-    ``HouseholdScenarioBundle``, ``GroupBookingScenarioBundle``,
+    ``SharedAccountScenarioBundle``, ``GroupBookingScenarioBundle``,
     etc.); callers that need uniform access should reach through
     ``bundle.scenario`` / ``bundle.evaluation_criteria`` /
     ``bundle.phase_schedule`` which every pack exposes by contract.
