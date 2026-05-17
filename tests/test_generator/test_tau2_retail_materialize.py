@@ -14,15 +14,15 @@ from pathlib import Path
 import pytest
 
 from clawsocialarena.generator.family_packs.tau2_retail import (
-    load_household_exchange_scenario,
-    materialize_household_bundle,
+    load_shared_account_scenario,
+    materialize_shared_account_bundle,
 )
 
 
 @pytest.fixture
 def materialized_bundle(tmp_path: Path) -> Path:
-    bundle = load_household_exchange_scenario()
-    return materialize_household_bundle(bundle, tmp_path / "scenario")
+    bundle = load_shared_account_scenario()
+    return materialize_shared_account_bundle(bundle, tmp_path / "scenario")
 
 
 def test_materialize_writes_required_files(materialized_bundle: Path) -> None:
@@ -134,10 +134,10 @@ def test_materialize_household_orders_json_is_written(
 def test_materialize_idempotent_on_rerun(tmp_path: Path) -> None:
     """Calling the materializer twice on the same out_dir overwrites
     cleanly without leaving stale files."""
-    bundle = load_household_exchange_scenario()
+    bundle = load_shared_account_scenario()
     out_dir = tmp_path / "scenario"
-    materialize_household_bundle(bundle, out_dir)
+    materialize_shared_account_bundle(bundle, out_dir)
     first_pass = sorted(p.relative_to(out_dir).as_posix() for p in out_dir.rglob("*"))
-    materialize_household_bundle(bundle, out_dir)
+    materialize_shared_account_bundle(bundle, out_dir)
     second_pass = sorted(p.relative_to(out_dir).as_posix() for p in out_dir.rglob("*"))
     assert first_pass == second_pass
