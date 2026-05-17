@@ -139,6 +139,33 @@ def materialize_store_rep_dyad_bundle(
     return out_path
 
 
+def materialize_hub_aggregator_bundle(
+    bundle: Any,  # HubAggregatorScenarioBundle (forward-declare to avoid circular imports)
+    out_dir: Path | str,
+) -> Path:
+    """Materialize a HubAggregatorScenarioBundle to disk.
+
+    Same on-disk layout as `materialize_shared_account_bundle`; uses the
+    multi-table shared-SQLite path because `shared_account_orders.sqlite`
+    carries both `orders` and `order_line_items`.
+    """
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    scenario = bundle.scenario
+
+    _write_scenario_json(scenario, out_path)
+    _write_scenario_gt_json(bundle, out_path)
+    _write_family_pack_context(bundle, out_path)
+    _write_docker_compose(scenario, out_path)
+    _write_personas(scenario, out_path)
+    _write_mcp_stubs(out_path)
+    _write_governance(scenario, out_path)
+    _write_resources(bundle, out_path)
+
+    return out_path
+
+
 def _write_family_pack_context(bundle: Any, out_dir: Path) -> None:
     """Write family_pack_context.json from the bundle's context dict."""
     (out_dir / "family_pack_context.json").write_text(
@@ -316,10 +343,15 @@ def _write_resources(bundle: Any, out_dir: Path) -> None:
         shared_dir.mkdir(parents=True, exist_ok=True)
         for shared_res in bundle.shared_resources:
             sqlite_path = shared_dir / f"{shared_res['shared_resource_id']}.sqlite"
-            _emit_owner_sqlite(
-                sqlite_path,
-                tables=({"name": "orders", "schema": shared_res["schema"], "rows": shared_res["rows"]},),
-            )
+            if shared_res.get("tables"):
+                # Multi-table shared resource (hub_aggregator path).
+                _emit_owner_sqlite(sqlite_path, tables=tuple(shared_res["tables"]))
+            else:
+                # Legacy single-table shared resource (shared_account path).
+                _emit_owner_sqlite(
+                    sqlite_path,
+                    tables=({"name": "orders", "schema": shared_res["schema"], "rows": shared_res["rows"]},),
+                )
 
     # Pristine snapshot for rerun replay
     resources_initial_dir = out_dir / "resources_initial"

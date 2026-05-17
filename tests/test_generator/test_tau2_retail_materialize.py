@@ -239,3 +239,41 @@ def test_materialized_store_rep_dyad_family_pack_context_has_archetype_field(tmp
     assert ctx["archetype"] == "store_rep_dyad"
     assert ctx["store_rep_owner_id"] == "retail_rep_07"
     assert ctx["customer_owner_id"] == "evelyn"
+
+
+def test_materialize_all_six_hub_aggregator_tasks(tmp_path: Path) -> None:
+    from clawsocialarena.generator.family_packs.tau2_retail import (
+        load_hub_aggregator_scenario,
+        materialize_hub_aggregator_bundle,
+    )
+    for i in range(6):
+        bundle = load_hub_aggregator_scenario(task_index=i)
+        out_dir = materialize_hub_aggregator_bundle(bundle, tmp_path / f"t{i}")
+        # 4 owners total: hub + 3 spokes
+        for owner in ("harriet", "sara", "theo", "uma"):
+            assert (out_dir / "resources" / "agents" / owner / "db" / "personal.sqlite").is_file()
+        # shared_account_orders has BOTH orders and order_line_items tables
+        shared_sqlite = out_dir / "resources" / "shared" / "FAM-A" / "shared_account_orders.sqlite"
+        assert shared_sqlite.is_file()
+        conn = sqlite3.connect(shared_sqlite)
+        try:
+            table_names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        finally:
+            conn.close()
+        assert "orders" in table_names
+        assert "order_line_items" in table_names
+
+
+def test_materialize_hub_aggregator_family_pack_context_has_archetype_field(tmp_path: Path) -> None:
+    from clawsocialarena.generator.family_packs.tau2_retail import (
+        load_hub_aggregator_scenario,
+        materialize_hub_aggregator_bundle,
+    )
+    bundle = load_hub_aggregator_scenario(task_index=0)
+    out_dir = materialize_hub_aggregator_bundle(bundle, tmp_path / "t0")
+    import json as _json
+    ctx = _json.loads((out_dir / "family_pack_context.json").read_text())
+    assert ctx["archetype"] == "hub_aggregator"
+    assert ctx["hub_owner_id"] == "harriet"
+    assert ctx["spoke_owner_ids"] == ["sara", "theo", "uma"]
+    assert ctx["shared_account_id"] == "FAM-A"
