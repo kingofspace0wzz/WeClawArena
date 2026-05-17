@@ -18,6 +18,10 @@ from clawsocialarena.generator.family_packs.tau2_retail.seeds.store_rep_dyad_see
     STORE_REP_DYAD_TASK_SEEDS,
     StoreRepDyadTaskSeed,
 )
+from clawsocialarena.generator.family_packs.tau2_retail.seeds.hub_aggregator_seeds import (
+    HUB_AGGREGATOR_TASK_SEEDS,
+    HubAggregatorTaskSeed,
+)
 
 __all__ = [
     "OwnerWorkspaceSeed",
@@ -30,4 +34,6 @@ __all__ = [
     "CrossAccountTaskSeed",
     "STORE_REP_DYAD_TASK_SEEDS",
     "StoreRepDyadTaskSeed",
+    "HUB_AGGREGATOR_TASK_SEEDS",
+    "HubAggregatorTaskSeed",
 ]

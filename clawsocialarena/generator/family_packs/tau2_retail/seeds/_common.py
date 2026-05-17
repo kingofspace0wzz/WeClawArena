@@ -78,8 +78,21 @@ class OwnerWorkspaceSeed:
 @dataclass(frozen=True)
 class SharedResourceSeed:
     """A cross-owner-readable resource (only for shared_account and
-    hub_aggregator archetypes)."""
+    hub_aggregator archetypes).
+
+    A shared resource may carry a single SQLite table (legacy single-table
+    form: pass ``schema`` and ``rows``), or multiple SQLite tables under
+    one resource id (multi-table form: pass ``tables``). When ``tables``
+    is set, it supersedes ``schema`` / ``rows`` and the materializer
+    iterates the nested ``WorkspaceTableSeed`` entries.
+
+    The hub_aggregator archetype uses the multi-table form to keep
+    ``orders`` and ``order_line_items`` under a single shared resource id
+    so the ``aggregated_order_includes_all_spokes`` predicate can join
+    across them within the same sqlite file.
+    """
 
     shared_resource_id: str
-    schema: str
-    rows: tuple[dict[str, Any], ...]
+    schema: str = ""
+    rows: tuple[dict[str, Any], ...] = ()
+    tables: tuple[WorkspaceTableSeed, ...] | None = None
