@@ -6,10 +6,16 @@ from clawsocialarena.generator.family_packs.tau2_retail.seeds._common import (
     WorkspaceFileSeed,
     WorkspaceTableSeed,
 )
+from clawsocialarena.generator.family_packs.tau2_retail.seeds.shared_account_seeds import (
+    SHARED_ACCOUNT_TASK_SEEDS,
+    SharedAccountTaskSeed,
+)
 
 __all__ = [
     "OwnerWorkspaceSeed",
     "SharedResourceSeed",
     "WorkspaceFileSeed",
     "WorkspaceTableSeed",
+    "SHARED_ACCOUNT_TASK_SEEDS",
+    "SharedAccountTaskSeed",
 ]
