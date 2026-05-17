@@ -18,6 +18,7 @@ MarbleResearchTaskSpec in marble_seed_data.ALL_TASKS.
 Tests in :mod:`tests.test_generator.test_phase5_task_variants`
 exercise this module against every registered family.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +26,17 @@ from typing import Any
 
 from clawsocialarena.generator.family_packs.marble_research.marble_seed_data import (
     ALL_TASKS as _MARBLE_RESEARCH_ALL_TASKS,
+)
+from clawsocialarena.generator.family_packs.marble_bargaining.bargaining_seed_data import (
+    BARGAINING_TASK_SEEDS as _MARBLE_BARGAINING_TASK_SEEDS,
+    bargaining_task_seeds_for_cell as _marble_bargaining_seeds_for_cell,
+)
+from clawsocialarena.generator.family_packs.marble_bidding.bidding_seed_data import (
+    MARBLE_BIDDING_TASK_SEEDS as _MARBLE_BIDDING_TASK_SEEDS,
+    bidding_task_seeds_for_cell as _marble_bidding_seeds_for_cell,
+)
+from clawsocialarena.generator.family_packs.swebench_workspace.seed_data import (
+    WORKSPACE_TASK_SEEDS as _SWEBENCH_WORKSPACE_TASK_SEEDS,
 )
 
 
@@ -134,9 +146,7 @@ def _kwargs_marble_research() -> tuple[dict[str, Any], ...]:
     """
     return tuple(
         {
-            "scenario_id": (
-                f"marble_research_collaboration_phase5_v{task.task_index}"
-            ),
+            "scenario_id": (f"marble_research_collaboration_phase5_v{task.task_index}"),
             "seed_id": task.seed_id,
             "proposal_id": task.proposal_id,
             "convener_owner": task.convener_owner,
@@ -149,63 +159,28 @@ def _kwargs_marble_research() -> tuple[dict[str, Any], ...]:
     )
 
 
-def _kwargs_marble_bargaining() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Return 3 task-variant kwarg dicts for marble_bargaining.
-
-    Each variant uses a distinct real item with realistic market pricing,
-    rather than scaled multiples of the same anonymous commodity. The
-    buyer/seller pairs are also distinct across variants.
-    """
-    return (
-        # ITEM-7: used Toyota Corolla (private seller)
-        {
-            "scenario_id": "marble_bargaining_phase5_v0",
-            "buyer_id": "alice_buyer",
-            "seller_id": "bob_seller",
-            "buyer_owner": "alice",
-            "seller_owner": "bob",
-            "item_id": "ITEM-7",
-            "item_description": (
-                "2018 Toyota Corolla SE sedan, 62,000 miles, one previous owner, "
-                "no accidents on record, needs new tyres"
-            ),
-            "buyer_budget_ceiling": 13_500.0,
-            "seller_reservation": 10_500.0,
-            "market_reference_price": 12_000.0,
-        },
-        # ITEM-12: used Apple MacBook Pro (private seller)
-        {
-            "scenario_id": "marble_bargaining_phase5_v1",
-            "buyer_id": "vera_buyer",
-            "seller_id": "william_seller",
-            "buyer_owner": "vera",
-            "seller_owner": "william",
-            "item_id": "ITEM-12",
-            "item_description": (
-                "2021 Apple MacBook Pro 14-inch, M1 Pro chip, 16 GB RAM, "
-                "512 GB SSD, space grey, minor scuff on lid"
-            ),
-            "buyer_budget_ceiling": 1_400.0,
-            "seller_reservation": 1_050.0,
-            "market_reference_price": 1_200.0,
-        },
-        # ITEM-21: vintage vinyl record collection (private seller)
-        {
-            "scenario_id": "marble_bargaining_phase5_v2",
-            "buyer_id": "xenia_buyer",
-            "seller_id": "yusuf_seller",
-            "buyer_owner": "xenia",
-            "seller_owner": "yusuf",
-            "item_id": "ITEM-21",
-            "item_description": (
-                "Collection of 120 classic rock vinyl records from the 1970s-80s, "
-                "including several first pressings; condition ranges from VG to NM"
-            ),
-            "buyer_budget_ceiling": 700.0,
-            "seller_reservation": 480.0,
-            "market_reference_price": 580.0,
-        },
+def _kwargs_marble_bargaining(
+    *, cell_id: str | None = None
+) -> tuple[dict[str, Any], ...]:
+    """Return task-variant kwarg dicts for marble_bargaining."""
+    seeds = (
+        _marble_bargaining_seeds_for_cell(cell_id)
+        if cell_id is not None
+        else _MARBLE_BARGAINING_TASK_SEEDS
     )
+    return tuple(dict(seed.loader_kwargs()) for seed in seeds)
+
+
+def _kwargs_marble_bidding(
+    *, cell_id: str | None = None
+) -> tuple[dict[str, Any], ...]:
+    """Return task-variant kwarg dicts for owned-ecosystem marble_bidding."""
+    seeds = (
+        _marble_bidding_seeds_for_cell(cell_id)
+        if cell_id is not None
+        else _MARBLE_BIDDING_TASK_SEEDS
+    )
+    return tuple(dict(seed.loader_kwargs()) for seed in seeds)
 
 
 def _kwargs_wildclaw_social() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -249,6 +224,11 @@ def _kwargs_wildclaw_social() -> tuple[dict[str, Any], dict[str, Any], dict[str,
     )
 
 
+def _kwargs_swebench_workspace() -> tuple[dict[str, Any], ...]:
+    """Return task-variant kwarg dicts for swebench_workspace."""
+    return tuple(dict(seed.loader_kwargs()) for seed in _SWEBENCH_WORKSPACE_TASK_SEEDS)
+
+
 def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
     """A short human-readable label baked from the variant identity.
 
@@ -269,8 +249,11 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
         owners = kwargs["participating_owners"]
         return "_".join(owners) + f"_{kwargs['proposal_id']}"
     if family_id == "marble_bargaining":
+        return f"{kwargs['buyer_owner']}_{kwargs['seller_owner']}_{kwargs['item_id']}"
+    if family_id == "marble_bidding":
         return (
-            f"{kwargs['buyer_owner']}_{kwargs['seller_owner']}_"
+            f"{kwargs['seller_owner']}_"
+            f"{'_'.join(kwargs['buyer_owners'])}_"
             f"{kwargs['item_id']}"
         )
     if family_id == "wildclaw_social":
@@ -281,6 +264,11 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
             f"{kwargs['participant_three_owner']}_"
             f"{kwargs['meeting_id']}"
         )
+    if family_id == "swebench_workspace":
+        return (
+            f"{kwargs['implementer_owner']}_{kwargs['reviewer_owner']}_"
+            f"{kwargs['code_owner']}_{kwargs['instance_id']}"
+        )
     return f"task{kwargs.get('scenario_id', 'unknown')}"
 
 
@@ -290,14 +278,23 @@ _FAMILY_KWARG_BUILDERS = {
     "tau2_telecom": _kwargs_tau2_telecom,
     "marble_research": _kwargs_marble_research,
     "marble_bargaining": _kwargs_marble_bargaining,
+    "marble_bidding": _kwargs_marble_bidding,
+    "swebench_workspace": _kwargs_swebench_workspace,
     "wildclaw_social": _kwargs_wildclaw_social,
 }
 
 
-def task_variants_for(family_id: str) -> tuple[TaskVariantSpec, ...]:
+def task_variants_for(
+    family_id: str,
+    *,
+    cell_id: str | None = None,
+) -> tuple[TaskVariantSpec, ...]:
     """Return the frozen task-variant specs for ``family_id``.
 
-    Most families return 3 variants; marble_research returns 8.
+    Most families return 3 variants; marble_research returns 8. When
+    ``family_id`` is ``marble_bargaining`` or ``marble_bidding``,
+    ``cell_id`` narrows the family grid to the slice used by the base
+    generator.
     Raises ``KeyError`` for an unknown family with a helpful message.
     """
     if family_id not in _FAMILY_KWARG_BUILDERS:
@@ -305,7 +302,12 @@ def task_variants_for(family_id: str) -> tuple[TaskVariantSpec, ...]:
             f"no task variants registered for family_id={family_id!r}; "
             f"known: {sorted(_FAMILY_KWARG_BUILDERS.keys())}"
         )
-    kwargs_tuple = _FAMILY_KWARG_BUILDERS[family_id]()
+    if family_id == "marble_bargaining":
+        kwargs_tuple = _kwargs_marble_bargaining(cell_id=cell_id)
+    elif family_id == "marble_bidding":
+        kwargs_tuple = _kwargs_marble_bidding(cell_id=cell_id)
+    else:
+        kwargs_tuple = _FAMILY_KWARG_BUILDERS[family_id]()
     return tuple(
         TaskVariantSpec(
             task_index=index,
@@ -316,13 +318,18 @@ def task_variants_for(family_id: str) -> tuple[TaskVariantSpec, ...]:
     )
 
 
-def task_variant_at(family_id: str, task_index: int) -> TaskVariantSpec:
+def task_variant_at(
+    family_id: str,
+    task_index: int,
+    *,
+    cell_id: str | None = None,
+) -> TaskVariantSpec:
     """Convenience: return one specific variant.
 
     Raises ``KeyError`` for unknown family, ``IndexError`` for unknown
     task_index.
     """
-    variants = task_variants_for(family_id)
+    variants = task_variants_for(family_id, cell_id=cell_id)
     if not 0 <= task_index < len(variants):
         raise IndexError(
             f"task_index {task_index} out of range [0, {len(variants)}) "
