@@ -16,8 +16,10 @@ import pytest
 from clawsocialarena.generator.family_packs.tau2_retail import (
     load_cross_account_scenario,
     load_shared_account_scenario,
+    load_store_rep_dyad_scenario,
     materialize_cross_account_bundle,
     materialize_shared_account_bundle,
+    materialize_store_rep_dyad_bundle,
 )
 
 
@@ -201,3 +203,39 @@ def test_materialized_cross_account_family_pack_context_has_no_shared_account(tm
     ctx = json.loads((out_dir / "family_pack_context.json").read_text())
     assert ctx["archetype"] == "cross_account"
     assert ctx["no_shared_account"] is True
+
+
+def test_materialize_all_six_store_rep_dyad_tasks(tmp_path: Path) -> None:
+    for i in range(6):
+        bundle = load_store_rep_dyad_scenario(task_index=i)
+        out_dir = materialize_store_rep_dyad_bundle(bundle, tmp_path / f"t{i}")
+        assert (out_dir / "scenario.json").is_file()
+        assert (out_dir / "scenario.gt.json").is_file()
+        assert (out_dir / "family_pack_context.json").is_file()
+        # store_rep_dyad has NO shared/ dir (asymmetric per-owner workspaces)
+        assert not (out_dir / "resources" / "shared").exists()
+        # both owners have personal DBs
+        assert (out_dir / "resources" / "agents" / "evelyn" / "db" / "personal.sqlite").is_file()
+        assert (out_dir / "resources" / "agents" / "retail_rep_07" / "db" / "personal.sqlite").is_file()
+        # verbatim retail policy file owned by the store rep
+        assert (
+            out_dir / "resources" / "agents" / "retail_rep_07" / "files" / "retail_policy.md"
+        ).is_file()
+        # store rep DB must include the auth_attempts table
+        rep_db = out_dir / "resources" / "agents" / "retail_rep_07" / "db" / "personal.sqlite"
+        conn = sqlite3.connect(rep_db)
+        try:
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            table_names = {row[0] for row in cur.fetchall()}
+        finally:
+            conn.close()
+        assert "auth_attempts" in table_names
+
+
+def test_materialized_store_rep_dyad_family_pack_context_has_archetype_field(tmp_path: Path) -> None:
+    bundle = load_store_rep_dyad_scenario(task_index=0)
+    out_dir = materialize_store_rep_dyad_bundle(bundle, tmp_path / "t0")
+    ctx = json.loads((out_dir / "family_pack_context.json").read_text())
+    assert ctx["archetype"] == "store_rep_dyad"
+    assert ctx["store_rep_owner_id"] == "retail_rep_07"
+    assert ctx["customer_owner_id"] == "evelyn"

@@ -13,6 +13,7 @@ from clawsocialarena.generator.family_packs.tau2_retail.loaders import (
 from clawsocialarena.generator.family_packs.tau2_retail.materialize import (
     materialize_cross_account_bundle,
     materialize_shared_account_bundle,
+    materialize_store_rep_dyad_bundle,
 )
 
 # Compatibility aliases for code still importing the old household-only names.
@@ -52,6 +53,7 @@ __all__ = [
     "StoreRepDyadLoader",
     "StoreRepDyadScenarioBundle",
     "load_store_rep_dyad_scenario",
+    "materialize_store_rep_dyad_bundle",
     "Tau2RetailLoader",  # compatibility alias
     "load_household_exchange_scenario",  # compatibility alias
     "materialize_household_bundle",  # compatibility alias
