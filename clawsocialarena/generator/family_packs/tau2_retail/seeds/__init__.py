@@ -10,6 +10,10 @@ from clawsocialarena.generator.family_packs.tau2_retail.seeds.shared_account_see
     SHARED_ACCOUNT_TASK_SEEDS,
     SharedAccountTaskSeed,
 )
+from clawsocialarena.generator.family_packs.tau2_retail.seeds.cross_account_seeds import (
+    CROSS_ACCOUNT_TASK_SEEDS,
+    CrossAccountTaskSeed,
+)
 
 __all__ = [
     "OwnerWorkspaceSeed",
@@ -18,4 +22,6 @@ __all__ = [
     "WorkspaceTableSeed",
     "SHARED_ACCOUNT_TASK_SEEDS",
     "SharedAccountTaskSeed",
+    "CROSS_ACCOUNT_TASK_SEEDS",
+    "CrossAccountTaskSeed",
 ]
