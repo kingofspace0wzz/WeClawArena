@@ -99,36 +99,36 @@ def test_materialize_mcp_stubs_cover_declared_tool_surface(
         )
 
 
-def test_materialize_resources_writes_per_user_sqlite(
+def test_materialize_resources_writes_per_agent_sqlite(
     materialized_bundle: Path,
 ) -> None:
-    """The database slicing adapter must produce one personal.sqlite
-    per household member, each carrying the household's orders."""
-    alice_db = materialized_bundle / "resources/users/alice/db/personal.sqlite"
-    bob_db = materialized_bundle / "resources/users/bob/db/personal.sqlite"
+    """The materializer must produce one personal.sqlite per agent owner
+    under the new canonical layout (resources/agents/<owner>/db/)."""
+    alice_db = materialized_bundle / "resources/agents/alice/db/personal.sqlite"
+    bob_db = materialized_bundle / "resources/agents/bob/db/personal.sqlite"
     assert alice_db.is_file()
     assert bob_db.is_file()
 
     conn = sqlite3.connect(alice_db)
     try:
-        rows = conn.execute("SELECT order_id, household_id FROM orders").fetchall()
+        rows = conn.execute("SELECT pm_id FROM payment_methods").fetchall()
     finally:
         conn.close()
-    assert rows, "alice's personal.sqlite should carry at least one order"
-    for _, household_id in rows:
-        assert household_id == "HH-7"
+    assert rows, "alice's personal.sqlite should carry at least one payment method"
 
 
-def test_materialize_household_orders_json_is_written(
+def test_materialize_shared_sqlite_is_written(
     materialized_bundle: Path,
 ) -> None:
-    orders_path = materialized_bundle / "resources/household/HH-7/orders.json"
-    assert orders_path.is_file()
-    orders = json.loads(orders_path.read_text())
-    assert isinstance(orders, list)
-    assert len(orders) >= 1
-    for order in orders:
-        assert order["household_id"] == "HH-7"
+    """The materializer must produce a shared SQLite for the shared account orders."""
+    shared_sqlite = materialized_bundle / "resources/shared/HH-7/shared_account_orders.sqlite"
+    assert shared_sqlite.is_file()
+    conn = sqlite3.connect(shared_sqlite)
+    try:
+        rows = conn.execute("SELECT order_id FROM orders").fetchall()
+    finally:
+        conn.close()
+    assert rows, "shared_account_orders.sqlite should carry at least one order"
 
 
 def test_materialize_idempotent_on_rerun(tmp_path: Path) -> None:
@@ -141,3 +141,36 @@ def test_materialize_idempotent_on_rerun(tmp_path: Path) -> None:
     materialize_shared_account_bundle(bundle, out_dir)
     second_pass = sorted(p.relative_to(out_dir).as_posix() for p in out_dir.rglob("*"))
     assert first_pass == second_pass
+
+
+def test_materialize_all_six_shared_account_tasks(tmp_path: Path) -> None:
+    for i in range(6):
+        bundle = load_shared_account_scenario(task_index=i)
+        out_dir = materialize_shared_account_bundle(bundle, tmp_path / f"t{i}")
+        assert (out_dir / "scenario.json").is_file()
+        assert (out_dir / "scenario.gt.json").is_file()
+        assert (out_dir / "family_pack_context.json").is_file()
+        assert (out_dir / "resources" / "agents" / "alice" / "db" / "personal.sqlite").is_file()
+        assert (out_dir / "resources" / "agents" / "bob" / "db" / "personal.sqlite").is_file()
+        # The first 5 base tasks use HH-7 (seed default); t5 may use a different
+        # shared_account_id per the seed. Look up the actual id from the bundle.
+        shared_id = bundle.family_pack_context["shared_account_id"]
+        assert (out_dir / "resources" / "shared" / shared_id / "shared_account_orders.sqlite").is_file()
+
+
+def test_materialized_family_pack_context_has_archetype_field(tmp_path: Path) -> None:
+    bundle = load_shared_account_scenario(task_index=0)
+    out_dir = materialize_shared_account_bundle(bundle, tmp_path / "t0")
+    ctx = json.loads((out_dir / "family_pack_context.json").read_text())
+    assert ctx["archetype"] == "shared_account"
+    assert ctx["tau2_source_task_id"] == "0"  # tau2#0 for t0
+
+
+def test_materialized_personal_files_present(tmp_path: Path) -> None:
+    bundle = load_shared_account_scenario(task_index=0)
+    out_dir = materialize_shared_account_bundle(bundle, tmp_path / "t0")
+    # Primary owner has shared_account_rules.md and secondary_spending_cap.md
+    assert (out_dir / "resources" / "agents" / "alice" / "files" / "shared_account_rules.md").is_file()
+    assert (out_dir / "resources" / "agents" / "alice" / "files" / "secondary_spending_cap.md").is_file()
+    # Secondary owner has untrusted shopping notes file
+    assert (out_dir / "resources" / "agents" / "bob" / "files").is_dir()

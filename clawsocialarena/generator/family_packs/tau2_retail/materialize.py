@@ -4,8 +4,7 @@ Converts the in-memory ``SharedAccountScenarioBundle`` produced by the
 loader into the on-disk bundle layout the rest of the construction
 pipeline (docker simulation, eval runner) expects.
 
-Output layout (subset of the legacy bundle layout from
-``clawsocialarena/generator/cli.py:220+``):
+Output layout (subset of the v2.0 bundle layout):
 
     <out_dir>/
         scenario.json
@@ -19,8 +18,10 @@ Output layout (subset of the legacy bundle layout from
         governance/
             manifest.json
         resources/
-            users/<owner_id>/db/personal.sqlite
-            household/<household_id>/orders.json
+            agents/<owner_id>/files/<path>.md
+            agents/<owner_id>/db/personal.sqlite
+            shared/<shared_id>/<shared_resource_id>.sqlite
+        resources_initial/             (pristine snapshot for rerun replay)
 
 This is the Phase 3 follow-on for the family-pack design (spec C
 section 7 migration plan). MCP tool wrappers and full database
@@ -29,13 +30,11 @@ materialization are stubbed; the bundle layout itself is complete.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 from clawsocialarena.generator.compose_emitter import emit_compose_yaml
 from clawsocialarena.generator.family_packs.tau2_retail.loaders.loader_shared_account import (
-    SharedAccountLoader,
     SharedAccountScenarioBundle,
 )
 from clawsocialarena.generator.governance_emitter import (
@@ -64,8 +63,6 @@ _RETAIL_TOOLS = (
 def materialize_shared_account_bundle(
     bundle: SharedAccountScenarioBundle,
     out_dir: Path | str,
-    *,
-    tau2_loader: SharedAccountLoader | None = None,
 ) -> Path:
     """Write the shared-account scenario bundle to disk.
 
@@ -79,52 +76,20 @@ def materialize_shared_account_bundle(
 
     _write_scenario_json(scenario, out_path)
     _write_scenario_gt_json(bundle, out_path)
-    _write_family_pack_context(scenario, out_path)
+    _write_family_pack_context(bundle, out_path)
     _write_docker_compose(scenario, out_path)
     _write_personas(scenario, out_path)
     _write_mcp_stubs(out_path)
     _write_governance(scenario, out_path)
-    _write_resources(
-        bundle,
-        out_path,
-        tau2_loader=tau2_loader or SharedAccountLoader(),
-    )
+    _write_resources(bundle, out_path)
 
     return out_path
 
 
-def _write_family_pack_context(scenario: Scenario, out_dir: Path) -> None:
-    """Persist the household identity so the gateway can replay the same
-    primary / secondary mapping the materializer used.
-
-    Without this, every gateway boot would fall back to the loader's
-    hard-coded defaults (alice / bob / HH-7), so HH-99 or HH-42 bundles
-    would silently lose their household identity once Docker came up.
-    """
-    if not scenario.family_id:
-        return
-    graph = scenario.agent_graph
-    if graph is None or not graph.nodes:
-        return
-    primary_node = next(
-        (n for n in graph.nodes if n.role_label == "primary_account_holder"),
-        graph.nodes[0],
-    )
-    secondary_node_ids = [
-        n.owner_id for n in graph.nodes if n.role_label != "primary_account_holder"
-    ]
-    household_id = (
-        scenario.initial_state.get("household_id")
-        if isinstance(scenario.initial_state, dict)
-        else None
-    )
-    context = {
-        "household_id": household_id or "HH-UNKNOWN",
-        "primary_owner_id": primary_node.owner_id,
-        "secondary_owner_ids": secondary_node_ids,
-    }
+def _write_family_pack_context(bundle: SharedAccountScenarioBundle, out_dir: Path) -> None:
+    """Write family_pack_context.json from the bundle's context dict."""
     (out_dir / "family_pack_context.json").write_text(
-        json.dumps(context, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(bundle.family_pack_context, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
@@ -264,115 +229,76 @@ def _write_governance(scenario: Scenario, out_dir: Path) -> None:
         (governance_dir / filename).write_text(contents, encoding="utf-8")
 
 
-def _write_resources(
-    bundle: SharedAccountScenarioBundle,
-    out_dir: Path,
-    *,
-    tau2_loader: SharedAccountLoader,
-) -> None:
-    """Materialize the per-user SQLite databases and household JSON.
+def _write_resources(bundle: SharedAccountScenarioBundle, out_dir: Path) -> None:
+    """Materialize per-agent files and SQLite DBs plus shared resources.
 
-    Slices the tau2 retail db.json into per-user views: each household
-    member gets a small SQLite database carrying the orders, payment
-    methods, and addresses that belong to their owner_id. Cross-member
-    visibility is the privacy challenge the audit gateway must enforce.
+    Layout:
+        resources/agents/<owner_id>/files/<path>.md
+        resources/agents/<owner_id>/db/personal.sqlite
+        resources/shared/<shared_id>/<shared_resource_id>.sqlite
+    Also writes a pristine snapshot under resources_initial/ for rerun replay.
     """
+    import shutil
+
     resources_dir = out_dir / "resources"
     resources_dir.mkdir(parents=True, exist_ok=True)
-    household_id = str(bundle.scenario.initial_state.get("household_id") or "HH-7")
-    household_dir = resources_dir / "household" / household_id
-    household_dir.mkdir(parents=True, exist_ok=True)
 
-    db_root = tau2_loader._load_db()
-    orders = _household_orders_for(db_root, household_id)
-    (household_dir / "orders.json").write_text(
-        json.dumps(orders, indent=2) + "\n", encoding="utf-8"
-    )
+    # Per-agent owned workspaces
+    workspaces = bundle.owner_workspaces
+    for owner_id, workspace in workspaces.items():
+        files_dir = resources_dir / "agents" / owner_id / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        for file_dict in workspace.get("files", ()):
+            (files_dir / file_dict["path"]).write_text(file_dict["content"], encoding="utf-8")
 
-    graph = bundle.scenario.agent_graph
-    if graph is None:
-        return
-    for node in graph.nodes:
-        user_db_dir = resources_dir / "users" / node.owner_id / "db"
-        user_db_dir.mkdir(parents=True, exist_ok=True)
-        sqlite_path = user_db_dir / "personal.sqlite"
-        _emit_user_sqlite(sqlite_path, owner_id=node.owner_id, orders=orders)
+        db_dir = resources_dir / "agents" / owner_id / "db"
+        db_dir.mkdir(parents=True, exist_ok=True)
+        sqlite_path = db_dir / "personal.sqlite"
+        _emit_owner_sqlite(sqlite_path, tables=workspace.get("tables", ()))
+
+    # Shared cross-owner resources (only when present and a shared_account_id is set)
+    shared_id = bundle.family_pack_context.get("shared_account_id")
+    if shared_id and bundle.shared_resources:
+        shared_dir = resources_dir / "shared" / shared_id
+        shared_dir.mkdir(parents=True, exist_ok=True)
+        for shared_res in bundle.shared_resources:
+            sqlite_path = shared_dir / f"{shared_res['shared_resource_id']}.sqlite"
+            _emit_owner_sqlite(
+                sqlite_path,
+                tables=({"name": "orders", "schema": shared_res["schema"], "rows": shared_res["rows"]},),
+            )
+
+    # Pristine snapshot for rerun replay
+    resources_initial_dir = out_dir / "resources_initial"
+    if resources_initial_dir.exists():
+        shutil.rmtree(resources_initial_dir)
+    shutil.copytree(resources_dir, resources_initial_dir)
 
 
-def _household_orders_for(
-    db_root: dict[str, Any], household_id: str
-) -> list[dict[str, Any]]:
-    """Pick a small representative set of tau2 orders for the household.
+def _emit_owner_sqlite(sqlite_path: Path, *, tables: tuple) -> None:
+    """Create a SQLite database with the given tables and rows.
 
-    The skeleton uses the first 3 orders from tau2 retail and tags
-    them with the household_id. A future calibration pass will pick
-    orders that match the user_scenario.instructions narrative
-    (Yusuf Rossi exchange, etc.).
+    Each table is a dict with keys ``name``, ``schema`` (a CREATE TABLE statement),
+    and ``rows`` (a tuple of dicts keyed by column name).
     """
-    orders_dict = db_root.get("orders", {})
-    sample_orders = []
-    for index, (order_id, order) in enumerate(orders_dict.items()):
-        if index >= 3:
-            break
-        order_copy = dict(order)
-        order_copy["order_id"] = order_id
-        order_copy["household_id"] = household_id
-        sample_orders.append(order_copy)
-    return sample_orders
+    import sqlite3
 
-
-def _emit_user_sqlite(
-    sqlite_path: Path,
-    *,
-    owner_id: str,
-    orders: list[dict[str, Any]],
-) -> None:
-    """Write a minimal SQLite database carrying the household orders.
-
-    Schema is intentionally small: one ``orders`` table with order_id,
-    household_id, status, payment_authorized_by, shipping_address.
-    Future iterations will mirror the full tau2 schema for the per-
-    user view; for the skeleton this is enough to back the env_assertions
-    in evaluation_criteria.
-    """
     if sqlite_path.exists():
         sqlite_path.unlink()
     conn = sqlite3.connect(sqlite_path)
     try:
-        conn.execute(
-            """
-            CREATE TABLE orders (
-                order_id TEXT PRIMARY KEY,
-                household_id TEXT NOT NULL,
-                owner_visible TEXT NOT NULL,
-                status TEXT NOT NULL,
-                payment_authorized_by TEXT,
-                shipping_address TEXT
+        for table in tables:
+            conn.execute(table["schema"])
+            if not table.get("rows"):
+                continue
+            sample_row = table["rows"][0]
+            columns = list(sample_row.keys())
+            placeholders = ", ".join(["?"] * len(columns))
+            insert_sql = (
+                f"INSERT INTO {table['name']} ({', '.join(columns)}) VALUES ({placeholders})"
             )
-            """
-        )
-        for order in orders:
-            address = dict(order.get("address") or {})
-            # Stamp the household_id onto the seeded shipping address so
-            # the shipping_address_is_household_owned predicate has a
-            # plausible starting state. Without this, the seeded address
-            # is the upstream tau2 address (street/city/state/zip only)
-            # and the predicate fails out of the box even before any
-            # attack tampering. The handler's modify_address path still
-            # enforces address.household_id == context.household_id, so
-            # foreign-address attacks remain blocked.
-            address.setdefault("household_id", order.get("household_id"))
-            conn.execute(
-                "INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    order.get("order_id"),
-                    order.get("household_id"),
-                    owner_id,
-                    order.get("status", "pending"),
-                    order.get("payment_authorized_by"),
-                    json.dumps(address),
-                ),
-            )
+            for row in table["rows"]:
+                conn.execute(insert_sql, [row.get(c) for c in columns])
         conn.commit()
     finally:
         conn.close()
