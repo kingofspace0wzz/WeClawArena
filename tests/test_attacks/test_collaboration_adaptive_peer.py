@@ -115,6 +115,12 @@ _FAMILY_TEST_CASES: dict[str, dict[str, str]] = {
         "peer_id": "bob_seller",
         "peer_role": "seller",
     },
+    "travel": {
+        "focal_id": "mt_1_traveler",
+        "focal_role": "traveler",
+        "peer_id": "huaning_county_yunnan_hotel_partner_hotel",
+        "peer_role": "partner_hotel",
+    },
 }
 
 

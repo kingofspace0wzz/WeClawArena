@@ -365,6 +365,7 @@ _FAMILY_TOOL_MODULES = {
     "marble_research": "clawsocialarena.mcp_tools.marble_research",
     "marble_bargaining": "clawsocialarena.mcp_tools.marble_bargaining",
     "wildclaw_social": "clawsocialarena.mcp_tools.wildclaw_social",
+    "travel": "clawsocialarena.mcp_tools.travel",
 }
 
 

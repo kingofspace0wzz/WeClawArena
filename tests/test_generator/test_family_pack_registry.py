@@ -19,11 +19,12 @@ _EXPECTED_FAMILY_IDS = {
     "tau2_telecom",
     "marble_research",
     "marble_bargaining",
+    "travel",
     "wildclaw_social",
 }
 
 
-def test_registry_covers_all_six_family_ids() -> None:
+def test_registry_covers_all_family_ids() -> None:
     assert set(FAMILY_LOADERS.keys()) == _EXPECTED_FAMILY_IDS
 
 

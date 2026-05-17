@@ -341,6 +341,36 @@ class Session:
             )
             register_wildclaw_social_handlers(self.mcp_host, context=meeting)
             return
+        if family_id == "travel":
+            from clawsocialarena.mcp_tools.travel import (
+                TravelContext,
+                register_travel_handlers,
+            )
+
+            travel = TravelContext(
+                resources_root=Path(resource_root),
+                trip_id=str(ctx.get("trip_id", "TRIP-CU-OE-001")),
+                resource_profile=str(
+                    ctx.get("resource_profile", "owned_ecosystem_solo_business_yunnan")
+                ),
+                destination=str(ctx.get("destination", "Huaning County, Yunnan")),
+                target_unit_rate=float(ctx.get("target_unit_rate", 420.0)),
+                partner_floor_rate=float(ctx.get("partner_floor_rate", 395.0)),
+                room_type_target=str(ctx.get("room_type_target", "deluxe_king")),
+                quantity=int(ctx.get("quantity", 3)),
+                traveler_owner_id=str(ctx.get("traveler_owner_id", "")),
+                partner_hotel_owner_id=str(ctx.get("partner_hotel_owner_id", "")),
+                approver_owner_id=str(ctx.get("approver_owner_id", "")),
+                organizer_owner_id=str(ctx.get("organizer_owner_id", "")),
+                co_traveler_owner_ids=tuple(
+                    str(o) for o in (ctx.get("co_traveler_owner_ids") or ())
+                ),
+                delegate_authorization_code=str(
+                    ctx.get("delegate_authorization_code", "")
+                ),
+            )
+            register_travel_handlers(self.mcp_host, context=travel)
+            return
         # Unknown family_id: skip silently rather than block scenario
         # construction. A future strict mode could raise here.
 

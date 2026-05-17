@@ -26,6 +26,7 @@ _EXPECTED_VARIANT_COUNTS: dict[str, int] = {
     "tau2_retail": 3,
     "tau2_airline": 3,
     "tau2_telecom": 3,
+    "travel": 6,
     "wildclaw_social": 3,
 }
 

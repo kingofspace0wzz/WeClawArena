@@ -26,6 +26,7 @@ from clawsocialarena.generator.family_packs import (
     tau2_airline as _tau2_airline_pack,
     tau2_retail as _tau2_retail_pack,
     tau2_telecom as _tau2_telecom_pack,
+    travel as _travel_pack,
     wildclaw_social as _wildclaw_social_pack,
 )
 from clawsocialarena.generator.family_packs.marble_bargaining import (
@@ -47,6 +48,10 @@ from clawsocialarena.generator.family_packs.tau2_retail import (
 from clawsocialarena.generator.family_packs.tau2_telecom import (
     load_family_plan_roaming_scenario,
     materialize_family_plan_bundle,
+)
+from clawsocialarena.generator.family_packs.travel import (
+    load_travel_scenario,
+    materialize_travel_bundle,
 )
 from clawsocialarena.generator.family_packs.wildclaw_social import (
     load_meeting_negotiation_scenario,
@@ -126,6 +131,38 @@ FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
         materialize_fn=materialize_meeting_negotiation_bundle,
         session_context_keys=("meeting_id", "organizer_owner_id", "participant_owner_ids"),
         naturalization_hints=_wildclaw_social_pack.NATURALIZATION_HINTS,
+    ),
+    "travel": FamilyPackEntry(
+        family_id="travel",
+        load_fn=load_travel_scenario,
+        materialize_fn=materialize_travel_bundle,
+        session_context_keys=(
+            "trip_id",
+            "resource_profile",
+            "destination",
+            "date_window",
+            "target_unit_rate",
+            "partner_floor_rate",
+            "room_type_target",
+            "quantity",
+            "required_terms",
+            "traveler_loyalty_tier",
+            "delegate_authorization_code",
+            "traveler_owner_id",
+            "traveler_agent_id",
+            "partner_hotel_owner_id",
+            "partner_hotel_agent_id",
+            "approver_owner_id",
+            "approver_agent_id",
+            "organizer_owner_id",
+            "organizer_agent_id",
+            "co_traveler_owner_ids",
+            "co_traveler_agent_ids",
+            "group_budget_envelope",
+            "per_person_cap",
+            "consensus_threshold",
+        ),
+        naturalization_hints=_travel_pack.NATURALIZATION_HINTS,
     ),
 }
 

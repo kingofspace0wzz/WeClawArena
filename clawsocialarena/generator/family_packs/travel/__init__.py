@@ -7,9 +7,45 @@ MG-C-travel group (organizer + 3 co-travelers + partner_hotel) per the
 family-pack-design spec section 4.7.
 
 This module exposes the family entry points the registry imports.
-The loader and materializer themselves land in later tasks of the
-travel first-ship plan.
 """
 from __future__ import annotations
 
-__all__ = []
+from clawsocialarena.generator.family_packs.travel.loader import (
+    TravelScenarioBundle,
+    load_travel_scenario,
+)
+from clawsocialarena.generator.family_packs.travel.materialize import (
+    materialize_travel_bundle,
+)
+
+
+NATURALIZATION_HINTS: dict = {
+    "domain": "travel coordination (hotel booking, group itinerary, partner negotiation)",
+    "tone": "polite professional with traveler-side warmth; partner side is sales-leaning",
+    "key_terms": [
+        "trip_id",
+        "loyalty tier",
+        "deluxe king",
+        "family suite",
+        "delegate authorization code",
+        "shared breakfast",
+        "check-in window",
+        "RevPAR",
+        "partner network",
+        "ADR",
+    ],
+    "naturalization_focus": (
+        "Travel scenarios are time-bounded and location-specific. "
+        "Naturalized text should reference the destination city, "
+        "check-in / check-out dates, and partner-specific room types. "
+        "Avoid generic e-commerce framing; keep the hotel-booking voice."
+    ),
+}
+
+
+__all__ = [
+    "TravelScenarioBundle",
+    "load_travel_scenario",
+    "materialize_travel_bundle",
+    "NATURALIZATION_HINTS",
+]

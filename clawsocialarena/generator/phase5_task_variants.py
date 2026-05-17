@@ -269,20 +269,31 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
             f"{kwargs['implementer_owner']}_{kwargs['reviewer_owner']}_"
             f"{kwargs['code_owner']}_{kwargs['instance_id']}"
         )
+    if family_id == "travel":
+        return f"{kwargs['trip_id']}_{kwargs['resource_profile']}"
     return f"task{kwargs.get('scenario_id', 'unknown')}"
 
 
-def _kwargs_travel() -> tuple[dict, ...]:
-    """Stub for the travel family.
+def _kwargs_travel(*, cell_id: str | None = None) -> tuple[dict, ...]:
+    """Return task-variant kwarg dicts for the travel family.
 
-    Task 0 of the travel first-ship plan registers the two new cells
-    `CU-D-travel` and `MG-C-travel` in `cell_allocation.py`. The real
-    cell-aware seed builder lands in Task 2 (`travel_seed_data.py`) and
-    is wired through here in Task 6. Until then this stub returns an
-    empty tuple so `task_variants_for('travel')` does not raise and the
-    pilot-math test continues to pass.
+    Routes ``CU-D-travel`` and ``MG-C-travel`` to their respective seed
+    slices in :mod:`travel_seed_data`; unknown / None ``cell_id``
+    returns every seed (used by audit listings).
     """
-    return ()
+    from clawsocialarena.generator.family_packs.travel.seed_data.travel_seeds import (
+        travel_task_seeds_for_cell as _travel_seeds_for_cell,
+    )
+
+    seeds = _travel_seeds_for_cell(cell_id)
+    return tuple(
+        {
+            "scenario_id": f"travel_{s.trip_id.lower()}_phase5_v0",
+            "trip_id": s.trip_id,
+            "resource_profile": s.resource_profile,
+        }
+        for s in seeds
+    )
 
 
 _FAMILY_KWARG_BUILDERS = {
@@ -320,6 +331,8 @@ def task_variants_for(
         kwargs_tuple = _kwargs_marble_bargaining(cell_id=cell_id)
     elif family_id == "marble_bidding":
         kwargs_tuple = _kwargs_marble_bidding(cell_id=cell_id)
+    elif family_id == "travel":
+        kwargs_tuple = _kwargs_travel(cell_id=cell_id)
     else:
         kwargs_tuple = _FAMILY_KWARG_BUILDERS[family_id]()
     return tuple(

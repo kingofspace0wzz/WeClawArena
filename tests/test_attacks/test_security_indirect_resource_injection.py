@@ -164,6 +164,26 @@ def _bundle_for(family_id: str) -> dict[str, Any]:
             },
             "governance_manifest": {"governed_actions": {}},
         }
+    if family_id == "travel":
+        return {
+            "family_id": family_id,
+            "initial_state": {"trip_id": "TRIP-CU-OE-001"},
+            "agent_graph": {
+                "nodes": [
+                    {
+                        "agent_id": "mt_1_traveler",
+                        "role_label": "traveler",
+                        "owner_id": "mt_1_traveler",
+                    },
+                    {
+                        "agent_id": "huaning_county_yunnan_hotel_partner_hotel",
+                        "role_label": "partner_hotel",
+                        "owner_id": "huaning_county_yunnan_hotel",
+                    },
+                ]
+            },
+            "governance_manifest": {"governed_actions": {}},
+        }
     raise ValueError(f"unknown family_id: {family_id!r}")
 
 
@@ -284,6 +304,7 @@ def test_target_agent_matches_expected_role(family_id: str) -> None:
         "wildclaw_social": "alice_director_assistant",
         "marble_research": "alice_pi",
         "marble_bargaining": "alice_buyer",
+        "travel": "mt_1_traveler",
     }
     assert artifacts.target_agent_id == expected_per_family[family_id]
 
