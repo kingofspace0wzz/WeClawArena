@@ -46,9 +46,15 @@ Dataset source: https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite/res
 
 Run output: `benchmark/phase5/pilot/swebench_workspace_expansion26_no_attacker_20260517_promptfix`
 
-| Slice | Rows | Successes | Errors | Turn caps | TSR |
-|---|---:|---:|---:|---:|---:|
-| New 26 | 26 | 9 | 16 | 16 | 34.62% |
-| Overall 50 no-attacker | 50 | 14 | 35 | 35 | 28.00% |
+The new 26 rows were run with a runtime `max_turns = 90` override. This is separate from the published bundle value in `scenario.json`, which remains `max_turns = 31`. In the table below, "Rows hitting cap" is a count of rows that hit the configured cap, not the numeric cap value.
+
+| Slice | Rows | Successes | Errors | Rows hitting cap | Runtime turn budget | TSR |
+|---|---:|---:|---:|---:|---:|---:|
+| New 26 | 26 | 9 | 16 | 16 | 90 | 34.62% |
+| Overall 50 no-attacker | 50 | 14 | 35 | 35 | mixed: 50 for existing 24, 90 for new 26 | 28.00% |
+
+Why 90: the expansion batch was run as a higher-cap calibration to see whether the new, harder seeds could reach the review, approval, test, and submit stages rather than failing only from handoff pressure at 50 turns. This was useful for accepting the 26 new seeds as scoreable tasks, but it means the 50-row TSR above is a mixed-budget calibration result.
+
+Superseding cap-normalized run: the 50-base five-mode sweep under common runtime `max_turns = 90` is now available at `benchmark/phase5/pilot/swebench_workspace_cap90_50base_5mode_20260518_parallel_quiet`. For current reporting, use its no-attacker TSR of 28/50 = 56.00% instead of the mixed-budget 28.00% calibration result above.
 
 Detailed report: `benchmark/phase5/pilot/swebench_workspace_expansion26_no_attacker_20260517_promptfix/NO_ATTACKER_TSR_REPORT.md`
