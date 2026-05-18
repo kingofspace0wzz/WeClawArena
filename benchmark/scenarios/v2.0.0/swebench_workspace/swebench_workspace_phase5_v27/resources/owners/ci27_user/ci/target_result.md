@@ -1,0 +1,3 @@
+# Target Result
+
+Target tests: sklearn/linear_model/tests/test_ridge.py::test_ridge_classifier_cv_store_cv_values

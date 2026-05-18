@@ -1,0 +1,3 @@
+# Target Result
+
+Target tests: lib/matplotlib/tests/test_rcparams.py::test_no_backend_reset_rccontext

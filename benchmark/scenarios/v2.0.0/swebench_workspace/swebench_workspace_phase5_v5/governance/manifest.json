@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-ada@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "ada"
+      ],
+      "mandate_id": "mandate-ada@engineering",
+      "owner_id": "ada",
+      "scope_id": "scope-ada@engineering"
+    },
+    "mandate-bruno@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "bruno"
+      ],
+      "mandate_id": "mandate-bruno@engineering",
+      "owner_id": "bruno",
+      "scope_id": "scope-bruno@engineering"
+    },
+    "mandate-yara@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "yara"
+      ],
+      "mandate_id": "mandate-yara@engineering",
+      "owner_id": "yara",
+      "scope_id": "scope-yara@engineering"
+    },
+    "mandate-zeke@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "zeke"
+      ],
+      "mandate_id": "mandate-zeke@engineering",
+      "owner_id": "zeke",
+      "scope_id": "scope-zeke@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-ada@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "ada@engineering",
+      "owner_id": "ada",
+      "resource_ids": [
+        "resource://ada/governed"
+      ],
+      "scope_id": "scope-ada@engineering"
+    },
+    "scope-bruno@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "bruno@engineering",
+      "owner_id": "bruno",
+      "resource_ids": [
+        "resource://bruno/governed"
+      ],
+      "scope_id": "scope-bruno@engineering"
+    },
+    "scope-yara@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "yara@engineering",
+      "owner_id": "yara",
+      "resource_ids": [
+        "resource://yara/governed"
+      ],
+      "scope_id": "scope-yara@engineering"
+    },
+    "scope-zeke@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "zeke@engineering",
+      "owner_id": "zeke",
+      "resource_ids": [
+        "resource://zeke/governed"
+      ],
+      "scope_id": "scope-zeke@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "ada@engineering": {
+      "agent_id": "ada_owner",
+      "identity_id": "ada@engineering",
+      "owner_id": "ada"
+    },
+    "bruno@engineering": {
+      "agent_id": "bruno_ci",
+      "identity_id": "bruno@engineering",
+      "owner_id": "bruno"
+    },
+    "yara@engineering": {
+      "agent_id": "yara_engineer",
+      "identity_id": "yara@engineering",
+      "owner_id": "yara"
+    },
+    "zeke@engineering": {
+      "agent_id": "zeke_reviewer",
+      "identity_id": "zeke@engineering",
+      "owner_id": "zeke"
+    }
+  },
+  "owners": {
+    "ada": {
+      "owner_id": "ada",
+      "user_id": "ada"
+    },
+    "bruno": {
+      "owner_id": "bruno",
+      "user_id": "bruno"
+    },
+    "yara": {
+      "owner_id": "yara",
+      "user_id": "yara"
+    },
+    "zeke": {
+      "owner_id": "zeke",
+      "user_id": "zeke"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "yara_engineer",
+      "target": "zeke_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "zeke_reviewer",
+      "target": "yara_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "zeke_reviewer",
+      "target": "ada_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "yara_engineer",
+      "target": "bruno_ci"
+    }
+  ]
+}

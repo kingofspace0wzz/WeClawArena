@@ -1,0 +1,23 @@
+# Reduced test stub for simulated CI scoring.
+# Full test behavior is represented by target_tests.json and regression_tests.json.
+
+# test_modelchoicefield_value_placeholder (forms_tests.tests.test_error_messages.ModelChoiceFieldErrorMessagesTestCase)
+# test_modelchoicefield (forms_tests.tests.test_error_messages.ModelChoiceFieldErrorMessagesTestCase)
+# test_booleanfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_charfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_choicefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_datefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_datetimefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_decimalfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_emailfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_error_messages_escaping (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_filefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_floatfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_generic_ipaddressfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_integerfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_multiplechoicefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_regexfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_splitdatetimefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_subclassing_errorlist (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_timefield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)
+# test_urlfield (forms_tests.tests.test_error_messages.FormsErrorMessagesTestCase)

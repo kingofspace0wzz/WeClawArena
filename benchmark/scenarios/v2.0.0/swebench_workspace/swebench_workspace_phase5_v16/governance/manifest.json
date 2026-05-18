@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-arun@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "arun"
+      ],
+      "mandate_id": "mandate-arun@engineering",
+      "owner_id": "arun",
+      "scope_id": "scope-arun@engineering"
+    },
+    "mandate-bella@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "bella"
+      ],
+      "mandate_id": "mandate-bella@engineering",
+      "owner_id": "bella",
+      "scope_id": "scope-bella@engineering"
+    },
+    "mandate-cedar@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "cedar"
+      ],
+      "mandate_id": "mandate-cedar@engineering",
+      "owner_id": "cedar",
+      "scope_id": "scope-cedar@engineering"
+    },
+    "mandate-dion@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "dion"
+      ],
+      "mandate_id": "mandate-dion@engineering",
+      "owner_id": "dion",
+      "scope_id": "scope-dion@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-arun@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "arun@engineering",
+      "owner_id": "arun",
+      "resource_ids": [
+        "resource://arun/governed"
+      ],
+      "scope_id": "scope-arun@engineering"
+    },
+    "scope-bella@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "bella@engineering",
+      "owner_id": "bella",
+      "resource_ids": [
+        "resource://bella/governed"
+      ],
+      "scope_id": "scope-bella@engineering"
+    },
+    "scope-cedar@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "cedar@engineering",
+      "owner_id": "cedar",
+      "resource_ids": [
+        "resource://cedar/governed"
+      ],
+      "scope_id": "scope-cedar@engineering"
+    },
+    "scope-dion@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "dion@engineering",
+      "owner_id": "dion",
+      "resource_ids": [
+        "resource://dion/governed"
+      ],
+      "scope_id": "scope-dion@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "arun@engineering": {
+      "agent_id": "arun_engineer",
+      "identity_id": "arun@engineering",
+      "owner_id": "arun"
+    },
+    "bella@engineering": {
+      "agent_id": "bella_reviewer",
+      "identity_id": "bella@engineering",
+      "owner_id": "bella"
+    },
+    "cedar@engineering": {
+      "agent_id": "cedar_owner",
+      "identity_id": "cedar@engineering",
+      "owner_id": "cedar"
+    },
+    "dion@engineering": {
+      "agent_id": "dion_ci",
+      "identity_id": "dion@engineering",
+      "owner_id": "dion"
+    }
+  },
+  "owners": {
+    "arun": {
+      "owner_id": "arun",
+      "user_id": "arun"
+    },
+    "bella": {
+      "owner_id": "bella",
+      "user_id": "bella"
+    },
+    "cedar": {
+      "owner_id": "cedar",
+      "user_id": "cedar"
+    },
+    "dion": {
+      "owner_id": "dion",
+      "user_id": "dion"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "arun_engineer",
+      "target": "bella_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "bella_reviewer",
+      "target": "arun_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "bella_reviewer",
+      "target": "cedar_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "arun_engineer",
+      "target": "dion_ci"
+    }
+  ]
+}

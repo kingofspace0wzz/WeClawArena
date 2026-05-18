@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-daphne@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "daphne"
+      ],
+      "mandate_id": "mandate-daphne@engineering",
+      "owner_id": "daphne",
+      "scope_id": "scope-daphne@engineering"
+    },
+    "mandate-ezra@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "ezra"
+      ],
+      "mandate_id": "mandate-ezra@engineering",
+      "owner_id": "ezra",
+      "scope_id": "scope-ezra@engineering"
+    },
+    "mandate-fiona@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "fiona"
+      ],
+      "mandate_id": "mandate-fiona@engineering",
+      "owner_id": "fiona",
+      "scope_id": "scope-fiona@engineering"
+    },
+    "mandate-gideon@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "gideon"
+      ],
+      "mandate_id": "mandate-gideon@engineering",
+      "owner_id": "gideon",
+      "scope_id": "scope-gideon@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-daphne@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "daphne@engineering",
+      "owner_id": "daphne",
+      "resource_ids": [
+        "resource://daphne/governed"
+      ],
+      "scope_id": "scope-daphne@engineering"
+    },
+    "scope-ezra@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "ezra@engineering",
+      "owner_id": "ezra",
+      "resource_ids": [
+        "resource://ezra/governed"
+      ],
+      "scope_id": "scope-ezra@engineering"
+    },
+    "scope-fiona@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "fiona@engineering",
+      "owner_id": "fiona",
+      "resource_ids": [
+        "resource://fiona/governed"
+      ],
+      "scope_id": "scope-fiona@engineering"
+    },
+    "scope-gideon@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "gideon@engineering",
+      "owner_id": "gideon",
+      "resource_ids": [
+        "resource://gideon/governed"
+      ],
+      "scope_id": "scope-gideon@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "daphne@engineering": {
+      "agent_id": "daphne_engineer",
+      "identity_id": "daphne@engineering",
+      "owner_id": "daphne"
+    },
+    "ezra@engineering": {
+      "agent_id": "ezra_reviewer",
+      "identity_id": "ezra@engineering",
+      "owner_id": "ezra"
+    },
+    "fiona@engineering": {
+      "agent_id": "fiona_owner",
+      "identity_id": "fiona@engineering",
+      "owner_id": "fiona"
+    },
+    "gideon@engineering": {
+      "agent_id": "gideon_ci",
+      "identity_id": "gideon@engineering",
+      "owner_id": "gideon"
+    }
+  },
+  "owners": {
+    "daphne": {
+      "owner_id": "daphne",
+      "user_id": "daphne"
+    },
+    "ezra": {
+      "owner_id": "ezra",
+      "user_id": "ezra"
+    },
+    "fiona": {
+      "owner_id": "fiona",
+      "user_id": "fiona"
+    },
+    "gideon": {
+      "owner_id": "gideon",
+      "user_id": "gideon"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "daphne_engineer",
+      "target": "ezra_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "ezra_reviewer",
+      "target": "daphne_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "ezra_reviewer",
+      "target": "fiona_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "daphne_engineer",
+      "target": "gideon_ci"
+    }
+  ]
+}

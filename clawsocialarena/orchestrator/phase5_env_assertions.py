@@ -50,6 +50,7 @@ _FAMILY_PREDICATE_MODULE: dict[str, str] = {
     "tau2_airline": "clawsocialarena.eval.predicates.tau2_airline",
     "tau2_retail": "clawsocialarena.eval.predicates.tau2_retail",
     "tau2_telecom": "clawsocialarena.eval.predicates.tau2_telecom",
+    "swebench_workspace": "clawsocialarena.eval.predicates.swebench_workspace",
     "wildclaw_social": "clawsocialarena.eval.predicates.wildclaw_social",
 }
 

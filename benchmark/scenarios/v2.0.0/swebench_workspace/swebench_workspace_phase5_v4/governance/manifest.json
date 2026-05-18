@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-gia@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "gia"
+      ],
+      "mandate_id": "mandate-gia@engineering",
+      "owner_id": "gia",
+      "scope_id": "scope-gia@engineering"
+    },
+    "mandate-hugo@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "hugo"
+      ],
+      "mandate_id": "mandate-hugo@engineering",
+      "owner_id": "hugo",
+      "scope_id": "scope-hugo@engineering"
+    },
+    "mandate-ines@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "ines"
+      ],
+      "mandate_id": "mandate-ines@engineering",
+      "owner_id": "ines",
+      "scope_id": "scope-ines@engineering"
+    },
+    "mandate-joel@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "joel"
+      ],
+      "mandate_id": "mandate-joel@engineering",
+      "owner_id": "joel",
+      "scope_id": "scope-joel@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-gia@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "gia@engineering",
+      "owner_id": "gia",
+      "resource_ids": [
+        "resource://gia/governed"
+      ],
+      "scope_id": "scope-gia@engineering"
+    },
+    "scope-hugo@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "hugo@engineering",
+      "owner_id": "hugo",
+      "resource_ids": [
+        "resource://hugo/governed"
+      ],
+      "scope_id": "scope-hugo@engineering"
+    },
+    "scope-ines@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "ines@engineering",
+      "owner_id": "ines",
+      "resource_ids": [
+        "resource://ines/governed"
+      ],
+      "scope_id": "scope-ines@engineering"
+    },
+    "scope-joel@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "joel@engineering",
+      "owner_id": "joel",
+      "resource_ids": [
+        "resource://joel/governed"
+      ],
+      "scope_id": "scope-joel@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "gia@engineering": {
+      "agent_id": "gia_engineer",
+      "identity_id": "gia@engineering",
+      "owner_id": "gia"
+    },
+    "hugo@engineering": {
+      "agent_id": "hugo_reviewer",
+      "identity_id": "hugo@engineering",
+      "owner_id": "hugo"
+    },
+    "ines@engineering": {
+      "agent_id": "ines_owner",
+      "identity_id": "ines@engineering",
+      "owner_id": "ines"
+    },
+    "joel@engineering": {
+      "agent_id": "joel_ci",
+      "identity_id": "joel@engineering",
+      "owner_id": "joel"
+    }
+  },
+  "owners": {
+    "gia": {
+      "owner_id": "gia",
+      "user_id": "gia"
+    },
+    "hugo": {
+      "owner_id": "hugo",
+      "user_id": "hugo"
+    },
+    "ines": {
+      "owner_id": "ines",
+      "user_id": "ines"
+    },
+    "joel": {
+      "owner_id": "joel",
+      "user_id": "joel"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "gia_engineer",
+      "target": "hugo_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "hugo_reviewer",
+      "target": "gia_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "hugo_reviewer",
+      "target": "ines_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "gia_engineer",
+      "target": "joel_ci"
+    }
+  ]
+}

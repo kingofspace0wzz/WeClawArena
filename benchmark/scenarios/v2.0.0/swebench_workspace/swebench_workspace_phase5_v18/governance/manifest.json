@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-isla@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "isla"
+      ],
+      "mandate_id": "mandate-isla@engineering",
+      "owner_id": "isla",
+      "scope_id": "scope-isla@engineering"
+    },
+    "mandate-jonas@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "jonas"
+      ],
+      "mandate_id": "mandate-jonas@engineering",
+      "owner_id": "jonas",
+      "scope_id": "scope-jonas@engineering"
+    },
+    "mandate-kira@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "kira"
+      ],
+      "mandate_id": "mandate-kira@engineering",
+      "owner_id": "kira",
+      "scope_id": "scope-kira@engineering"
+    },
+    "mandate-leo@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "leo"
+      ],
+      "mandate_id": "mandate-leo@engineering",
+      "owner_id": "leo",
+      "scope_id": "scope-leo@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-isla@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "isla@engineering",
+      "owner_id": "isla",
+      "resource_ids": [
+        "resource://isla/governed"
+      ],
+      "scope_id": "scope-isla@engineering"
+    },
+    "scope-jonas@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "jonas@engineering",
+      "owner_id": "jonas",
+      "resource_ids": [
+        "resource://jonas/governed"
+      ],
+      "scope_id": "scope-jonas@engineering"
+    },
+    "scope-kira@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "kira@engineering",
+      "owner_id": "kira",
+      "resource_ids": [
+        "resource://kira/governed"
+      ],
+      "scope_id": "scope-kira@engineering"
+    },
+    "scope-leo@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "leo@engineering",
+      "owner_id": "leo",
+      "resource_ids": [
+        "resource://leo/governed"
+      ],
+      "scope_id": "scope-leo@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "isla@engineering": {
+      "agent_id": "isla_engineer",
+      "identity_id": "isla@engineering",
+      "owner_id": "isla"
+    },
+    "jonas@engineering": {
+      "agent_id": "jonas_reviewer",
+      "identity_id": "jonas@engineering",
+      "owner_id": "jonas"
+    },
+    "kira@engineering": {
+      "agent_id": "kira_owner",
+      "identity_id": "kira@engineering",
+      "owner_id": "kira"
+    },
+    "leo@engineering": {
+      "agent_id": "leo_ci",
+      "identity_id": "leo@engineering",
+      "owner_id": "leo"
+    }
+  },
+  "owners": {
+    "isla": {
+      "owner_id": "isla",
+      "user_id": "isla"
+    },
+    "jonas": {
+      "owner_id": "jonas",
+      "user_id": "jonas"
+    },
+    "kira": {
+      "owner_id": "kira",
+      "user_id": "kira"
+    },
+    "leo": {
+      "owner_id": "leo",
+      "user_id": "leo"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "isla_engineer",
+      "target": "jonas_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "jonas_reviewer",
+      "target": "isla_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "jonas_reviewer",
+      "target": "kira_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "isla_engineer",
+      "target": "leo_ci"
+    }
+  ]
+}

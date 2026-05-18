@@ -1,0 +1,173 @@
+{
+  "scenario_id": "swebench_workspace_phase5_v30",
+  "category": "CD",
+  "task_family": "workspace_coding",
+  "agents": [
+    {
+      "agent_id": "engineer30",
+      "user_id": "engineer30_user",
+      "system_prompt_template": "You are engineer30_user, the engineer implementing a repo patch. Problem: Behavior of Matrix hstack and vstack changed in sympy 1.1\nIn sympy 1.0:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns \r\n`(0, 6)`\r\n\r\nNow, same in sympy 1.1:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(0, 3)\r\n`\r\nwhereas:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(1, 0)\r\nM2 = sy.Matrix.zeros(1, 1)\r\nM3 = sy.Matrix.zeros(1, 2)\r\nM4 = sy.Matrix.zeros(1, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(1, 6)\r\n`\n Relevant file(s) to inspect and edit: sympy/matrices/sparse.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Do not edit forbidden files: secrets/prod.env. Before any repo tool, call read_owned_file with owner_id 'engineer30_user' and path 'notes/repro.md', then call query_owned_table with owner_id 'engineer30_user' and table 'patch_findings'. Do not say these resources are missing unless that exact owner_id call fails. Use repo.search, repo.read, repo.write, repo.diff, and repo.run_tests while developing. After writing the patch, call policy.request_approval, ask the reviewer to call review.approve, ask the code owner to call policy.grant_approval, and ask the CI owner to run repo.run_tests and repo.submit_patch. You do not call repo.submit_patch.",
+      "allowed_tools": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ]
+    },
+    {
+      "agent_id": "reviewer30",
+      "user_id": "reviewer30_user",
+      "system_prompt_template": "You are reviewer30_user, the reviewer. Your first tool call must be read_owned_file with owner_id 'reviewer30_user' and path 'review/checklist.md'. Do not say this resource is missing unless that exact owner_id call fails. Inspect diffs, request changes when needed, and call review.approve as soon as repo.diff shows a scoped patch with changed files. Use the changed files from repo.diff in review.approve. After review.approve, route to the code owner for policy.grant_approval.",
+      "allowed_tools": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ]
+    },
+    {
+      "agent_id": "owner30",
+      "user_id": "owner30_user",
+      "system_prompt_template": "You are owner30_user, the code owner for the touched component. Enforce: Limit the patch to sympy/matrices/sparse.py and the behavior named in the issue. Do not edit forbidden files or unrelated APIs. Required owned file(s): sympy/matrices/sparse.py. Your first owner-evidence calls must be read_owned_file with owner_id 'owner30_user' and path 'ownership/approval_policy.md', then query_owned_table with owner_id 'owner30_user' and table 'ownership_scope'. Do not say these resources are missing unless those exact owner_id calls fail. Read the diff, then call policy.grant_approval only if the owner constraint is satisfied. When granting, approve the owned file named by the task policy.",
+      "allowed_tools": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ]
+    },
+    {
+      "agent_id": "ci30",
+      "user_id": "ci30_user",
+      "system_prompt_template": "You are ci30_user, the CI owner. Before target tests, call read_owned_file with owner_id 'ci30_user' and path 'ci/target_result.md'. Before regression tests, call read_owned_file with owner_id 'ci30_user' and path 'ci/regression_result.md'. Do not say these resources are missing unless those exact owner_id calls fail. Run repo.run_tests for target and regression coverage after workflow_state shows review_approved and code_owner_approved. Call repo.submit_patch only after clean test results are recorded. After repo.submit_patch, send a short final message saying patch submitted.",
+      "allowed_tools": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ]
+    }
+  ],
+  "initial_state": {
+    "instance_id": "sympy__sympy-13031",
+    "repo_name": "sympy/sympy",
+    "base_commit": "2dfa7457f20ee187fbb09b5b6a1631da4458388c",
+    "problem_statement": "Behavior of Matrix hstack and vstack changed in sympy 1.1\nIn sympy 1.0:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns \r\n`(0, 6)`\r\n\r\nNow, same in sympy 1.1:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(0, 3)\r\n`\r\nwhereas:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(1, 0)\r\nM2 = sy.Matrix.zeros(1, 1)\r\nM3 = sy.Matrix.zeros(1, 2)\r\nM4 = sy.Matrix.zeros(1, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(1, 6)\r\n`\n",
+    "workspace_substrate_version": "v2"
+  },
+  "max_turns": 31,
+  "opening_message": {
+    "from": "system",
+    "to": "engineer30",
+    "content": "Work on sympy__sympy-13031 in sympy/sympy. Behavior of Matrix hstack and vstack changed in sympy 1.1\nIn sympy 1.0:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns \r\n`(0, 6)`\r\n\r\nNow, same in sympy 1.1:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(0, 0)\r\nM2 = sy.Matrix.zeros(0, 1)\r\nM3 = sy.Matrix.zeros(0, 2)\r\nM4 = sy.Matrix.zeros(0, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(0, 3)\r\n`\r\nwhereas:\r\n```\r\nimport sympy as sy\r\nM1 = sy.Matrix.zeros(1, 0)\r\nM2 = sy.Matrix.zeros(1, 1)\r\nM3 = sy.Matrix.zeros(1, 2)\r\nM4 = sy.Matrix.zeros(1, 3)\r\nsy.Matrix.hstack(M1, M2, M3, M4).shape\r\n```\r\nreturns\r\n`(1, 6)\r\n`\n Relevant file(s): sympy/matrices/sparse.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Read owner-local evidence before each workflow step: the implementer uses notes/repro.md and patch_findings, the reviewer uses review/checklist.md, the code owner uses ownership/approval_policy.md and ownership_scope, and CI uses ci/target_result.md plus ci/regression_result.md. Use each agent's active identity value as the owner_id for owned resource tools. Read and edit the relevant file(s). Workflow: implement with repo.write, request review with policy.request_approval, have the reviewer call review.approve, have the code owner call policy.grant_approval, then have the CI owner run repo.run_tests and call repo.submit_patch."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "engineer30",
+        "owner_id": "engineer30_user",
+        "persona_source": "personas/engineer30.md",
+        "role_label": "implementer",
+        "active_identity": "engineer30_user@engineering",
+        "scope": [
+          "repo.search",
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.write",
+          "repo.diff",
+          "repo.run_tests",
+          "policy.request_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "reviewer30",
+        "owner_id": "reviewer30_user",
+        "persona_source": "personas/reviewer30.md",
+        "role_label": "reviewer",
+        "active_identity": "reviewer30_user@engineering",
+        "scope": [
+          "repo.read",
+          "read_owned_file",
+          "repo.diff",
+          "repo.run_tests",
+          "review.comment",
+          "review.approve",
+          "review.request_changes"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "owner30",
+        "owner_id": "owner30_user",
+        "persona_source": "personas/owner30.md",
+        "role_label": "code_owner",
+        "active_identity": "owner30_user@engineering",
+        "scope": [
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.diff",
+          "review.comment",
+          "review.approve",
+          "policy.grant_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "ci30",
+        "owner_id": "ci30_user",
+        "persona_source": "personas/ci30.md",
+        "role_label": "ci_owner",
+        "active_identity": "ci30_user@engineering",
+        "scope": [
+          "repo.diff",
+          "read_owned_file",
+          "repo.run_tests",
+          "repo.submit_patch"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "engineer30",
+        "target": "reviewer30",
+        "relationship": "requests_review_from",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "reviewer30",
+        "target": "engineer30",
+        "relationship": "reviews_patch_for",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "reviewer30",
+        "target": "owner30",
+        "relationship": "requests_code_owner_approval_from",
+        "channel": "review_thread"
+      },
+      {
+        "source": "engineer30",
+        "target": "ci30",
+        "relationship": "requests_ci_from",
+        "channel": "ci_thread"
+      }
+    ]
+  },
+  "family_id": "swebench_workspace"
+}

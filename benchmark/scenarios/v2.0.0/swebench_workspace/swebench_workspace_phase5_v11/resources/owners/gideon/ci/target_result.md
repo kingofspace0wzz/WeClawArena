@@ -1,0 +1,3 @@
+# Target Result
+
+Target tests: test_modelchoicefield_value_placeholder (forms_tests.tests.test_error_messages.ModelChoiceFieldErrorMessagesTestCase)

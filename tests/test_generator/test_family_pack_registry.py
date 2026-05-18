@@ -1,4 +1,5 @@
 """Tests for the family pack registry (Phase 5 Batch A)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,6 +20,8 @@ _EXPECTED_FAMILY_IDS = {
     "tau2_telecom",
     "marble_research",
     "marble_bargaining",
+    "marble_bidding",
+    "swebench_workspace",
     "travel",
     "wildclaw_social",
 }
@@ -75,9 +78,9 @@ def test_load_and_materialize_forwards_load_kwargs(tmp_path: Path) -> None:
     bundle_dir, bundle = load_and_materialize(
         family_id="tau2_retail",
         out_dir=tmp_path / "retail",
-        load_kwargs={"household_id": "HH-PHASE5"},
+        load_kwargs={"shared_account_id": "HH-PHASE5"},
     )
-    assert bundle.scenario.initial_state["household_id"] == "HH-PHASE5"
+    assert bundle.scenario.initial_state["shared_account_id"] == "HH-PHASE5"
 
 
 def test_session_context_keys_are_strings() -> None:
@@ -85,3 +88,13 @@ def test_session_context_keys_are_strings() -> None:
         for key in entry.session_context_keys:
             assert isinstance(key, str)
             assert key, f"{entry.family_id} has an empty context key"
+
+
+def test_marble_bargaining_registry_includes_owned_ecosystem_context_keys() -> None:
+    entry = get_entry("marble_bargaining")
+    assert "transaction_id" in entry.session_context_keys
+    assert "resource_profile" in entry.session_context_keys
+    assert "buyer_owner_id" in entry.session_context_keys
+    assert "seller_owner_id" in entry.session_context_keys
+    assert "approver_owner_id" in entry.session_context_keys
+    assert "item_id" in entry.session_context_keys

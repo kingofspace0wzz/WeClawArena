@@ -1,0 +1,19 @@
+# Reduced source stub for sympy/printing/mathematica.py.
+# Reconstructed from the SWE-bench gold patch context.
+
+
+    "asech": [(lambda x: True, "ArcSech")],
+    "acsch": [(lambda x: True, "ArcCsch")],
+    "conjugate": [(lambda x: True, "Conjugate")],
+
+}
+
+
+
+def _print_Function(self, expr):
+                    return "%s[%s]" % (mfunc, self.stringify(expr.args, ", "))
+        return expr.func.__name__ + "[%s]" % self.stringify(expr.args, ", ")
+
+    def _print_Integral(self, expr):
+        if len(expr.variables) == 1 and not expr.limits[0][1:]:
+            args = [expr.args[0], expr.variables[0]]

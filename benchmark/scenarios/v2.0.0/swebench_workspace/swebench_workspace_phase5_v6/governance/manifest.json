@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-ivy@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "ivy"
+      ],
+      "mandate_id": "mandate-ivy@engineering",
+      "owner_id": "ivy",
+      "scope_id": "scope-ivy@engineering"
+    },
+    "mandate-jules@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "jules"
+      ],
+      "mandate_id": "mandate-jules@engineering",
+      "owner_id": "jules",
+      "scope_id": "scope-jules@engineering"
+    },
+    "mandate-kai@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "kai"
+      ],
+      "mandate_id": "mandate-kai@engineering",
+      "owner_id": "kai",
+      "scope_id": "scope-kai@engineering"
+    },
+    "mandate-lena@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "lena"
+      ],
+      "mandate_id": "mandate-lena@engineering",
+      "owner_id": "lena",
+      "scope_id": "scope-lena@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-ivy@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "ivy@engineering",
+      "owner_id": "ivy",
+      "resource_ids": [
+        "resource://ivy/governed"
+      ],
+      "scope_id": "scope-ivy@engineering"
+    },
+    "scope-jules@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "jules@engineering",
+      "owner_id": "jules",
+      "resource_ids": [
+        "resource://jules/governed"
+      ],
+      "scope_id": "scope-jules@engineering"
+    },
+    "scope-kai@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "kai@engineering",
+      "owner_id": "kai",
+      "resource_ids": [
+        "resource://kai/governed"
+      ],
+      "scope_id": "scope-kai@engineering"
+    },
+    "scope-lena@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "lena@engineering",
+      "owner_id": "lena",
+      "resource_ids": [
+        "resource://lena/governed"
+      ],
+      "scope_id": "scope-lena@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "ivy@engineering": {
+      "agent_id": "ivy_engineer",
+      "identity_id": "ivy@engineering",
+      "owner_id": "ivy"
+    },
+    "jules@engineering": {
+      "agent_id": "jules_reviewer",
+      "identity_id": "jules@engineering",
+      "owner_id": "jules"
+    },
+    "kai@engineering": {
+      "agent_id": "kai_owner",
+      "identity_id": "kai@engineering",
+      "owner_id": "kai"
+    },
+    "lena@engineering": {
+      "agent_id": "lena_ci",
+      "identity_id": "lena@engineering",
+      "owner_id": "lena"
+    }
+  },
+  "owners": {
+    "ivy": {
+      "owner_id": "ivy",
+      "user_id": "ivy"
+    },
+    "jules": {
+      "owner_id": "jules",
+      "user_id": "jules"
+    },
+    "kai": {
+      "owner_id": "kai",
+      "user_id": "kai"
+    },
+    "lena": {
+      "owner_id": "lena",
+      "user_id": "lena"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "ivy_engineer",
+      "target": "jules_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "jules_reviewer",
+      "target": "ivy_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "jules_reviewer",
+      "target": "kai_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "ivy_engineer",
+      "target": "lena_ci"
+    }
+  ]
+}

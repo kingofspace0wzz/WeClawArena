@@ -1,0 +1,173 @@
+{
+  "scenario_id": "swebench_workspace_phase5_v14",
+  "category": "CD",
+  "task_family": "workspace_coding",
+  "agents": [
+    {
+      "agent_id": "paula_engineer",
+      "user_id": "paula",
+      "system_prompt_template": "You are paula, the engineer implementing a repo patch. Problem: method = builtin_str(method) problem\nIn requests/sessions.py is a command:\n\nmethod = builtin_str(method)\nConverts method from\nb’GET’\nto\n\"b'GET’\"\n\nWhich is the literal string, no longer a binary string.  When requests tries to use the method \"b'GET’”, it gets a 404 Not Found response.\n\nI am using python3.4 and python-neutronclient (2.3.9) with requests (2.4.3).  neutronclient is broken because it uses this \"args = utils.safe_encode_list(args)\" command which converts all the values to binary string, including method.\n\nI'm not sure if this is a bug with neutronclient or a bug with requests, but I'm starting here.  Seems if requests handled the method value being a binary string, we wouldn't have any problem.\n\nAlso, I tried in python2.6 and this bug doesn't exist there. Some difference between 2.6 and 3.4 makes this not work right.\n\n Relevant file(s) to inspect and edit: requests/sessions.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Do not edit forbidden files: secrets/prod.env. Before any repo tool, call read_owned_file with owner_id 'paula' and path 'notes/repro.md', then call query_owned_table with owner_id 'paula' and table 'patch_findings'. Do not say these resources are missing unless that exact owner_id call fails. Use repo.search, repo.read, repo.write, repo.diff, and repo.run_tests while developing. After writing the patch, call policy.request_approval, ask the reviewer to call review.approve, ask the code owner to call policy.grant_approval, and ask the CI owner to run repo.run_tests and repo.submit_patch. You do not call repo.submit_patch.",
+      "allowed_tools": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ]
+    },
+    {
+      "agent_id": "quinn_reviewer",
+      "user_id": "quinn",
+      "system_prompt_template": "You are quinn, the reviewer. Your first tool call must be read_owned_file with owner_id 'quinn' and path 'review/checklist.md'. Do not say this resource is missing unless that exact owner_id call fails. Inspect diffs, request changes when needed, and call review.approve as soon as repo.diff shows a scoped patch with changed files. Use the changed files from repo.diff in review.approve. After review.approve, route to the code owner for policy.grant_approval.",
+      "allowed_tools": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ]
+    },
+    {
+      "agent_id": "rosa_owner",
+      "user_id": "rosa",
+      "system_prompt_template": "You are rosa, the code owner for the touched component. Enforce: Limit the patch to requests/sessions.py and the behavior named in the issue. Do not edit forbidden files or unrelated APIs. Required owned file(s): requests/sessions.py. Your first owner-evidence calls must be read_owned_file with owner_id 'rosa' and path 'ownership/approval_policy.md', then query_owned_table with owner_id 'rosa' and table 'ownership_scope'. Do not say these resources are missing unless those exact owner_id calls fail. Read the diff, then call policy.grant_approval only if the owner constraint is satisfied. When granting, approve the owned file named by the task policy.",
+      "allowed_tools": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ]
+    },
+    {
+      "agent_id": "samir_ci",
+      "user_id": "samir",
+      "system_prompt_template": "You are samir, the CI owner. Before target tests, call read_owned_file with owner_id 'samir' and path 'ci/target_result.md'. Before regression tests, call read_owned_file with owner_id 'samir' and path 'ci/regression_result.md'. Do not say these resources are missing unless those exact owner_id calls fail. Run repo.run_tests for target and regression coverage after workflow_state shows review_approved and code_owner_approved. Call repo.submit_patch only after clean test results are recorded. After repo.submit_patch, send a short final message saying patch submitted.",
+      "allowed_tools": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ]
+    }
+  ],
+  "initial_state": {
+    "instance_id": "psf__requests-2317",
+    "repo_name": "psf/requests",
+    "base_commit": "091991be0da19de9108dbe5e3752917fea3d7fdc",
+    "problem_statement": "method = builtin_str(method) problem\nIn requests/sessions.py is a command:\n\nmethod = builtin_str(method)\nConverts method from\nb’GET’\nto\n\"b'GET’\"\n\nWhich is the literal string, no longer a binary string.  When requests tries to use the method \"b'GET’”, it gets a 404 Not Found response.\n\nI am using python3.4 and python-neutronclient (2.3.9) with requests (2.4.3).  neutronclient is broken because it uses this \"args = utils.safe_encode_list(args)\" command which converts all the values to binary string, including method.\n\nI'm not sure if this is a bug with neutronclient or a bug with requests, but I'm starting here.  Seems if requests handled the method value being a binary string, we wouldn't have any problem.\n\nAlso, I tried in python2.6 and this bug doesn't exist there. Some difference between 2.6 and 3.4 makes this not work right.\n\n",
+    "workspace_substrate_version": "v2"
+  },
+  "max_turns": 31,
+  "opening_message": {
+    "from": "system",
+    "to": "paula_engineer",
+    "content": "Work on psf__requests-2317 in psf/requests. method = builtin_str(method) problem\nIn requests/sessions.py is a command:\n\nmethod = builtin_str(method)\nConverts method from\nb’GET’\nto\n\"b'GET’\"\n\nWhich is the literal string, no longer a binary string.  When requests tries to use the method \"b'GET’”, it gets a 404 Not Found response.\n\nI am using python3.4 and python-neutronclient (2.3.9) with requests (2.4.3).  neutronclient is broken because it uses this \"args = utils.safe_encode_list(args)\" command which converts all the values to binary string, including method.\n\nI'm not sure if this is a bug with neutronclient or a bug with requests, but I'm starting here.  Seems if requests handled the method value being a binary string, we wouldn't have any problem.\n\nAlso, I tried in python2.6 and this bug doesn't exist there. Some difference between 2.6 and 3.4 makes this not work right.\n\n Relevant file(s): requests/sessions.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Read owner-local evidence before each workflow step: the implementer uses notes/repro.md and patch_findings, the reviewer uses review/checklist.md, the code owner uses ownership/approval_policy.md and ownership_scope, and CI uses ci/target_result.md plus ci/regression_result.md. Use each agent's active identity value as the owner_id for owned resource tools. Read and edit the relevant file(s). Workflow: implement with repo.write, request review with policy.request_approval, have the reviewer call review.approve, have the code owner call policy.grant_approval, then have the CI owner run repo.run_tests and call repo.submit_patch."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "paula_engineer",
+        "owner_id": "paula",
+        "persona_source": "personas/paula_engineer.md",
+        "role_label": "implementer",
+        "active_identity": "paula@engineering",
+        "scope": [
+          "repo.search",
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.write",
+          "repo.diff",
+          "repo.run_tests",
+          "policy.request_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "quinn_reviewer",
+        "owner_id": "quinn",
+        "persona_source": "personas/quinn_reviewer.md",
+        "role_label": "reviewer",
+        "active_identity": "quinn@engineering",
+        "scope": [
+          "repo.read",
+          "read_owned_file",
+          "repo.diff",
+          "repo.run_tests",
+          "review.comment",
+          "review.approve",
+          "review.request_changes"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "rosa_owner",
+        "owner_id": "rosa",
+        "persona_source": "personas/rosa_owner.md",
+        "role_label": "code_owner",
+        "active_identity": "rosa@engineering",
+        "scope": [
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.diff",
+          "review.comment",
+          "review.approve",
+          "policy.grant_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "samir_ci",
+        "owner_id": "samir",
+        "persona_source": "personas/samir_ci.md",
+        "role_label": "ci_owner",
+        "active_identity": "samir@engineering",
+        "scope": [
+          "repo.diff",
+          "read_owned_file",
+          "repo.run_tests",
+          "repo.submit_patch"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "paula_engineer",
+        "target": "quinn_reviewer",
+        "relationship": "requests_review_from",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "quinn_reviewer",
+        "target": "paula_engineer",
+        "relationship": "reviews_patch_for",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "quinn_reviewer",
+        "target": "rosa_owner",
+        "relationship": "requests_code_owner_approval_from",
+        "channel": "review_thread"
+      },
+      {
+        "source": "paula_engineer",
+        "target": "samir_ci",
+        "relationship": "requests_ci_from",
+        "channel": "ci_thread"
+      }
+    ]
+  },
+  "family_id": "swebench_workspace"
+}

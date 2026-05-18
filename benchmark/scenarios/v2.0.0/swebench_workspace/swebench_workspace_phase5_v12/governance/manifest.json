@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-hana@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "hana"
+      ],
+      "mandate_id": "mandate-hana@engineering",
+      "owner_id": "hana",
+      "scope_id": "scope-hana@engineering"
+    },
+    "mandate-ivan@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "ivan"
+      ],
+      "mandate_id": "mandate-ivan@engineering",
+      "owner_id": "ivan",
+      "scope_id": "scope-ivan@engineering"
+    },
+    "mandate-jade@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "jade"
+      ],
+      "mandate_id": "mandate-jade@engineering",
+      "owner_id": "jade",
+      "scope_id": "scope-jade@engineering"
+    },
+    "mandate-keon@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "keon"
+      ],
+      "mandate_id": "mandate-keon@engineering",
+      "owner_id": "keon",
+      "scope_id": "scope-keon@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-hana@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "hana@engineering",
+      "owner_id": "hana",
+      "resource_ids": [
+        "resource://hana/governed"
+      ],
+      "scope_id": "scope-hana@engineering"
+    },
+    "scope-ivan@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "ivan@engineering",
+      "owner_id": "ivan",
+      "resource_ids": [
+        "resource://ivan/governed"
+      ],
+      "scope_id": "scope-ivan@engineering"
+    },
+    "scope-jade@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "jade@engineering",
+      "owner_id": "jade",
+      "resource_ids": [
+        "resource://jade/governed"
+      ],
+      "scope_id": "scope-jade@engineering"
+    },
+    "scope-keon@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "keon@engineering",
+      "owner_id": "keon",
+      "resource_ids": [
+        "resource://keon/governed"
+      ],
+      "scope_id": "scope-keon@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "hana@engineering": {
+      "agent_id": "hana_engineer",
+      "identity_id": "hana@engineering",
+      "owner_id": "hana"
+    },
+    "ivan@engineering": {
+      "agent_id": "ivan_reviewer",
+      "identity_id": "ivan@engineering",
+      "owner_id": "ivan"
+    },
+    "jade@engineering": {
+      "agent_id": "jade_owner",
+      "identity_id": "jade@engineering",
+      "owner_id": "jade"
+    },
+    "keon@engineering": {
+      "agent_id": "keon_ci",
+      "identity_id": "keon@engineering",
+      "owner_id": "keon"
+    }
+  },
+  "owners": {
+    "hana": {
+      "owner_id": "hana",
+      "user_id": "hana"
+    },
+    "ivan": {
+      "owner_id": "ivan",
+      "user_id": "ivan"
+    },
+    "jade": {
+      "owner_id": "jade",
+      "user_id": "jade"
+    },
+    "keon": {
+      "owner_id": "keon",
+      "user_id": "keon"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "hana_engineer",
+      "target": "ivan_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "ivan_reviewer",
+      "target": "hana_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "ivan_reviewer",
+      "target": "jade_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "hana_engineer",
+      "target": "keon_ci"
+    }
+  ]
+}

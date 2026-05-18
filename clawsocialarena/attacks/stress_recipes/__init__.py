@@ -56,6 +56,7 @@ from clawsocialarena.attacks.stress_recipes import (  # noqa: E402,F401
     governance_poisoned_consent,
     collaboration_adaptive_peer,
     bargaining_mode_local_playbooks,
+    workspace_mode_local_playbooks,
 )
 
 

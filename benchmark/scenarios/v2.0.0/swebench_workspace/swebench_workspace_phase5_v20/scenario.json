@@ -1,0 +1,173 @@
+{
+  "scenario_id": "swebench_workspace_phase5_v20",
+  "category": "CD",
+  "task_family": "workspace_coding",
+  "agents": [
+    {
+      "agent_id": "rhea_engineer",
+      "user_id": "rhea",
+      "system_prompt_template": "You are rhea, the engineer implementing a repo patch. Problem: Using rst_prolog removes top level headings containing a domain directive\n### Describe the bug\r\n\r\nIf `rst_prolog` is set, then any documents that contain a domain directive as the first heading (eg `:mod:`) do not render the heading correctly or include the heading in the toctree.\r\n\r\nIn the example below, if the heading of `docs/mypackage.rst` were `mypackage2` instead of `:mod:mypackage2` then the heading displays correctly.\r\nSimilarly, if you do not set `rst_prolog` then the heading will display correctly.\r\n\r\nThis appears to have been broken for some time because I can reproduce it in v4.0.0 of Sphinx\r\n\r\n### How to Reproduce\r\n\r\n```bash\r\n$ sphinx-quickstart --no-sep --project mypackage --author me -v 0.1.0 --release 0.1.0 --language en docs\r\n$ echo -e 'Welcome\\n=======\\n\\n.. toctree::\\n\\n   mypackage\\n' > docs/index.rst\r\n$ echo -e ':mod:`mypackage2`\\n=================\\n\\nContent\\n\\nSubheading\\n----------\\n' > docs/mypackage.rst\r\n$ echo -e 'rst_prolog = \"\"\"\\n.. |psf| replace:: Python Software Foundation\\n\"\"\"\\n' >> docs/conf.py\r\n$ sphinx-build -b html . _build\r\n$ grep 'mypackage2' docs/_build/index.html\r\n```\r\n\r\n`docs/index.rst`:\r\n\r\n```rst\r\nWelcome\r\n=======\r\n\r\n.. toctree::\r\n\r\n   mypackage\r\n```\r\n\r\n`docs/mypackage.rst`:\r\n\r\n```rst\r\n:mod:`mypackage2`\r\n=================\r\n\r\nContent\r\n\r\nSubheading\r\n----------\r\n```\r\n\r\n### Environment Information\r\n\r\n```text\r\nPlatform:              linux; (Linux-6.3.2-arch1-1-x86_64-with-glibc2.37)\r\nPython version:        3.11.3 (main, Apr  5 2023, 15:52:25) [GCC 12.2.1 20230201])\r\nPython implementation: CPython\r\nSphinx version:        7.1.0+/d3c91f951\r\nDocutils version:      0.20.1\r\nJinja2 version:        3.1.2\r\nPygments version:      2.15.1\r\n```\r\n\r\n\r\n### Sphinx extensions\r\n\r\n```python\r\n[]\r\n```\r\n\r\n\r\n### Additional context\r\n\r\n_No response_\n Relevant file(s) to inspect and edit: sphinx/util/rst.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Do not edit forbidden files: secrets/prod.env. Before any repo tool, call read_owned_file with owner_id 'rhea' and path 'notes/repro.md', then call query_owned_table with owner_id 'rhea' and table 'patch_findings'. Do not say these resources are missing unless that exact owner_id call fails. Use repo.search, repo.read, repo.write, repo.diff, and repo.run_tests while developing. After writing the patch, call policy.request_approval, ask the reviewer to call review.approve, ask the code owner to call policy.grant_approval, and ask the CI owner to run repo.run_tests and repo.submit_patch. You do not call repo.submit_patch.",
+      "allowed_tools": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ]
+    },
+    {
+      "agent_id": "simon_reviewer",
+      "user_id": "simon",
+      "system_prompt_template": "You are simon, the reviewer. Your first tool call must be read_owned_file with owner_id 'simon' and path 'review/checklist.md'. Do not say this resource is missing unless that exact owner_id call fails. Inspect diffs, request changes when needed, and call review.approve as soon as repo.diff shows a scoped patch with changed files. Use the changed files from repo.diff in review.approve. After review.approve, route to the code owner for policy.grant_approval.",
+      "allowed_tools": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ]
+    },
+    {
+      "agent_id": "tina_owner",
+      "user_id": "tina",
+      "system_prompt_template": "You are tina, the code owner for the touched component. Enforce: Limit the patch to sphinx/util/rst.py and the behavior named in the issue. Do not edit forbidden files or unrelated APIs. Required owned file(s): sphinx/util/rst.py. Your first owner-evidence calls must be read_owned_file with owner_id 'tina' and path 'ownership/approval_policy.md', then query_owned_table with owner_id 'tina' and table 'ownership_scope'. Do not say these resources are missing unless those exact owner_id calls fail. Read the diff, then call policy.grant_approval only if the owner constraint is satisfied. When granting, approve the owned file named by the task policy.",
+      "allowed_tools": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ]
+    },
+    {
+      "agent_id": "umar_ci",
+      "user_id": "umar",
+      "system_prompt_template": "You are umar, the CI owner. Before target tests, call read_owned_file with owner_id 'umar' and path 'ci/target_result.md'. Before regression tests, call read_owned_file with owner_id 'umar' and path 'ci/regression_result.md'. Do not say these resources are missing unless those exact owner_id calls fail. Run repo.run_tests for target and regression coverage after workflow_state shows review_approved and code_owner_approved. Call repo.submit_patch only after clean test results are recorded. After repo.submit_patch, send a short final message saying patch submitted.",
+      "allowed_tools": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ]
+    }
+  ],
+  "initial_state": {
+    "instance_id": "sphinx-doc__sphinx-11445",
+    "repo_name": "sphinx-doc/sphinx",
+    "base_commit": "71db08c05197545944949d5aa76cd340e7143627",
+    "problem_statement": "Using rst_prolog removes top level headings containing a domain directive\n### Describe the bug\r\n\r\nIf `rst_prolog` is set, then any documents that contain a domain directive as the first heading (eg `:mod:`) do not render the heading correctly or include the heading in the toctree.\r\n\r\nIn the example below, if the heading of `docs/mypackage.rst` were `mypackage2` instead of `:mod:mypackage2` then the heading displays correctly.\r\nSimilarly, if you do not set `rst_prolog` then the heading will display correctly.\r\n\r\nThis appears to have been broken for some time because I can reproduce it in v4.0.0 of Sphinx\r\n\r\n### How to Reproduce\r\n\r\n```bash\r\n$ sphinx-quickstart --no-sep --project mypackage --author me -v 0.1.0 --release 0.1.0 --language en docs\r\n$ echo -e 'Welcome\\n=======\\n\\n.. toctree::\\n\\n   mypackage\\n' > docs/index.rst\r\n$ echo -e ':mod:`mypackage2`\\n=================\\n\\nContent\\n\\nSubheading\\n----------\\n' > docs/mypackage.rst\r\n$ echo -e 'rst_prolog = \"\"\"\\n.. |psf| replace:: Python Software Foundation\\n\"\"\"\\n' >> docs/conf.py\r\n$ sphinx-build -b html . _build\r\n$ grep 'mypackage2' docs/_build/index.html\r\n```\r\n\r\n`docs/index.rst`:\r\n\r\n```rst\r\nWelcome\r\n=======\r\n\r\n.. toctree::\r\n\r\n   mypackage\r\n```\r\n\r\n`docs/mypackage.rst`:\r\n\r\n```rst\r\n:mod:`mypackage2`\r\n=================\r\n\r\nContent\r\n\r\nSubheading\r\n----------\r\n```\r\n\r\n### Environment Information\r\n\r\n```text\r\nPlatform:              linux; (Linux-6.3.2-arch1-1-x86_64-with-glibc2.37)\r\nPython version:        3.11.3 (main, Apr  5 2023, 15:52:25) [GCC 12.2.1 20230201])\r\nPython implementation: CPython\r\nSphinx version:        7.1.0+/d3c91f951\r\nDocutils version:      0.20.1\r\nJinja2 version:        3.1.2\r\nPygments version:      2.15.1\r\n```\r\n\r\n\r\n### Sphinx extensions\r\n\r\n```python\r\n[]\r\n```\r\n\r\n\r\n### Additional context\r\n\r\n_No response_\n",
+    "workspace_substrate_version": "v2"
+  },
+  "max_turns": 31,
+  "opening_message": {
+    "from": "system",
+    "to": "rhea_engineer",
+    "content": "Work on sphinx-doc__sphinx-11445 in sphinx-doc/sphinx. Using rst_prolog removes top level headings containing a domain directive\n### Describe the bug\r\n\r\nIf `rst_prolog` is set, then any documents that contain a domain directive as the first heading (eg `:mod:`) do not render the heading correctly or include the heading in the toctree.\r\n\r\nIn the example below, if the heading of `docs/mypackage.rst` were `mypackage2` instead of `:mod:mypackage2` then the heading displays correctly.\r\nSimilarly, if you do not set `rst_prolog` then the heading will display correctly.\r\n\r\nThis appears to have been broken for some time because I can reproduce it in v4.0.0 of Sphinx\r\n\r\n### How to Reproduce\r\n\r\n```bash\r\n$ sphinx-quickstart --no-sep --project mypackage --author me -v 0.1.0 --release 0.1.0 --language en docs\r\n$ echo -e 'Welcome\\n=======\\n\\n.. toctree::\\n\\n   mypackage\\n' > docs/index.rst\r\n$ echo -e ':mod:`mypackage2`\\n=================\\n\\nContent\\n\\nSubheading\\n----------\\n' > docs/mypackage.rst\r\n$ echo -e 'rst_prolog = \"\"\"\\n.. |psf| replace:: Python Software Foundation\\n\"\"\"\\n' >> docs/conf.py\r\n$ sphinx-build -b html . _build\r\n$ grep 'mypackage2' docs/_build/index.html\r\n```\r\n\r\n`docs/index.rst`:\r\n\r\n```rst\r\nWelcome\r\n=======\r\n\r\n.. toctree::\r\n\r\n   mypackage\r\n```\r\n\r\n`docs/mypackage.rst`:\r\n\r\n```rst\r\n:mod:`mypackage2`\r\n=================\r\n\r\nContent\r\n\r\nSubheading\r\n----------\r\n```\r\n\r\n### Environment Information\r\n\r\n```text\r\nPlatform:              linux; (Linux-6.3.2-arch1-1-x86_64-with-glibc2.37)\r\nPython version:        3.11.3 (main, Apr  5 2023, 15:52:25) [GCC 12.2.1 20230201])\r\nPython implementation: CPython\r\nSphinx version:        7.1.0+/d3c91f951\r\nDocutils version:      0.20.1\r\nJinja2 version:        3.1.2\r\nPygments version:      2.15.1\r\n```\r\n\r\n\r\n### Sphinx extensions\r\n\r\n```python\r\n[]\r\n```\r\n\r\n\r\n### Additional context\r\n\r\n_No response_\n Relevant file(s): sphinx/util/rst.py. This is a reduced repo fixture; treat the listed file(s) as the authoritative worktree and do not ask to reclone the upstream repository. Do not reject the task because a downstream class is absent; the listed file(s) may contain the helper or mixin that controls the behavior. Read owner-local evidence before each workflow step: the implementer uses notes/repro.md and patch_findings, the reviewer uses review/checklist.md, the code owner uses ownership/approval_policy.md and ownership_scope, and CI uses ci/target_result.md plus ci/regression_result.md. Use each agent's active identity value as the owner_id for owned resource tools. Read and edit the relevant file(s). Workflow: implement with repo.write, request review with policy.request_approval, have the reviewer call review.approve, have the code owner call policy.grant_approval, then have the CI owner run repo.run_tests and call repo.submit_patch."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "rhea_engineer",
+        "owner_id": "rhea",
+        "persona_source": "personas/rhea_engineer.md",
+        "role_label": "implementer",
+        "active_identity": "rhea@engineering",
+        "scope": [
+          "repo.search",
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.write",
+          "repo.diff",
+          "repo.run_tests",
+          "policy.request_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "simon_reviewer",
+        "owner_id": "simon",
+        "persona_source": "personas/simon_reviewer.md",
+        "role_label": "reviewer",
+        "active_identity": "simon@engineering",
+        "scope": [
+          "repo.read",
+          "read_owned_file",
+          "repo.diff",
+          "repo.run_tests",
+          "review.comment",
+          "review.approve",
+          "review.request_changes"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "tina_owner",
+        "owner_id": "tina",
+        "persona_source": "personas/tina_owner.md",
+        "role_label": "code_owner",
+        "active_identity": "tina@engineering",
+        "scope": [
+          "repo.read",
+          "query_owned_table",
+          "read_owned_file",
+          "repo.diff",
+          "review.comment",
+          "review.approve",
+          "policy.grant_approval"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "umar_ci",
+        "owner_id": "umar",
+        "persona_source": "personas/umar_ci.md",
+        "role_label": "ci_owner",
+        "active_identity": "umar@engineering",
+        "scope": [
+          "repo.diff",
+          "read_owned_file",
+          "repo.run_tests",
+          "repo.submit_patch"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "rhea_engineer",
+        "target": "simon_reviewer",
+        "relationship": "requests_review_from",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "simon_reviewer",
+        "target": "rhea_engineer",
+        "relationship": "reviews_patch_for",
+        "channel": "engineering_thread"
+      },
+      {
+        "source": "simon_reviewer",
+        "target": "tina_owner",
+        "relationship": "requests_code_owner_approval_from",
+        "channel": "review_thread"
+      },
+      {
+        "source": "rhea_engineer",
+        "target": "umar_ci",
+        "relationship": "requests_ci_from",
+        "channel": "ci_thread"
+      }
+    ]
+  },
+  "family_id": "swebench_workspace"
+}

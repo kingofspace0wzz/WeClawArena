@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-margo@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "margo"
+      ],
+      "mandate_id": "mandate-margo@engineering",
+      "owner_id": "margo",
+      "scope_id": "scope-margo@engineering"
+    },
+    "mandate-noah@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "noah"
+      ],
+      "mandate_id": "mandate-noah@engineering",
+      "owner_id": "noah",
+      "scope_id": "scope-noah@engineering"
+    },
+    "mandate-orion@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "orion"
+      ],
+      "mandate_id": "mandate-orion@engineering",
+      "owner_id": "orion",
+      "scope_id": "scope-orion@engineering"
+    },
+    "mandate-piper@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "piper"
+      ],
+      "mandate_id": "mandate-piper@engineering",
+      "owner_id": "piper",
+      "scope_id": "scope-piper@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-margo@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "margo@engineering",
+      "owner_id": "margo",
+      "resource_ids": [
+        "resource://margo/governed"
+      ],
+      "scope_id": "scope-margo@engineering"
+    },
+    "scope-noah@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "noah@engineering",
+      "owner_id": "noah",
+      "resource_ids": [
+        "resource://noah/governed"
+      ],
+      "scope_id": "scope-noah@engineering"
+    },
+    "scope-orion@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "orion@engineering",
+      "owner_id": "orion",
+      "resource_ids": [
+        "resource://orion/governed"
+      ],
+      "scope_id": "scope-orion@engineering"
+    },
+    "scope-piper@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "piper@engineering",
+      "owner_id": "piper",
+      "resource_ids": [
+        "resource://piper/governed"
+      ],
+      "scope_id": "scope-piper@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "margo@engineering": {
+      "agent_id": "margo_engineer",
+      "identity_id": "margo@engineering",
+      "owner_id": "margo"
+    },
+    "noah@engineering": {
+      "agent_id": "noah_reviewer",
+      "identity_id": "noah@engineering",
+      "owner_id": "noah"
+    },
+    "orion@engineering": {
+      "agent_id": "orion_owner",
+      "identity_id": "orion@engineering",
+      "owner_id": "orion"
+    },
+    "piper@engineering": {
+      "agent_id": "piper_ci",
+      "identity_id": "piper@engineering",
+      "owner_id": "piper"
+    }
+  },
+  "owners": {
+    "margo": {
+      "owner_id": "margo",
+      "user_id": "margo"
+    },
+    "noah": {
+      "owner_id": "noah",
+      "user_id": "noah"
+    },
+    "orion": {
+      "owner_id": "orion",
+      "user_id": "orion"
+    },
+    "piper": {
+      "owner_id": "piper",
+      "user_id": "piper"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "margo_engineer",
+      "target": "noah_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "noah_reviewer",
+      "target": "margo_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "noah_reviewer",
+      "target": "orion_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "margo_engineer",
+      "target": "piper_ci"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Reduced source stub for requests/sessions.py.
+# Reconstructed from the SWE-bench gold patch context.
+
+
+from datetime import datetime
+
+from .auth import _basic_auth_str
+from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str
+from .cookies import (
+    cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)
+from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT
+
+def request(self, method, url,
+            If Tuple, ('cert', 'key') pair.
+        """
+
+        method = builtin_str(method)
+
+        # Create the Request.
+        req = Request(

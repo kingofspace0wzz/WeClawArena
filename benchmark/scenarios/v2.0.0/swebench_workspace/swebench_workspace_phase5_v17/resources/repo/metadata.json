@@ -1,0 +1,34 @@
+{
+  "instance_id": "scikit-learn__scikit-learn-13496",
+  "repo_name": "scikit-learn/scikit-learn",
+  "base_commit": "3aefc834dce72e850bff48689bea3c7dff5f3fad",
+  "source_dataset": "princeton-nlp/SWE-bench_Lite",
+  "source_split": "test",
+  "environment_setup_commit": "7813f7efb5b2012412888b69e73d76f2df2b50b6",
+  "problem_statement": "Expose warm_start in Isolation forest\nIt seems to me that `sklearn.ensemble.IsolationForest` supports incremental addition of new trees with the `warm_start` parameter of its parent class, `sklearn.ensemble.BaseBagging`.\r\n\r\nEven though this parameter is not exposed in `__init__()` , it gets inherited from `BaseBagging` and one can use it by changing it to `True` after initialization. To make it work, you have to also increment `n_estimators` on every iteration. \r\n\r\nIt took me a while to notice that it actually works, and I had to inspect the source code of both `IsolationForest` and `BaseBagging`. Also, it looks to me that the behavior is in-line with `sklearn.ensemble.BaseForest` that is behind e.g. `sklearn.ensemble.RandomForestClassifier`.\r\n\r\nTo make it more easier to use, I'd suggest to:\r\n* expose `warm_start` in `IsolationForest.__init__()`, default `False`;\r\n* document it in the same way as it is documented for `RandomForestClassifier`, i.e. say:\r\n```py\r\n    warm_start : bool, optional (default=False)\r\n        When set to ``True``, reuse the solution of the previous call to fit\r\n        and add more estimators to the ensemble, otherwise, just fit a whole\r\n        new forest. See :term:`the Glossary <warm_start>`.\r\n```\r\n* add a test to make sure it works properly;\r\n* possibly also mention in the \"IsolationForest example\" documentation entry;\r\n\n",
+  "workspace_substrate_version": "v2",
+  "target_tests": [
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_warm_start"
+  ],
+  "regression_tests": [
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_sparse",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_error",
+    "sklearn/ensemble/tests/test_iforest.py::test_recalculate_max_depth",
+    "sklearn/ensemble/tests/test_iforest.py::test_max_samples_attribute",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_parallel_regression",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_performance",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_works[0.25]",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_works[auto]",
+    "sklearn/ensemble/tests/test_iforest.py::test_max_samples_consistency",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_subsampled_features",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_average_path_length",
+    "sklearn/ensemble/tests/test_iforest.py::test_score_samples",
+    "sklearn/ensemble/tests/test_iforest.py::test_deprecation",
+    "sklearn/ensemble/tests/test_iforest.py::test_behaviour_param",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_chunks_works1[0.25-3]",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_chunks_works1[auto-2]",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_chunks_works2[0.25-3]",
+    "sklearn/ensemble/tests/test_iforest.py::test_iforest_chunks_works2[auto-2]"
+  ]
+}

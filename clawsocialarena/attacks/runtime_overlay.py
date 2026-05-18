@@ -56,6 +56,13 @@ FAMILY_AXIS_TO_RECIPE: dict[tuple[str, str], str] = {
     ("marble_bargaining", "security"): "bargaining_security_mode_local_playbook",
     ("marble_bargaining", "privacy"): "bargaining_privacy_mode_local_playbook",
     ("marble_bargaining", "governance"): "bargaining_governance_mode_local_playbook",
+    (
+        "swebench_workspace",
+        "collaboration",
+    ): "workspace_collaboration_mode_local_playbook",
+    ("swebench_workspace", "security"): "workspace_security_mode_local_playbook",
+    ("swebench_workspace", "privacy"): "workspace_privacy_mode_local_playbook",
+    ("swebench_workspace", "governance"): "workspace_governance_mode_local_playbook",
 }
 
 # Private alias kept for backwards-compat within this module.
@@ -78,6 +85,13 @@ def _recipe_name_for(
     attack_mode: str,
     base_bundle: dict[str, Any] | None = None,
 ) -> str | None:
+    if (
+        family_id == "swebench_workspace"
+        and base_bundle is not None
+        and _workspace_substrate_version(base_bundle) == "v2"
+        and attack_mode in {"security", "governance", "privacy", "collaboration"}
+    ):
+        return f"workspace_{attack_mode}_resource_bound_playbook"
     return FAMILY_AXIS_TO_RECIPE.get((family_id, attack_mode)) or AXIS_TO_RECIPE.get(
         attack_mode
     )

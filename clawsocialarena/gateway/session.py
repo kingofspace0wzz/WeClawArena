@@ -330,6 +330,37 @@ class Session:
             )
             register_marble_bargaining_handlers(self.mcp_host, context=bargain)
             return
+        if family_id == "swebench_workspace":
+            from clawsocialarena.mcp_tools.swebench_workspace import (
+                WorkspaceCodingContext,
+                register_swebench_workspace_handlers,
+            )
+
+            owner_ids = tuple(
+                str(owner)
+                for owner in (
+                    ctx.get("owner_ids")
+                    or (
+                        ctx.get("implementer_owner_id", "maya"),
+                        ctx.get("reviewer_owner_id", "nolan"),
+                        ctx.get("code_owner_id", "opal"),
+                        ctx.get("ci_owner_id", "priya"),
+                    )
+                )
+            )
+            workspace = WorkspaceCodingContext(
+                resources_root=Path(resource_root),
+                instance_id=str(ctx.get("instance_id", "django__django-0001")),
+                repo_name=str(ctx.get("repo_name", "django/django")),
+                base_commit=str(ctx.get("base_commit", "")),
+                owner_ids=owner_ids,
+                code_owner_id=str(ctx.get("code_owner_id", "opal")),
+                workspace_substrate_version=str(
+                    ctx.get("workspace_substrate_version", "v1")
+                ),
+            )
+            register_swebench_workspace_handlers(self.mcp_host, context=workspace)
+            return
         if family_id == "wildclaw_social":
             from clawsocialarena.mcp_tools.wildclaw_social import (
                 MeetingNegotiationContext,

@@ -1,0 +1,40 @@
+{
+  "instance_id": "sympy__sympy-12419",
+  "repo_name": "sympy/sympy",
+  "base_commit": "479939f8c65c8c2908bbedc959549a257a7c0b0b",
+  "source_dataset": "princeton-nlp/SWE-bench_Lite",
+  "source_split": "test",
+  "environment_setup_commit": "50b81f9f6be151014501ffac44e5dc6b2416938f",
+  "problem_statement": "Sum of the elements of an identity matrix is zero\nI think this is a bug.\r\n\r\nI created a matrix by M.T * M under an assumption that M is orthogonal.  SymPy successfully recognized that the result is an identity matrix.  I tested its identity-ness by element-wise, queries, and sum of the diagonal elements and received expected results.\r\n\r\nHowever, when I attempt to evaluate the total sum of the elements the result was 0 while 'n' is expected.\r\n\r\n```\r\nfrom sympy import *\r\nfrom sympy import Q as Query\r\n\r\nn = Symbol('n', integer=True, positive=True)\r\ni, j = symbols('i j', integer=True)\r\nM = MatrixSymbol('M', n, n)\r\n\r\ne = None\r\nwith assuming(Query.orthogonal(M)):\r\n    e = refine((M.T * M).doit())\r\n\r\n# Correct: M.T * M is an identity matrix.\r\nprint(e, e[0, 0], e[0, 1], e[1, 0], e[1, 1])\r\n\r\n# Correct: The output is True True\r\nprint(ask(Query.diagonal(e)), ask(Query.integer_elements(e)))\r\n\r\n# Correct: The sum of the diagonal elements is n\r\nprint(Sum(e[i, i], (i, 0, n-1)).doit())\r\n\r\n# So far so good\r\n# Total sum of the elements is expected to be 'n' but the answer is 0!\r\nprint(Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit())\r\n```\n",
+  "workspace_substrate_version": "v2",
+  "target_tests": [
+    "test_Identity"
+  ],
+  "regression_tests": [
+    "test_shape",
+    "test_matexpr",
+    "test_subs",
+    "test_ZeroMatrix",
+    "test_ZeroMatrix_doit",
+    "test_Identity_doit",
+    "test_addition",
+    "test_multiplication",
+    "test_MatPow",
+    "test_MatrixSymbol",
+    "test_dense_conversion",
+    "test_free_symbols",
+    "test_zero_matmul",
+    "test_matadd_simplify",
+    "test_matmul_simplify",
+    "test_invariants",
+    "test_indexing",
+    "test_single_indexing",
+    "test_MatrixElement_commutative",
+    "test_MatrixSymbol_determinant",
+    "test_MatrixElement_diff",
+    "test_MatrixElement_doit",
+    "test_identity_powers",
+    "test_Zero_power",
+    "test_matrixelement_diff"
+  ]
+}

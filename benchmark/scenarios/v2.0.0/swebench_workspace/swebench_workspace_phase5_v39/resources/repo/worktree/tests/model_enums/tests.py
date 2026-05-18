@@ -1,0 +1,20 @@
+# Reduced test stub for simulated CI scoring.
+# Full test behavior is represented by target_tests.json and regression_tests.json.
+
+# test_str (model_enums.tests.ChoicesTests)
+# test_textchoices (model_enums.tests.ChoicesTests)
+# test_integerchoices (model_enums.tests.ChoicesTests)
+# test_integerchoices_auto_label (model_enums.tests.ChoicesTests)
+# test_integerchoices_containment (model_enums.tests.ChoicesTests)
+# test_integerchoices_empty_label (model_enums.tests.ChoicesTests)
+# test_integerchoices_functional_api (model_enums.tests.ChoicesTests)
+# test_invalid_definition (model_enums.tests.ChoicesTests)
+# test_textchoices_auto_label (model_enums.tests.ChoicesTests)
+# test_textchoices_blank_value (model_enums.tests.ChoicesTests)
+# test_textchoices_containment (model_enums.tests.ChoicesTests)
+# test_textchoices_empty_label (model_enums.tests.ChoicesTests)
+# test_textchoices_functional_api (model_enums.tests.ChoicesTests)
+# test_bool_unsupported (model_enums.tests.CustomChoicesTests)
+# test_labels_valid (model_enums.tests.CustomChoicesTests)
+# test_timezone_unsupported (model_enums.tests.CustomChoicesTests)
+# test_uuid_unsupported (model_enums.tests.CustomChoicesTests)

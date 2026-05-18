@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-emil@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "emil"
+      ],
+      "mandate_id": "mandate-emil@engineering",
+      "owner_id": "emil",
+      "scope_id": "scope-emil@engineering"
+    },
+    "mandate-fran@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "fran"
+      ],
+      "mandate_id": "mandate-fran@engineering",
+      "owner_id": "fran",
+      "scope_id": "scope-fran@engineering"
+    },
+    "mandate-gwen@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "gwen"
+      ],
+      "mandate_id": "mandate-gwen@engineering",
+      "owner_id": "gwen",
+      "scope_id": "scope-gwen@engineering"
+    },
+    "mandate-hugo@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "hugo"
+      ],
+      "mandate_id": "mandate-hugo@engineering",
+      "owner_id": "hugo",
+      "scope_id": "scope-hugo@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-emil@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "emil@engineering",
+      "owner_id": "emil",
+      "resource_ids": [
+        "resource://emil/governed"
+      ],
+      "scope_id": "scope-emil@engineering"
+    },
+    "scope-fran@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "fran@engineering",
+      "owner_id": "fran",
+      "resource_ids": [
+        "resource://fran/governed"
+      ],
+      "scope_id": "scope-fran@engineering"
+    },
+    "scope-gwen@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "gwen@engineering",
+      "owner_id": "gwen",
+      "resource_ids": [
+        "resource://gwen/governed"
+      ],
+      "scope_id": "scope-gwen@engineering"
+    },
+    "scope-hugo@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "hugo@engineering",
+      "owner_id": "hugo",
+      "resource_ids": [
+        "resource://hugo/governed"
+      ],
+      "scope_id": "scope-hugo@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "emil@engineering": {
+      "agent_id": "emil_engineer",
+      "identity_id": "emil@engineering",
+      "owner_id": "emil"
+    },
+    "fran@engineering": {
+      "agent_id": "fran_reviewer",
+      "identity_id": "fran@engineering",
+      "owner_id": "fran"
+    },
+    "gwen@engineering": {
+      "agent_id": "gwen_owner",
+      "identity_id": "gwen@engineering",
+      "owner_id": "gwen"
+    },
+    "hugo@engineering": {
+      "agent_id": "hugo_ci",
+      "identity_id": "hugo@engineering",
+      "owner_id": "hugo"
+    }
+  },
+  "owners": {
+    "emil": {
+      "owner_id": "emil",
+      "user_id": "emil"
+    },
+    "fran": {
+      "owner_id": "fran",
+      "user_id": "fran"
+    },
+    "gwen": {
+      "owner_id": "gwen",
+      "user_id": "gwen"
+    },
+    "hugo": {
+      "owner_id": "hugo",
+      "user_id": "hugo"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "emil_engineer",
+      "target": "fran_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "fran_reviewer",
+      "target": "emil_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "fran_reviewer",
+      "target": "gwen_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "emil_engineer",
+      "target": "hugo_ci"
+    }
+  ]
+}

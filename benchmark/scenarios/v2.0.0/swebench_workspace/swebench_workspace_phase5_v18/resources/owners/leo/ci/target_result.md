@@ -1,0 +1,3 @@
+# Target Result
+
+Target tests: sklearn/utils/tests/test_set_output.py::test_set_output_pandas_keep_index

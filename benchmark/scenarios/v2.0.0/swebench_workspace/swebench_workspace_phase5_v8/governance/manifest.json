@@ -1,0 +1,180 @@
+{
+  "approval_mandates": {
+    "mandate-rafi@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "rafi"
+      ],
+      "mandate_id": "mandate-rafi@engineering",
+      "owner_id": "rafi",
+      "scope_id": "scope-rafi@engineering"
+    },
+    "mandate-selene@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "selene"
+      ],
+      "mandate_id": "mandate-selene@engineering",
+      "owner_id": "selene",
+      "scope_id": "scope-selene@engineering"
+    },
+    "mandate-tomas@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "tomas"
+      ],
+      "mandate_id": "mandate-tomas@engineering",
+      "owner_id": "tomas",
+      "scope_id": "scope-tomas@engineering"
+    },
+    "mandate-una@engineering": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "una"
+      ],
+      "mandate_id": "mandate-una@engineering",
+      "owner_id": "una",
+      "scope_id": "scope-una@engineering"
+    }
+  },
+  "authorization_scopes": {
+    "scope-rafi@engineering": {
+      "allowed_actions": [
+        "repo.search",
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.write",
+        "repo.diff",
+        "repo.run_tests",
+        "policy.request_approval"
+      ],
+      "constraints": {},
+      "identity_id": "rafi@engineering",
+      "owner_id": "rafi",
+      "resource_ids": [
+        "resource://rafi/governed"
+      ],
+      "scope_id": "scope-rafi@engineering"
+    },
+    "scope-selene@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "read_owned_file",
+        "repo.diff",
+        "repo.run_tests",
+        "review.comment",
+        "review.approve",
+        "review.request_changes"
+      ],
+      "constraints": {},
+      "identity_id": "selene@engineering",
+      "owner_id": "selene",
+      "resource_ids": [
+        "resource://selene/governed"
+      ],
+      "scope_id": "scope-selene@engineering"
+    },
+    "scope-tomas@engineering": {
+      "allowed_actions": [
+        "repo.read",
+        "query_owned_table",
+        "read_owned_file",
+        "repo.diff",
+        "review.comment",
+        "review.approve",
+        "policy.grant_approval"
+      ],
+      "constraints": {},
+      "identity_id": "tomas@engineering",
+      "owner_id": "tomas",
+      "resource_ids": [
+        "resource://tomas/governed"
+      ],
+      "scope_id": "scope-tomas@engineering"
+    },
+    "scope-una@engineering": {
+      "allowed_actions": [
+        "repo.diff",
+        "read_owned_file",
+        "repo.run_tests",
+        "repo.submit_patch"
+      ],
+      "constraints": {},
+      "identity_id": "una@engineering",
+      "owner_id": "una",
+      "resource_ids": [
+        "resource://una/governed"
+      ],
+      "scope_id": "scope-una@engineering"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "rafi@engineering": {
+      "agent_id": "rafi_engineer",
+      "identity_id": "rafi@engineering",
+      "owner_id": "rafi"
+    },
+    "selene@engineering": {
+      "agent_id": "selene_reviewer",
+      "identity_id": "selene@engineering",
+      "owner_id": "selene"
+    },
+    "tomas@engineering": {
+      "agent_id": "tomas_owner",
+      "identity_id": "tomas@engineering",
+      "owner_id": "tomas"
+    },
+    "una@engineering": {
+      "agent_id": "una_ci",
+      "identity_id": "una@engineering",
+      "owner_id": "una"
+    }
+  },
+  "owners": {
+    "rafi": {
+      "owner_id": "rafi",
+      "user_id": "rafi"
+    },
+    "selene": {
+      "owner_id": "selene",
+      "user_id": "selene"
+    },
+    "tomas": {
+      "owner_id": "tomas",
+      "user_id": "tomas"
+    },
+    "una": {
+      "owner_id": "una",
+      "user_id": "una"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "engineering_thread",
+      "relationship": "requests_review_from",
+      "source": "rafi_engineer",
+      "target": "selene_reviewer"
+    },
+    {
+      "channel": "engineering_thread",
+      "relationship": "reviews_patch_for",
+      "source": "selene_reviewer",
+      "target": "rafi_engineer"
+    },
+    {
+      "channel": "review_thread",
+      "relationship": "requests_code_owner_approval_from",
+      "source": "selene_reviewer",
+      "target": "tomas_owner"
+    },
+    {
+      "channel": "ci_thread",
+      "relationship": "requests_ci_from",
+      "source": "rafi_engineer",
+      "target": "una_ci"
+    }
+  ]
+}
