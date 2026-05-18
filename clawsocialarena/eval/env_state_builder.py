@@ -42,7 +42,13 @@ def build_env_state(*, resources_dir: Path | str) -> EnvState:
     db: dict[str, dict[str, Any]] = {}
     if not root.is_dir():
         return EnvState(db=db)
-    for sqlite_path in sorted(root.glob("**/personal.sqlite")):
+    # Walk every .sqlite file under resources/, not just personal.sqlite.
+    # tau2_retail's shared_account / hub_aggregator archetypes keep order
+    # state in resources/shared/<account>/shared_account_orders.sqlite,
+    # which a personal-only glob misses entirely. Including all .sqlite
+    # files folds the shared orders into the merged env_state so the
+    # predicate evaluator sees post-run shared state.
+    for sqlite_path in sorted(root.glob("**/*.sqlite")):
         _merge_db_file(sqlite_path, db)
     return EnvState(db=db)
 
