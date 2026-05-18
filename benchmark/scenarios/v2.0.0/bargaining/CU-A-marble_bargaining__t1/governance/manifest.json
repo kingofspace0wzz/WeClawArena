@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-harborview_finance@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "harborview_finance"
+      ],
+      "mandate_id": "mandate-harborview_finance@finance",
+      "owner_id": "harborview_finance",
+      "scope_id": "scope-harborview_finance@finance"
+    },
+    "mandate-harborview_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "harborview_procurement"
+      ],
+      "mandate_id": "mandate-harborview_procurement@procurement",
+      "owner_id": "harborview_procurement",
+      "scope_id": "scope-harborview_procurement@procurement"
+    },
+    "mandate-northstar_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "northstar_sales"
+      ],
+      "mandate_id": "mandate-northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "scope_id": "scope-northstar_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-harborview_finance@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "harborview_finance@finance",
+      "owner_id": "harborview_finance",
+      "resource_ids": [
+        "resource://harborview_finance/governed"
+      ],
+      "scope_id": "scope-harborview_finance@finance"
+    },
+    "scope-harborview_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "harborview_procurement@procurement",
+      "owner_id": "harborview_procurement",
+      "resource_ids": [
+        "resource://harborview_procurement/governed"
+      ],
+      "scope_id": "scope-harborview_procurement@procurement"
+    },
+    "scope-northstar_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "resource_ids": [
+        "resource://northstar_sales/governed"
+      ],
+      "scope_id": "scope-northstar_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "harborview_finance@finance": {
+      "agent_id": "harborview_finance_approver",
+      "identity_id": "harborview_finance@finance",
+      "owner_id": "harborview_finance"
+    },
+    "harborview_procurement@procurement": {
+      "agent_id": "harborview_buyer",
+      "identity_id": "harborview_procurement@procurement",
+      "owner_id": "harborview_procurement"
+    },
+    "northstar_sales@sales": {
+      "agent_id": "northstar_seller",
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales"
+    }
+  },
+  "owners": {
+    "harborview_finance": {
+      "owner_id": "harborview_finance",
+      "user_id": "harborview_finance"
+    },
+    "harborview_procurement": {
+      "owner_id": "harborview_procurement",
+      "user_id": "harborview_procurement"
+    },
+    "northstar_sales": {
+      "owner_id": "northstar_sales",
+      "user_id": "northstar_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "harborview_buyer",
+      "target": "northstar_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "harborview_buyer",
+      "target": "harborview_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "harborview_finance_approver",
+      "target": "harborview_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "northstar_seller",
+      "target": "harborview_buyer"
+    }
+  ]
+}

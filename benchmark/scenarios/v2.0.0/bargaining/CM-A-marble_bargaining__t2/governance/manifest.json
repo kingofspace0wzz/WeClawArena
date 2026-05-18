@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-canyon_industrial_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "canyon_industrial_sales"
+      ],
+      "mandate_id": "mandate-canyon_industrial_sales@sales",
+      "owner_id": "canyon_industrial_sales",
+      "scope_id": "scope-canyon_industrial_sales@sales"
+    },
+    "mandate-seabright_finance@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "seabright_finance"
+      ],
+      "mandate_id": "mandate-seabright_finance@finance",
+      "owner_id": "seabright_finance",
+      "scope_id": "scope-seabright_finance@finance"
+    },
+    "mandate-seabright_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "seabright_procurement"
+      ],
+      "mandate_id": "mandate-seabright_procurement@procurement",
+      "owner_id": "seabright_procurement",
+      "scope_id": "scope-seabright_procurement@procurement"
+    }
+  },
+  "authorization_scopes": {
+    "scope-canyon_industrial_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "canyon_industrial_sales@sales",
+      "owner_id": "canyon_industrial_sales",
+      "resource_ids": [
+        "resource://canyon_industrial_sales/governed"
+      ],
+      "scope_id": "scope-canyon_industrial_sales@sales"
+    },
+    "scope-seabright_finance@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "seabright_finance@finance",
+      "owner_id": "seabright_finance",
+      "resource_ids": [
+        "resource://seabright_finance/governed"
+      ],
+      "scope_id": "scope-seabright_finance@finance"
+    },
+    "scope-seabright_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "seabright_procurement@procurement",
+      "owner_id": "seabright_procurement",
+      "resource_ids": [
+        "resource://seabright_procurement/governed"
+      ],
+      "scope_id": "scope-seabright_procurement@procurement"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "canyon_industrial_sales@sales": {
+      "agent_id": "canyon_seller",
+      "identity_id": "canyon_industrial_sales@sales",
+      "owner_id": "canyon_industrial_sales"
+    },
+    "seabright_finance@finance": {
+      "agent_id": "seabright_finance_approver",
+      "identity_id": "seabright_finance@finance",
+      "owner_id": "seabright_finance"
+    },
+    "seabright_procurement@procurement": {
+      "agent_id": "seabright_buyer",
+      "identity_id": "seabright_procurement@procurement",
+      "owner_id": "seabright_procurement"
+    }
+  },
+  "owners": {
+    "canyon_industrial_sales": {
+      "owner_id": "canyon_industrial_sales",
+      "user_id": "canyon_industrial_sales"
+    },
+    "seabright_finance": {
+      "owner_id": "seabright_finance",
+      "user_id": "seabright_finance"
+    },
+    "seabright_procurement": {
+      "owner_id": "seabright_procurement",
+      "user_id": "seabright_procurement"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "seabright_buyer",
+      "target": "canyon_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "seabright_buyer",
+      "target": "seabright_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "seabright_finance_approver",
+      "target": "seabright_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "canyon_seller",
+      "target": "seabright_buyer"
+    }
+  ]
+}

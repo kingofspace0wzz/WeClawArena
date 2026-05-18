@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-meridian_it_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "meridian_it_procurement"
+      ],
+      "mandate_id": "mandate-meridian_it_procurement@procurement",
+      "owner_id": "meridian_it_procurement",
+      "scope_id": "scope-meridian_it_procurement@procurement"
+    },
+    "mandate-meridian_vendor_management@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "meridian_vendor_management"
+      ],
+      "mandate_id": "mandate-meridian_vendor_management@finance",
+      "owner_id": "meridian_vendor_management",
+      "scope_id": "scope-meridian_vendor_management@finance"
+    },
+    "mandate-omniworks_account_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "omniworks_account_sales"
+      ],
+      "mandate_id": "mandate-omniworks_account_sales@sales",
+      "owner_id": "omniworks_account_sales",
+      "scope_id": "scope-omniworks_account_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-meridian_it_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "meridian_it_procurement@procurement",
+      "owner_id": "meridian_it_procurement",
+      "resource_ids": [
+        "resource://meridian_it_procurement/governed"
+      ],
+      "scope_id": "scope-meridian_it_procurement@procurement"
+    },
+    "scope-meridian_vendor_management@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "meridian_vendor_management@finance",
+      "owner_id": "meridian_vendor_management",
+      "resource_ids": [
+        "resource://meridian_vendor_management/governed"
+      ],
+      "scope_id": "scope-meridian_vendor_management@finance"
+    },
+    "scope-omniworks_account_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "omniworks_account_sales@sales",
+      "owner_id": "omniworks_account_sales",
+      "resource_ids": [
+        "resource://omniworks_account_sales/governed"
+      ],
+      "scope_id": "scope-omniworks_account_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "meridian_it_procurement@procurement": {
+      "agent_id": "meridian_buyer",
+      "identity_id": "meridian_it_procurement@procurement",
+      "owner_id": "meridian_it_procurement"
+    },
+    "meridian_vendor_management@finance": {
+      "agent_id": "meridian_vendor_approver",
+      "identity_id": "meridian_vendor_management@finance",
+      "owner_id": "meridian_vendor_management"
+    },
+    "omniworks_account_sales@sales": {
+      "agent_id": "omniworks_seller",
+      "identity_id": "omniworks_account_sales@sales",
+      "owner_id": "omniworks_account_sales"
+    }
+  },
+  "owners": {
+    "meridian_it_procurement": {
+      "owner_id": "meridian_it_procurement",
+      "user_id": "meridian_it_procurement"
+    },
+    "meridian_vendor_management": {
+      "owner_id": "meridian_vendor_management",
+      "user_id": "meridian_vendor_management"
+    },
+    "omniworks_account_sales": {
+      "owner_id": "omniworks_account_sales",
+      "user_id": "omniworks_account_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "meridian_buyer",
+      "target": "omniworks_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "meridian_buyer",
+      "target": "meridian_vendor_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "meridian_vendor_approver",
+      "target": "meridian_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "omniworks_seller",
+      "target": "meridian_buyer"
+    }
+  ]
+}

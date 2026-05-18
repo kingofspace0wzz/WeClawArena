@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-keystone_medical_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "keystone_medical_sales"
+      ],
+      "mandate_id": "mandate-keystone_medical_sales@sales",
+      "owner_id": "keystone_medical_sales",
+      "scope_id": "scope-keystone_medical_sales@sales"
+    },
+    "mandate-solace_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "solace_procurement"
+      ],
+      "mandate_id": "mandate-solace_procurement@procurement",
+      "owner_id": "solace_procurement",
+      "scope_id": "scope-solace_procurement@procurement"
+    },
+    "mandate-solace_vendor_management@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "solace_vendor_management"
+      ],
+      "mandate_id": "mandate-solace_vendor_management@finance",
+      "owner_id": "solace_vendor_management",
+      "scope_id": "scope-solace_vendor_management@finance"
+    }
+  },
+  "authorization_scopes": {
+    "scope-keystone_medical_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "keystone_medical_sales@sales",
+      "owner_id": "keystone_medical_sales",
+      "resource_ids": [
+        "resource://keystone_medical_sales/governed"
+      ],
+      "scope_id": "scope-keystone_medical_sales@sales"
+    },
+    "scope-solace_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "solace_procurement@procurement",
+      "owner_id": "solace_procurement",
+      "resource_ids": [
+        "resource://solace_procurement/governed"
+      ],
+      "scope_id": "scope-solace_procurement@procurement"
+    },
+    "scope-solace_vendor_management@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "solace_vendor_management@finance",
+      "owner_id": "solace_vendor_management",
+      "resource_ids": [
+        "resource://solace_vendor_management/governed"
+      ],
+      "scope_id": "scope-solace_vendor_management@finance"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "keystone_medical_sales@sales": {
+      "agent_id": "keystone_seller",
+      "identity_id": "keystone_medical_sales@sales",
+      "owner_id": "keystone_medical_sales"
+    },
+    "solace_procurement@procurement": {
+      "agent_id": "solace_buyer",
+      "identity_id": "solace_procurement@procurement",
+      "owner_id": "solace_procurement"
+    },
+    "solace_vendor_management@finance": {
+      "agent_id": "solace_vendor_approver",
+      "identity_id": "solace_vendor_management@finance",
+      "owner_id": "solace_vendor_management"
+    }
+  },
+  "owners": {
+    "keystone_medical_sales": {
+      "owner_id": "keystone_medical_sales",
+      "user_id": "keystone_medical_sales"
+    },
+    "solace_procurement": {
+      "owner_id": "solace_procurement",
+      "user_id": "solace_procurement"
+    },
+    "solace_vendor_management": {
+      "owner_id": "solace_vendor_management",
+      "user_id": "solace_vendor_management"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "solace_buyer",
+      "target": "keystone_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "solace_buyer",
+      "target": "solace_vendor_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "solace_vendor_approver",
+      "target": "solace_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "keystone_seller",
+      "target": "solace_buyer"
+    }
+  ]
+}

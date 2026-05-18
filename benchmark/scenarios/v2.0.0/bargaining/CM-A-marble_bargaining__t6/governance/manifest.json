@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-monarch_components_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "monarch_components_sales"
+      ],
+      "mandate_id": "mandate-monarch_components_sales@sales",
+      "owner_id": "monarch_components_sales",
+      "scope_id": "scope-monarch_components_sales@sales"
+    },
+    "mandate-vesta_capacity_planning@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "vesta_capacity_planning"
+      ],
+      "mandate_id": "mandate-vesta_capacity_planning@finance",
+      "owner_id": "vesta_capacity_planning",
+      "scope_id": "scope-vesta_capacity_planning@finance"
+    },
+    "mandate-vesta_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "vesta_procurement"
+      ],
+      "mandate_id": "mandate-vesta_procurement@procurement",
+      "owner_id": "vesta_procurement",
+      "scope_id": "scope-vesta_procurement@procurement"
+    }
+  },
+  "authorization_scopes": {
+    "scope-monarch_components_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "monarch_components_sales@sales",
+      "owner_id": "monarch_components_sales",
+      "resource_ids": [
+        "resource://monarch_components_sales/governed"
+      ],
+      "scope_id": "scope-monarch_components_sales@sales"
+    },
+    "scope-vesta_capacity_planning@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "vesta_capacity_planning@finance",
+      "owner_id": "vesta_capacity_planning",
+      "resource_ids": [
+        "resource://vesta_capacity_planning/governed"
+      ],
+      "scope_id": "scope-vesta_capacity_planning@finance"
+    },
+    "scope-vesta_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "vesta_procurement@procurement",
+      "owner_id": "vesta_procurement",
+      "resource_ids": [
+        "resource://vesta_procurement/governed"
+      ],
+      "scope_id": "scope-vesta_procurement@procurement"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "monarch_components_sales@sales": {
+      "agent_id": "monarch_seller",
+      "identity_id": "monarch_components_sales@sales",
+      "owner_id": "monarch_components_sales"
+    },
+    "vesta_capacity_planning@finance": {
+      "agent_id": "vesta_capacity_approver",
+      "identity_id": "vesta_capacity_planning@finance",
+      "owner_id": "vesta_capacity_planning"
+    },
+    "vesta_procurement@procurement": {
+      "agent_id": "vesta_buyer",
+      "identity_id": "vesta_procurement@procurement",
+      "owner_id": "vesta_procurement"
+    }
+  },
+  "owners": {
+    "monarch_components_sales": {
+      "owner_id": "monarch_components_sales",
+      "user_id": "monarch_components_sales"
+    },
+    "vesta_capacity_planning": {
+      "owner_id": "vesta_capacity_planning",
+      "user_id": "vesta_capacity_planning"
+    },
+    "vesta_procurement": {
+      "owner_id": "vesta_procurement",
+      "user_id": "vesta_procurement"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "vesta_buyer",
+      "target": "monarch_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "vesta_buyer",
+      "target": "vesta_capacity_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "vesta_capacity_approver",
+      "target": "vesta_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "monarch_seller",
+      "target": "vesta_buyer"
+    }
+  ]
+}

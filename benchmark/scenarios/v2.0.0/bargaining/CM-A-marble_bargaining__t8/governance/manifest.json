@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-kestrel_legal@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "kestrel_legal"
+      ],
+      "mandate_id": "mandate-kestrel_legal@finance",
+      "owner_id": "kestrel_legal",
+      "scope_id": "scope-kestrel_legal@finance"
+    },
+    "mandate-kestrel_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "kestrel_procurement"
+      ],
+      "mandate_id": "mandate-kestrel_procurement@procurement",
+      "owner_id": "kestrel_procurement",
+      "scope_id": "scope-kestrel_procurement@procurement"
+    },
+    "mandate-orion_field_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "orion_field_sales"
+      ],
+      "mandate_id": "mandate-orion_field_sales@sales",
+      "owner_id": "orion_field_sales",
+      "scope_id": "scope-orion_field_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-kestrel_legal@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "kestrel_legal@finance",
+      "owner_id": "kestrel_legal",
+      "resource_ids": [
+        "resource://kestrel_legal/governed"
+      ],
+      "scope_id": "scope-kestrel_legal@finance"
+    },
+    "scope-kestrel_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "kestrel_procurement@procurement",
+      "owner_id": "kestrel_procurement",
+      "resource_ids": [
+        "resource://kestrel_procurement/governed"
+      ],
+      "scope_id": "scope-kestrel_procurement@procurement"
+    },
+    "scope-orion_field_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "orion_field_sales@sales",
+      "owner_id": "orion_field_sales",
+      "resource_ids": [
+        "resource://orion_field_sales/governed"
+      ],
+      "scope_id": "scope-orion_field_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "kestrel_legal@finance": {
+      "agent_id": "kestrel_legal_approver",
+      "identity_id": "kestrel_legal@finance",
+      "owner_id": "kestrel_legal"
+    },
+    "kestrel_procurement@procurement": {
+      "agent_id": "kestrel_buyer",
+      "identity_id": "kestrel_procurement@procurement",
+      "owner_id": "kestrel_procurement"
+    },
+    "orion_field_sales@sales": {
+      "agent_id": "orion_seller",
+      "identity_id": "orion_field_sales@sales",
+      "owner_id": "orion_field_sales"
+    }
+  },
+  "owners": {
+    "kestrel_legal": {
+      "owner_id": "kestrel_legal",
+      "user_id": "kestrel_legal"
+    },
+    "kestrel_procurement": {
+      "owner_id": "kestrel_procurement",
+      "user_id": "kestrel_procurement"
+    },
+    "orion_field_sales": {
+      "owner_id": "orion_field_sales",
+      "user_id": "orion_field_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "kestrel_buyer",
+      "target": "orion_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "kestrel_buyer",
+      "target": "kestrel_legal_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "kestrel_legal_approver",
+      "target": "kestrel_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "orion_seller",
+      "target": "kestrel_buyer"
+    }
+  ]
+}

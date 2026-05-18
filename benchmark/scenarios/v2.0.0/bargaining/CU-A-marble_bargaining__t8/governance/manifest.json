@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-pinecrest_compliance@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "pinecrest_compliance"
+      ],
+      "mandate_id": "mandate-pinecrest_compliance@finance",
+      "owner_id": "pinecrest_compliance",
+      "scope_id": "scope-pinecrest_compliance@finance"
+    },
+    "mandate-pinecrest_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "pinecrest_procurement"
+      ],
+      "mandate_id": "mandate-pinecrest_procurement@procurement",
+      "owner_id": "pinecrest_procurement",
+      "scope_id": "scope-pinecrest_procurement@procurement"
+    },
+    "mandate-vector_medical_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "vector_medical_sales"
+      ],
+      "mandate_id": "mandate-vector_medical_sales@sales",
+      "owner_id": "vector_medical_sales",
+      "scope_id": "scope-vector_medical_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-pinecrest_compliance@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "pinecrest_compliance@finance",
+      "owner_id": "pinecrest_compliance",
+      "resource_ids": [
+        "resource://pinecrest_compliance/governed"
+      ],
+      "scope_id": "scope-pinecrest_compliance@finance"
+    },
+    "scope-pinecrest_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "pinecrest_procurement@procurement",
+      "owner_id": "pinecrest_procurement",
+      "resource_ids": [
+        "resource://pinecrest_procurement/governed"
+      ],
+      "scope_id": "scope-pinecrest_procurement@procurement"
+    },
+    "scope-vector_medical_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "vector_medical_sales@sales",
+      "owner_id": "vector_medical_sales",
+      "resource_ids": [
+        "resource://vector_medical_sales/governed"
+      ],
+      "scope_id": "scope-vector_medical_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "pinecrest_compliance@finance": {
+      "agent_id": "pinecrest_compliance_approver",
+      "identity_id": "pinecrest_compliance@finance",
+      "owner_id": "pinecrest_compliance"
+    },
+    "pinecrest_procurement@procurement": {
+      "agent_id": "pinecrest_buyer",
+      "identity_id": "pinecrest_procurement@procurement",
+      "owner_id": "pinecrest_procurement"
+    },
+    "vector_medical_sales@sales": {
+      "agent_id": "vector_seller",
+      "identity_id": "vector_medical_sales@sales",
+      "owner_id": "vector_medical_sales"
+    }
+  },
+  "owners": {
+    "pinecrest_compliance": {
+      "owner_id": "pinecrest_compliance",
+      "user_id": "pinecrest_compliance"
+    },
+    "pinecrest_procurement": {
+      "owner_id": "pinecrest_procurement",
+      "user_id": "pinecrest_procurement"
+    },
+    "vector_medical_sales": {
+      "owner_id": "vector_medical_sales",
+      "user_id": "vector_medical_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "pinecrest_buyer",
+      "target": "vector_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "pinecrest_buyer",
+      "target": "pinecrest_compliance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "pinecrest_compliance_approver",
+      "target": "pinecrest_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "vector_seller",
+      "target": "pinecrest_buyer"
+    }
+  ]
+}

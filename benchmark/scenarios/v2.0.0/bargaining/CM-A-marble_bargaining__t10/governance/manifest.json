@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-nimbus_platform_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "nimbus_platform_sales"
+      ],
+      "mandate_id": "mandate-nimbus_platform_sales@sales",
+      "owner_id": "nimbus_platform_sales",
+      "scope_id": "scope-nimbus_platform_sales@sales"
+    },
+    "mandate-quartz_it_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "quartz_it_procurement"
+      ],
+      "mandate_id": "mandate-quartz_it_procurement@procurement",
+      "owner_id": "quartz_it_procurement",
+      "scope_id": "scope-quartz_it_procurement@procurement"
+    },
+    "mandate-quartz_vendor_management@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "quartz_vendor_management"
+      ],
+      "mandate_id": "mandate-quartz_vendor_management@finance",
+      "owner_id": "quartz_vendor_management",
+      "scope_id": "scope-quartz_vendor_management@finance"
+    }
+  },
+  "authorization_scopes": {
+    "scope-nimbus_platform_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "nimbus_platform_sales@sales",
+      "owner_id": "nimbus_platform_sales",
+      "resource_ids": [
+        "resource://nimbus_platform_sales/governed"
+      ],
+      "scope_id": "scope-nimbus_platform_sales@sales"
+    },
+    "scope-quartz_it_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "quartz_it_procurement@procurement",
+      "owner_id": "quartz_it_procurement",
+      "resource_ids": [
+        "resource://quartz_it_procurement/governed"
+      ],
+      "scope_id": "scope-quartz_it_procurement@procurement"
+    },
+    "scope-quartz_vendor_management@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "quartz_vendor_management@finance",
+      "owner_id": "quartz_vendor_management",
+      "resource_ids": [
+        "resource://quartz_vendor_management/governed"
+      ],
+      "scope_id": "scope-quartz_vendor_management@finance"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "nimbus_platform_sales@sales": {
+      "agent_id": "nimbus_seller",
+      "identity_id": "nimbus_platform_sales@sales",
+      "owner_id": "nimbus_platform_sales"
+    },
+    "quartz_it_procurement@procurement": {
+      "agent_id": "quartz_buyer",
+      "identity_id": "quartz_it_procurement@procurement",
+      "owner_id": "quartz_it_procurement"
+    },
+    "quartz_vendor_management@finance": {
+      "agent_id": "quartz_vendor_approver",
+      "identity_id": "quartz_vendor_management@finance",
+      "owner_id": "quartz_vendor_management"
+    }
+  },
+  "owners": {
+    "nimbus_platform_sales": {
+      "owner_id": "nimbus_platform_sales",
+      "user_id": "nimbus_platform_sales"
+    },
+    "quartz_it_procurement": {
+      "owner_id": "quartz_it_procurement",
+      "user_id": "quartz_it_procurement"
+    },
+    "quartz_vendor_management": {
+      "owner_id": "quartz_vendor_management",
+      "user_id": "quartz_vendor_management"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "quartz_buyer",
+      "target": "nimbus_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "quartz_buyer",
+      "target": "quartz_vendor_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "quartz_vendor_approver",
+      "target": "quartz_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "nimbus_seller",
+      "target": "quartz_buyer"
+    }
+  ]
+}
