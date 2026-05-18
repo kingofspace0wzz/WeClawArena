@@ -37,22 +37,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from clawsocialarena.generator.phase5_attack_variants import (
-    PHASE5_VARIANT_INDEX_FILENAME,
-    VariantRecord,
-    expand_base_records_to_variants,
-    load_variant_index,
-)
-from clawsocialarena.generator.phase5_base_generator import (
-    BaseBundleRecord,
-    generate_base_bundles,
-)
-from clawsocialarena.generator.phase5_supplementary import (
-    SupplementaryRecord,
-    supplementary_records,
-)
-
-
 PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
 # v2 counts (difficulty-tier dim dropped, marble_research redesigned to 8 tasks):
 #   3 marble_research cells × 8 × 5 = 120
@@ -184,6 +168,14 @@ def assemble_manifest(
     Writes ``phase5_manifest.json`` at ``out_dir`` and returns the
     same payload as a Python dict.
     """
+    from clawsocialarena.generator.phase5_attack_variants import (
+        PHASE5_VARIANT_INDEX_FILENAME,
+        expand_base_records_to_variants,
+        load_variant_index,
+    )
+    from clawsocialarena.generator.phase5_base_generator import generate_base_bundles
+    from clawsocialarena.generator.phase5_supplementary import supplementary_records
+
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 

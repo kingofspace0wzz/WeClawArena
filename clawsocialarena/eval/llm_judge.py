@@ -297,7 +297,28 @@ def _resolve_session_db_path(
     """
     transcript_path = row.get("transcript_path")
     if isinstance(transcript_path, str) and transcript_path:
-        return Path(transcript_path)
+        path = Path(transcript_path)
+        if path.suffix == ".db":
+            return path
+        if path.name == "simulation_report.json":
+            action_log = path.parent / "action_log.db"
+            if action_log.is_file():
+                return action_log
+            sibling_session = path.parent / "session.db"
+            if sibling_session.is_file():
+                return sibling_session
+        return path
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    bundle_dir_raw = extra.get("bundle_dir") if extra else None
+    if isinstance(bundle_dir_raw, str) and bundle_dir_raw:
+        bundle_dir = Path(bundle_dir_raw)
+        for candidate in (
+            bundle_dir / "run" / "action_log.db",
+            bundle_dir / "run" / "session.db",
+            bundle_dir / "phase5_session" / "session.db",
+        ):
+            if candidate.is_file():
+                return candidate
     cell_id = str(row.get("cell_id") or "")
     task_index = int(row.get("task_index") or 0)
     tier_index = int(row.get("tier_index") or 0)
@@ -333,6 +354,19 @@ def _resolve_variant_metadata_path(
     attack_mode = str(row.get("attack_mode") or "no_attacker")
     if attack_mode == "no_attacker":
         return None
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    bundle_dir_raw = extra.get("bundle_dir") if extra else None
+    if isinstance(bundle_dir_raw, str) and bundle_dir_raw:
+        bundle_dir = Path(bundle_dir_raw)
+        for candidate in (
+            bundle_dir / "phase5_variant_metadata.json",
+            bundle_dir
+            / "attack_variants"
+            / attack_mode
+            / "phase5_variant_metadata.json",
+        ):
+            if candidate.is_file():
+                return candidate
     candidate = (
         base_dir
         / cell_id
@@ -391,8 +425,13 @@ def _load_trajectory_from_session_db(
             source_ids = json.loads(raw["source_action_ids"] or "[]")
         except (TypeError, json.JSONDecodeError):
             source_ids = []
+        tool_call_action_id = payload.get("tool_call_action_id")
+        if tool_call_action_id:
+            source_ids.append(str(tool_call_action_id))
         for source_id in source_ids:
-            observations_by_source[str(source_id)] = payload
+            observations_by_source[str(source_id)] = _coerce_observation_payload(
+                payload
+            )
 
     for raw in rows:
         action_type = raw["action_type"]
@@ -432,6 +471,22 @@ def _load_trajectory_from_session_db(
         "tool_dispatches": tool_dispatches,
         "action_log": action_log,
     }
+
+
+def _coerce_observation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize tool observations from session and action-log DBs."""
+    observation = payload.get("observation")
+    if isinstance(observation, str):
+        try:
+            decoded = json.loads(observation)
+        except json.JSONDecodeError:
+            return {"ok": None, "raw": observation}
+        if isinstance(decoded, dict):
+            return decoded
+        return {"ok": None, "raw": decoded}
+    if isinstance(observation, dict):
+        return observation
+    return payload
 
 
 def load_trajectory_for_row(

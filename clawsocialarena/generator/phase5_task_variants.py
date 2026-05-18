@@ -31,14 +31,6 @@ from clawsocialarena.generator.family_packs.marble_bargaining.bargaining_seed_da
     BARGAINING_TASK_SEEDS as _MARBLE_BARGAINING_TASK_SEEDS,
     bargaining_task_seeds_for_cell as _marble_bargaining_seeds_for_cell,
 )
-from clawsocialarena.generator.family_packs.marble_bidding.bidding_seed_data import (
-    MARBLE_BIDDING_TASK_SEEDS as _MARBLE_BIDDING_TASK_SEEDS,
-    bidding_task_seeds_for_cell as _marble_bidding_seeds_for_cell,
-)
-from clawsocialarena.generator.family_packs.swebench_workspace.seed_data import (
-    WORKSPACE_TASK_SEEDS as _SWEBENCH_WORKSPACE_TASK_SEEDS,
-)
-
 
 @dataclass(frozen=True)
 class TaskVariantSpec:
@@ -175,6 +167,11 @@ def _kwargs_marble_bidding(
     *, cell_id: str | None = None
 ) -> tuple[dict[str, Any], ...]:
     """Return task-variant kwarg dicts for owned-ecosystem marble_bidding."""
+    from clawsocialarena.generator.family_packs.marble_bidding.bidding_seed_data import (
+        MARBLE_BIDDING_TASK_SEEDS as _MARBLE_BIDDING_TASK_SEEDS,
+        bidding_task_seeds_for_cell as _marble_bidding_seeds_for_cell,
+    )
+
     seeds = (
         _marble_bidding_seeds_for_cell(cell_id)
         if cell_id is not None
@@ -226,6 +223,10 @@ def _kwargs_wildclaw_social() -> tuple[dict[str, Any], dict[str, Any], dict[str,
 
 def _kwargs_swebench_workspace() -> tuple[dict[str, Any], ...]:
     """Return task-variant kwarg dicts for swebench_workspace."""
+    from clawsocialarena.generator.family_packs.swebench_workspace.seed_data import (
+        WORKSPACE_TASK_SEEDS as _SWEBENCH_WORKSPACE_TASK_SEEDS,
+    )
+
     return tuple(dict(seed.loader_kwargs()) for seed in _SWEBENCH_WORKSPACE_TASK_SEEDS)
 
 

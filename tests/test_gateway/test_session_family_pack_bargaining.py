@@ -1,6 +1,7 @@
-"""Session.build wires marble_bargaining handlers automatically."""
+"""Session.build wires owned-ecosystem marble_bargaining handlers."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,10 @@ def materialized_bundle_dir(tmp_path: Path) -> Path:
     return materialize_bargaining_bundle(bundle, tmp_path / "scenario")
 
 
+def _family_context(materialized_bundle_dir: Path) -> dict:
+    return json.loads((materialized_bundle_dir / "family_pack_context.json").read_text())
+
+
 def test_session_build_baseline_registers_bargaining_handlers(
     materialized_bundle_dir: Path,
     tmp_path: Path,
@@ -30,13 +35,7 @@ def test_session_build_baseline_registers_bargaining_handlers(
         db_path=tmp_path / "ignored.db",
         resource_root=materialized_bundle_dir / "resources",
         family_id="marble_bargaining",
-        family_pack_context={
-            "buyer_owner_id": "alice",
-            "seller_owner_id": "bob",
-            "buyer_budget_ceiling": 60.0,
-            "seller_reservation": 40.0,
-            "market_reference_price": 50.0,
-        },
+        family_pack_context=_family_context(materialized_bundle_dir),
     )
     registered = set(session.mcp_host.tools())
     assert set(TOOL_NAMES).issubset(registered)
@@ -54,16 +53,11 @@ async def test_session_built_handlers_dispatch_against_real_sqlite(
         resource_root=materialized_bundle_dir / "resources",
         work_dir=tmp_path,
         family_id="marble_bargaining",
-        family_pack_context={
-            "buyer_owner_id": "alice",
-            "seller_owner_id": "bob",
-            "buyer_budget_ceiling": 60.0,
-            "seller_reservation": 40.0,
-            "market_reference_price": 50.0,
-        },
+        family_pack_context=_family_context(materialized_bundle_dir),
     )
     result = await session.mcp_host.dispatch(
-        "get_market_reference", {"item_id": "ITEM-7"}
+        "read_owned_file",
+        {"owner_id": "acme_procurement", "path": "purchase_request.md"},
     )
-    assert result["ok"]
-    assert result["market_reference_price"] == 50.0
+    assert result["ok"] is True
+    assert "PR-447" in result["content"]

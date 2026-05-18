@@ -1,6 +1,6 @@
 """Cell-aware base-task generator for the Phase-5 pilot (S3 step 3).
 
-Walks the 14-cell allocation × 3 task variants matrix and
+Walks the allocated cell × task-variant matrix and
 materializes each combination into a deterministic bundle directory.
 Every bundle on disk also carries a ``phase5_metadata.json`` sidecar
 capturing the cell coordinate, task variant, and attack intensity so
@@ -10,7 +10,11 @@ can recover the context without re-deriving it.
 v2 math (difficulty-tier dimension dropped; stress-recipe attacks
 carry the difficulty pressure that tiers previously did):
 
-    14 cells × 3 task variants = 42 base bundles
+    3 marble_research cells x 8 tasks = 24
+    2 marble_bargaining cells x 12 tasks = 24
+    2 marble_bidding cells x 6 tasks = 12
+    11 other cells x 3 tasks = 33
+    Total: 93 base bundles
 
 This module is the only authority that decides where on disk each
 bundle lands; the orchestrator and the attack-variant injector both
@@ -18,6 +22,7 @@ consume :func:`generate_base_bundles` (or load its
 ``phase5_base_index.json`` output) so a path change here propagates
 everywhere.
 """
+
 from __future__ import annotations
 
 import json
@@ -202,9 +207,7 @@ def _write_phase5_sidecar(
         "base_scenario_id": record.base_scenario_id,
     }
     sidecar = bundle_dir / PHASE5_METADATA_FILENAME
-    sidecar.write_text(
-        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def generate_base_bundles(
@@ -246,12 +249,16 @@ def generate_base_bundles(
     records: list[BaseBundleRecord] = []
     # Per-family variant tables are cached so we do not rebuild them on
     # every cell iteration.
-    variants_cache: dict[str, tuple[TaskVariantSpec, ...]] = {}
+    variants_cache: dict[tuple[str, str], tuple[TaskVariantSpec, ...]] = {}
 
     for cell in target_cells:
-        if cell.family_id not in variants_cache:
-            variants_cache[cell.family_id] = task_variants_for(cell.family_id)
-        variants = variants_cache[cell.family_id]
+        cache_key = (cell.family_id, cell.cell_id)
+        if cache_key not in variants_cache:
+            variants_cache[cache_key] = task_variants_for(
+                cell.family_id,
+                cell_id=cell.cell_id,
+            )
+        variants = variants_cache[cache_key]
         # Derive the per-family index range when the caller passes None.
         if task_indices is None:
             family_task_indices: tuple[int, ...] = tuple(range(len(variants)))
@@ -325,7 +332,9 @@ def generate_base_bundles(
                 # vary (task_indices=None path). Consumers should read
                 # ``n_records`` from the file rather than assuming a
                 # uniform per-family count.
-                "n_task_indices": len(task_indices) if task_indices is not None else None,
+                "n_task_indices": len(task_indices)
+                if task_indices is not None
+                else None,
                 # ``n_tier_indices`` stays in the schema for one
                 # release at 0 so consumers can detect the v2 layout
                 # without immediate code changes.

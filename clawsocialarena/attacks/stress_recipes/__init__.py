@@ -11,14 +11,14 @@ The four canonical stress recipes per spec Section 4.2 are:
     governance    -> poisoned_consent_row (fake_approval_chain)
     collaboration -> adaptive_malicious_peer
 
-Static stress recipes (security, governance) mutate the variant
-bundle on disk before runtime; the live executor reads the mutated
-resources via normal MCP tool dispatch and the attack lands without
-any new runtime substrate. Adaptive stress recipes (privacy,
-collaboration) declare ``requires_runtime_peer=True`` and supply an
-``attacker_peer_prompt``; the live executor spins up a second LLM
-agent role that responds adaptively to the focal agent's outbound
-messages each turn.
+Static stress recipes mutate the variant bundle on disk before
+runtime; the live executor reads the mutated resources via normal MCP
+tool dispatch and the attack lands without any new runtime substrate.
+Some generic adaptive recipes still declare ``requires_runtime_peer``
+and supply an ``attacker_peer_prompt``. Family-specific owned-resource
+playbooks, such as bargaining, prefer static scenario/resource
+overlays so the docker runner does not need family-specific delivery
+branches.
 
 Wiring: the orchestrator selects the recipe by looking up
 ``variant_metadata.attack_recipe`` against :data:`STRESS_RECIPE_REGISTRY`.
@@ -55,6 +55,7 @@ from clawsocialarena.attacks.stress_recipes import (  # noqa: E402,F401
     privacy_adaptive_exfiltration,
     governance_poisoned_consent,
     collaboration_adaptive_peer,
+    bargaining_mode_local_playbooks,
 )
 
 

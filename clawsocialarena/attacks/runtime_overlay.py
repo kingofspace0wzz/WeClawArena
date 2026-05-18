@@ -38,6 +38,7 @@ from clawsocialarena.attacks.stress_recipes import (
     StressRecipe,
     StressVariantArtifacts,
 )
+from clawsocialarena.generator.phase5_store_layout import resolve_store_base_dir
 
 
 AXIS_TO_RECIPE: dict[str, str] = {
@@ -47,8 +48,39 @@ AXIS_TO_RECIPE: dict[str, str] = {
     "collaboration": "adaptive_malicious_peer",
 }
 
+FAMILY_AXIS_TO_RECIPE: dict[tuple[str, str], str] = {
+    (
+        "marble_bargaining",
+        "collaboration",
+    ): "bargaining_collaboration_mode_local_playbook",
+    ("marble_bargaining", "security"): "bargaining_security_mode_local_playbook",
+    ("marble_bargaining", "privacy"): "bargaining_privacy_mode_local_playbook",
+    ("marble_bargaining", "governance"): "bargaining_governance_mode_local_playbook",
+}
+
 # Private alias kept for backwards-compat within this module.
 _AXIS_TO_RECIPE = AXIS_TO_RECIPE
+
+
+def _workspace_substrate_version(base_bundle: dict[str, Any]) -> str:
+    context = base_bundle.get("family_pack_context")
+    if isinstance(context, dict) and context.get("workspace_substrate_version"):
+        return str(context["workspace_substrate_version"])
+    metadata = base_bundle.get("phase5_metadata")
+    if isinstance(metadata, dict) and metadata.get("workspace_substrate_version"):
+        return str(metadata["workspace_substrate_version"])
+    return "v1"
+
+
+def _recipe_name_for(
+    *,
+    family_id: str,
+    attack_mode: str,
+    base_bundle: dict[str, Any] | None = None,
+) -> str | None:
+    return FAMILY_AXIS_TO_RECIPE.get((family_id, attack_mode)) or AXIS_TO_RECIPE.get(
+        attack_mode
+    )
 
 
 def materialize_runtime_variant(
@@ -57,21 +89,26 @@ def materialize_runtime_variant(
     base_id: str,
     attack_mode: str,
     run_dir: Path,
+    bundle_dir: str | Path | None = None,
     recipe_registry: dict[str, StressRecipe] | None = None,
     seed: int | None = None,
 ) -> Path:
     """Copy a base bundle from the v2 store and apply the stress overlay.
 
     Raises:
-        FileNotFoundError: when ``store_dir/<base_id>/`` is not a dir.
+        FileNotFoundError: when the base cannot be found in either the
+            manifest path, ``store_dir/<domain>/<base_id>/``, or the legacy
+            ``store_dir/<base_id>/`` flat path.
         KeyError: when ``attack_mode`` is non-baseline but its recipe
             is missing from ``recipe_registry`` (default
             ``STRESS_RECIPE_REGISTRY``).
     """
     registry = recipe_registry or STRESS_RECIPE_REGISTRY
-    src_dir = store_dir / base_id
-    if not src_dir.is_dir():
-        raise FileNotFoundError(f"base bundle missing in store: {src_dir}")
+    src_dir = resolve_store_base_dir(
+        store_dir=store_dir,
+        base_id=base_id,
+        bundle_dir=bundle_dir,
+    )
 
     variant_id = f"{base_id}__{attack_mode}"
     variant_dir = run_dir / "variants" / variant_id
@@ -83,15 +120,19 @@ def materialize_runtime_variant(
     if attack_mode == "no_attacker":
         return variant_dir
 
-    recipe_name = AXIS_TO_RECIPE.get(attack_mode)
+    base_bundle = _load_base_bundle_for_recipe(variant_dir)
+    family_id = str(base_bundle.get("family_id") or "")
+    recipe_name = _recipe_name_for(
+        family_id=family_id,
+        attack_mode=attack_mode,
+        base_bundle=base_bundle,
+    )
     if recipe_name is None or recipe_name not in registry:
         raise KeyError(
             f"no stress recipe registered for attack_mode={attack_mode!r}"
         )
     recipe = registry[recipe_name]
 
-    base_bundle = _load_base_bundle_for_recipe(variant_dir)
-    family_id = str(base_bundle.get("family_id") or "")
     if seed is not None:
         deterministic_seed = seed
     else:
@@ -103,6 +144,14 @@ def materialize_runtime_variant(
         base_bundle=base_bundle, family_id=family_id, seed=deterministic_seed
     )
     _apply_artifacts(variant_dir=variant_dir, artifacts=artifacts)
+    _write_runtime_variant_metadata(
+        variant_dir=variant_dir,
+        base_id=base_id,
+        attack_mode=attack_mode,
+        family_id=family_id,
+        recipe_name=recipe_name,
+        artifacts=artifacts,
+    )
     return variant_dir
 
 
@@ -123,7 +172,58 @@ def _load_base_bundle_for_recipe(variant_dir: Path) -> dict[str, Any]:
         cm = merged.get("construction_manifest") or {}
         if isinstance(cm, dict) and cm.get("family_id"):
             merged["family_id"] = cm["family_id"]
+    context_path = variant_dir / "family_pack_context.json"
+    if context_path.is_file():
+        try:
+            context = json.loads(context_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            context = None
+        if isinstance(context, dict):
+            merged["family_pack_context"] = context
     return merged
+
+
+def _write_runtime_variant_metadata(
+    *,
+    variant_dir: Path,
+    base_id: str,
+    attack_mode: str,
+    family_id: str,
+    recipe_name: str,
+    artifacts: StressVariantArtifacts,
+) -> None:
+    metadata = {
+        "phase5_version": 1,
+        "variant_id": f"{base_id}__{attack_mode}",
+        "base_scenario_id": base_id,
+        "family_id": family_id,
+        "attack": {
+            "attack_mode": attack_mode,
+            "attack_recipe": artifacts.recipe_metadata.get(
+                "attack_recipe", recipe_name
+            ),
+            "attack_intensity": artifacts.recipe_metadata.get(
+                "attack_intensity", "stress"
+            ),
+            "delivery_surface": artifacts.recipe_metadata.get(
+                "delivery_surface", "message"
+            ),
+            "attacker_control": artifacts.recipe_metadata.get(
+                "attacker_control", "scripted_multi_turn"
+            ),
+            "target_agent_id": artifacts.target_agent_id,
+            "payload_text": artifacts.payload_text,
+            "metadata": dict(artifacts.recipe_metadata),
+            "requires_runtime_peer": artifacts.requires_runtime_peer,
+            "attacker_peer_id": artifacts.attacker_peer_id,
+            "attacker_peer_prompt": artifacts.attacker_peer_prompt,
+            "attacker_peer_max_turns": artifacts.attacker_peer_max_turns,
+        },
+    }
+    (variant_dir / "phase5_variant_metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def apply_recipe_to_variant_dir(
@@ -147,7 +247,11 @@ def apply_recipe_to_variant_dir(
     registered recipe; the caller can treat this as a no-op.
     """
     registry = recipe_registry or STRESS_RECIPE_REGISTRY
-    recipe_name = AXIS_TO_RECIPE.get(attack_mode)
+    recipe_name = _recipe_name_for(
+        family_id=family_id,
+        attack_mode=attack_mode,
+        base_bundle=base_bundle,
+    )
     if not recipe_name or recipe_name not in registry:
         return {"recipe": None, "applied": False}
     recipe = registry[recipe_name]
@@ -208,6 +312,19 @@ def _seed_variant_resource_dirs(variant_dir: Path) -> None:
        would change the baseline. We materialize a per-variant copy
        so each recipe's overlay is isolated.
     """
+    resources_root = variant_dir / "resources"
+    resources_initial_root = variant_dir / "resources_initial"
+
+    if resources_root.is_dir():
+        resources_initial_root.mkdir(parents=True, exist_ok=True)
+        for src in resources_root.rglob("*"):
+            if src.is_file():
+                rel = src.relative_to(resources_root)
+                dest = resources_initial_root / rel
+                if not dest.exists():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dest)
+
     for which in ("resources", "resources_initial"):
         target_root = variant_dir / which
         target_root.mkdir(parents=True, exist_ok=True)

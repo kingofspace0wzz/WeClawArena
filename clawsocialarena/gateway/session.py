@@ -317,12 +317,16 @@ class Session:
             )
             bargain = BargainingContext(
                 resources_root=Path(resource_root),
-                item_id=str(ctx.get("item_id", "ITEM-7")),
-                buyer_owner_id=str(ctx.get("buyer_owner_id", "alice")),
-                seller_owner_id=str(ctx.get("seller_owner_id", "bob")),
-                market_reference_price=float(ctx.get("market_reference_price", 50.0)),
-                buyer_budget_ceiling=float(ctx.get("buyer_budget_ceiling", 60.0)),
-                seller_reservation=float(ctx.get("seller_reservation", 40.0)),
+                transaction_id=str(ctx.get("transaction_id", "TXN-OE-001")),
+                resource_profile=str(
+                    ctx.get("resource_profile", "owned_ecosystem_procurement")
+                ),
+                item_id=str(ctx.get("item_id", "PRINTER-BUNDLE-12")),
+                quantity=int(ctx.get("quantity", 12)),
+                target_price=float(ctx.get("target_price", 795.0)),
+                buyer_owner_id=str(ctx.get("buyer_owner_id", "acme_procurement")),
+                seller_owner_id=str(ctx.get("seller_owner_id", "northstar_sales")),
+                approver_owner_id=str(ctx.get("approver_owner_id", "acme_finance")),
             )
             register_marble_bargaining_handlers(self.mcp_host, context=bargain)
             return
