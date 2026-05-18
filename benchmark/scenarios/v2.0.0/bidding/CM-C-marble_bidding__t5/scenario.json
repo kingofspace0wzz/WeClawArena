@@ -1,0 +1,182 @@
+{
+  "scenario_id": "marble_bidding_phase5_v5",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "solace_seller",
+      "user_id": "solace_controls_sales",
+      "system_prompt_template": "You are solace_controls_sales, the seller running auction AUC-BID-005 for BID-LOT-005. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "talon_buyer",
+      "user_id": "talon_projects",
+      "system_prompt_template": "You are talon_projects, a buyer in auction AUC-BID-005 for BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "umbra_buyer",
+      "user_id": "umbra_projects",
+      "system_prompt_template": "You are umbra_projects, a buyer in auction AUC-BID-005 for BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "vector_buyer",
+      "user_id": "vector_projects",
+      "system_prompt_template": "You are vector_projects, a buyer in auction AUC-BID-005 for BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "willow_buyer",
+      "user_id": "willow_projects",
+      "system_prompt_template": "You are willow_projects, a buyer in auction AUC-BID-005 for BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-BID-005",
+    "item_id": "BID-LOT-005",
+    "item_description": "Five sealed environmental sensor gateways for field trials",
+    "quantity": 5,
+    "market_reference_price": 1880.0,
+    "buyer_count": 4
+  },
+  "max_turns": 20,
+  "opening_message": {
+    "from": "system",
+    "to": "solace_seller",
+    "content": "Solace_Controls_Sales, list the item directly for buyer agents talon_buyer (`talon_projects`), umbra_buyer (`umbra_projects`), vector_buyer (`vector_projects`), willow_buyer (`willow_projects`): Five sealed environmental sensor gateways for field trials... The public market reference price is $1880.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "solace_seller",
+        "owner_id": "solace_controls_sales",
+        "persona_source": "personas/solace_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "solace_controls_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "talon_buyer",
+        "owner_id": "talon_projects",
+        "persona_source": "personas/talon_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "talon_projects@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "umbra_buyer",
+        "owner_id": "umbra_projects",
+        "persona_source": "personas/umbra_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "umbra_projects@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "vector_buyer",
+        "owner_id": "vector_projects",
+        "persona_source": "personas/vector_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "vector_projects@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "willow_buyer",
+        "owner_id": "willow_projects",
+        "persona_source": "personas/willow_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "willow_projects@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "solace_seller",
+        "target": "talon_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "talon_buyer",
+        "target": "solace_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "solace_seller",
+        "target": "umbra_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "umbra_buyer",
+        "target": "solace_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "solace_seller",
+        "target": "vector_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "vector_buyer",
+        "target": "solace_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "solace_seller",
+        "target": "willow_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "willow_buyer",
+        "target": "solace_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

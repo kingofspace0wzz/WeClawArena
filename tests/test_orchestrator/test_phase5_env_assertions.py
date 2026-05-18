@@ -162,6 +162,41 @@ def test_actions_and_communicate_both_pass() -> None:
     assert "exchange_item" in result.canonical_actions_dispatched
 
 
+def test_wildcard_agent_action_matches_any_agent_dispatch() -> None:
+    gt, criteria = _gt_with_criteria(
+        actions=[
+            {
+                "agent_id": "*",
+                "tool_name": "submit_bid",
+                "compare_args": ["auction_id", "item_id"],
+            }
+        ],
+        communicate_info=[],
+    )
+    log = _action_with_observation(
+        agent_id="beacon_buyer",
+        tool_name="submit_bid",
+        arguments={"auction_id": "AUC-BID-000", "item_id": "BID-LOT-000"},
+    )
+
+    result = evaluate_evaluation_criteria(
+        gt_bundle=gt,
+        evaluation_criteria_override=criteria,
+        action_log=log,
+        outbound_messages=[],
+    )
+
+    assert result.task_success is True
+    assert result.action_passes == [
+        {
+            "agent_id": "*",
+            "tool_name": "submit_bid",
+            "compare_args": ["auction_id", "item_id"],
+        }
+    ]
+    assert not result.action_failures
+
+
 def test_action_with_arg_mismatch_fails() -> None:
     gt, criteria = _gt_with_criteria(
         actions=[

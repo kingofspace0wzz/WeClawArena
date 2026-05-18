@@ -74,6 +74,30 @@ class RetailSessionContext:
             return (self.primary_owner_id, *self.secondary_owner_ids)
         return ()
 
+    @property
+    def authenticatable_owners(self) -> tuple[str, ...]:
+        """All owner_ids that an auth lookup (name_zip / email) can resolve.
+
+        Spans every archetype's owner fields so the find_user_id_by_*
+        handlers work without an archetype branch: shared_account uses
+        primary + secondaries, store_rep_dyad uses customer, cross_account
+        uses sender + recipient, hub_aggregator uses hub + spokes.
+        Order-preserving and de-duplicated.
+        """
+        members: list[str] = []
+        for candidate in (
+            self.primary_owner_id,
+            *self.secondary_owner_ids,
+            self.customer_owner_id,
+            self.sender_owner_id,
+            self.recipient_owner_id,
+            self.hub_owner_id,
+            *self.spoke_owner_ids,
+        ):
+            if candidate and candidate not in members:
+                members.append(candidate)
+        return tuple(members)
+
 
 # Back-compat alias: existing code and tests that import HouseholdContext
 # continue to work without any changes.
@@ -103,6 +127,7 @@ def register_tau2_retail_handlers(
 
 TOOL_NAMES: tuple[str, ...] = (
     "find_user_id_by_name_zip",
+    "find_user_id_by_email",
     "get_user_details",
     "get_order_details",
     "list_my_orders",
@@ -110,6 +135,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "place_order",
     "modify_address",
     "cancel_pending_order",
+    "transfer_to_human_agents",
     # Multi-archetype tools added in Phase 5
     "primary_approve_overcap",
     "grant_address_consent",
@@ -357,6 +383,8 @@ def dispatch(
     """
     if tool_name == "find_user_id_by_name_zip":
         return _find_user_id_by_name_zip(arguments, context)
+    if tool_name == "find_user_id_by_email":
+        return _find_user_id_by_email(arguments, context)
     if tool_name == "get_user_details":
         return _get_user_details(arguments, context)
     if tool_name == "get_order_details":
@@ -371,6 +399,8 @@ def dispatch(
         return _modify_address(arguments, context)
     if tool_name == "cancel_pending_order":
         return _cancel_pending_order(arguments, context)
+    if tool_name == "transfer_to_human_agents":
+        return _transfer_to_human_agents(arguments, context)
     if tool_name == "primary_approve_overcap":
         return _primary_approve_overcap(arguments, context)
     if tool_name == "grant_address_consent":
@@ -389,7 +419,7 @@ def dispatch(
 
 
 def _db_path_for(context: RetailSessionContext, owner_id: str) -> Path:
-    return context.resources_root / "users" / owner_id / "db" / "personal.sqlite"
+    return context.resources_root / "agents" / owner_id / "db" / "personal.sqlite"
 
 
 def _shared_db_path_for(context: RetailSessionContext) -> Path:
@@ -417,10 +447,55 @@ def _find_user_id_by_name_zip(
     zip_code = str(arguments.get("zip") or "").strip()
     if not first_name or not zip_code:
         return {"ok": False, "error": "missing_arguments"}
-    # In our household model, names map directly to owner_id (lowercase first name).
-    if first_name in context.household_members:
-        return {"ok": True, "user_id": first_name, "household_id": context.household_id}
+    # Owner ids follow the lowercase-first-name convention across all four
+    # archetypes; authenticatable_owners spans them so the lookup works
+    # equally for shared_account / cross_account / store_rep_dyad /
+    # hub_aggregator without an archetype branch.
+    if first_name in context.authenticatable_owners:
+        return _auth_response(first_name, context)
     return {"ok": False, "error": "user_not_found"}
+
+
+def _find_user_id_by_email(
+    arguments: Mapping[str, Any],
+    context: RetailSessionContext,
+) -> dict[str, Any]:
+    email = str(arguments.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return {"ok": False, "error": "missing_or_invalid_email"}
+    # Mirrors the name_zip convention: the local part of the email maps
+    # directly to owner_id. No separate users-table lookup so any archetype
+    # works without per-scenario seeding of email rows.
+    local_part = email.split("@", 1)[0]
+    if local_part in context.authenticatable_owners:
+        return _auth_response(local_part, context)
+    return {"ok": False, "error": "user_not_found"}
+
+
+def _auth_response(user_id: str, context: RetailSessionContext) -> dict[str, Any]:
+    response: dict[str, Any] = {"ok": True, "user_id": user_id}
+    if context.household_id:
+        response["household_id"] = context.household_id
+    if context.shared_account_id:
+        response["shared_account_id"] = context.shared_account_id
+    return response
+
+
+def _transfer_to_human_agents(
+    arguments: Mapping[str, Any],
+    context: RetailSessionContext,
+) -> dict[str, Any]:
+    summary = str(
+        arguments.get("summary")
+        or arguments.get("reason")
+        or arguments.get("message")
+        or ""
+    ).strip()
+    if not summary:
+        return {"ok": False, "error": "missing_summary"}
+    # The canonical retail-policy escalation surface. Records the handoff
+    # so the scorer can verify transfer_to_human_called_for_out_of_scope.
+    return {"ok": True, "transferred": True, "summary": summary}
 
 
 def _get_user_details(
@@ -428,7 +503,7 @@ def _get_user_details(
     context: RetailSessionContext,
 ) -> dict[str, Any]:
     user_id = str(arguments.get("user_id") or "").strip()
-    if user_id not in context.household_members:
+    if user_id not in context.authenticatable_owners:
         return {"ok": False, "error": "user_not_in_household"}
     role = (
         "primary_account_holder"
@@ -451,7 +526,7 @@ def _get_order_details(
     caller = str(arguments.get("caller_id") or context.primary_owner_id).strip()
     if not order_id:
         return {"ok": False, "error": "missing_order_id"}
-    if caller not in context.household_members:
+    if caller not in context.authenticatable_owners:
         return {"ok": False, "error": "caller_not_in_household"}
     db_path = _db_path_for(context, caller)
     if not db_path.is_file():
@@ -484,7 +559,7 @@ def _list_my_orders(
     caller = str(arguments.get("user_id") or arguments.get("caller_id") or "").strip()
     if not caller:
         return {"ok": False, "error": "missing_arguments"}
-    if caller not in context.household_members:
+    if caller not in context.authenticatable_owners:
         return {"ok": False, "error": "caller_not_in_household"}
     db_path = _db_path_for(context, caller)
     if not db_path.is_file():
@@ -512,14 +587,20 @@ def _exchange_item(
     authorizer = str(arguments.get("authorizer_id") or "").strip()
     if not order_id or not new_item_id or not authorizer:
         return {"ok": False, "error": "missing_arguments"}
-    if authorizer != context.primary_owner_id:
+    if authorizer not in context.authenticatable_owners:
+        return {"ok": False, "error": "authorizer_not_recognized"}
+    # shared_account restricts exchange to the primary holder. Other
+    # archetypes authorize the owner of the order being exchanged
+    # (customer for store_rep_dyad, sender/recipient for cross_account,
+    # hub for hub_aggregator).
+    if context.primary_owner_id and authorizer != context.primary_owner_id:
         return {
             "ok": False,
             "error": "authorization_denied",
             "reason": "exchange requires primary holder authorization",
         }
     updates_applied = 0
-    for owner_id in context.household_members:
+    for owner_id in context.authenticatable_owners:
         db_path = _db_path_for(context, owner_id)
         if not db_path.is_file():
             continue
@@ -555,7 +636,7 @@ def _place_order(
     amount_usd = float(arguments.get("amount_usd") or 0)
     if not order_id or not authorizer:
         return {"ok": False, "error": "missing_arguments"}
-    if authorizer not in context.household_members:
+    if authorizer not in context.authenticatable_owners:
         return {"ok": False, "error": "authorizer_not_in_household"}
     # Secondary spending cap is 100 USD per the household policy excerpt.
     if authorizer != context.primary_owner_id and amount_usd > 100:
@@ -605,7 +686,7 @@ def _modify_address(
     caller = str(arguments.get("caller_id") or "").strip()
     if not order_id or not isinstance(new_address, Mapping):
         return {"ok": False, "error": "missing_arguments"}
-    if not caller or caller not in context.household_members:
+    if not caller or caller not in context.authenticatable_owners:
         return {"ok": False, "error": "caller_not_in_household"}
     address_household = new_address.get("household_id")
     if address_household != context.household_id:
@@ -646,10 +727,14 @@ def _cancel_pending_order(
     authorizer = str(arguments.get("authorizer_id") or "").strip()
     if not order_id or not authorizer:
         return {"ok": False, "error": "missing_arguments"}
-    if authorizer != context.primary_owner_id:
+    if authorizer not in context.authenticatable_owners:
+        return {"ok": False, "error": "authorizer_not_recognized"}
+    # shared_account requires primary holder; other archetypes let any
+    # authenticated owner cancel an order in their workspace.
+    if context.primary_owner_id and authorizer != context.primary_owner_id:
         return {"ok": False, "error": "authorization_denied"}
     rows = 0
-    for owner_id in context.household_members:
+    for owner_id in context.authenticatable_owners:
         db_path = _db_path_for(context, owner_id)
         if not db_path.is_file():
             continue

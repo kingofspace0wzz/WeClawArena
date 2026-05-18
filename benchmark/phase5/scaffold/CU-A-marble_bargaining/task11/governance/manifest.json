@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-helio_pm_approval@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "helio_pm_approval"
+      ],
+      "mandate_id": "mandate-helio_pm_approval@finance",
+      "owner_id": "helio_pm_approval",
+      "scope_id": "scope-helio_pm_approval@finance"
+    },
+    "mandate-helio_projects@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "helio_projects"
+      ],
+      "mandate_id": "mandate-helio_projects@procurement",
+      "owner_id": "helio_projects",
+      "scope_id": "scope-helio_projects@procurement"
+    },
+    "mandate-summit_controls_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "summit_controls_sales"
+      ],
+      "mandate_id": "mandate-summit_controls_sales@sales",
+      "owner_id": "summit_controls_sales",
+      "scope_id": "scope-summit_controls_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-helio_pm_approval@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "helio_pm_approval@finance",
+      "owner_id": "helio_pm_approval",
+      "resource_ids": [
+        "resource://helio_pm_approval/governed"
+      ],
+      "scope_id": "scope-helio_pm_approval@finance"
+    },
+    "scope-helio_projects@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "helio_projects@procurement",
+      "owner_id": "helio_projects",
+      "resource_ids": [
+        "resource://helio_projects/governed"
+      ],
+      "scope_id": "scope-helio_projects@procurement"
+    },
+    "scope-summit_controls_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "summit_controls_sales@sales",
+      "owner_id": "summit_controls_sales",
+      "resource_ids": [
+        "resource://summit_controls_sales/governed"
+      ],
+      "scope_id": "scope-summit_controls_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "helio_pm_approval@finance": {
+      "agent_id": "helio_pm_approver",
+      "identity_id": "helio_pm_approval@finance",
+      "owner_id": "helio_pm_approval"
+    },
+    "helio_projects@procurement": {
+      "agent_id": "helio_buyer",
+      "identity_id": "helio_projects@procurement",
+      "owner_id": "helio_projects"
+    },
+    "summit_controls_sales@sales": {
+      "agent_id": "summit_seller",
+      "identity_id": "summit_controls_sales@sales",
+      "owner_id": "summit_controls_sales"
+    }
+  },
+  "owners": {
+    "helio_pm_approval": {
+      "owner_id": "helio_pm_approval",
+      "user_id": "helio_pm_approval"
+    },
+    "helio_projects": {
+      "owner_id": "helio_projects",
+      "user_id": "helio_projects"
+    },
+    "summit_controls_sales": {
+      "owner_id": "summit_controls_sales",
+      "user_id": "summit_controls_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "helio_buyer",
+      "target": "summit_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "helio_buyer",
+      "target": "helio_pm_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "helio_pm_approver",
+      "target": "helio_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "summit_seller",
+      "target": "helio_buyer"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "redwood_buyer",
+        "target": "apollo_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "redwood_buyer",
+        "target": "redwood_pm_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "redwood_pm_approver",
+        "target": "redwood_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "apollo_seller",
+        "target": "redwood_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "redwood_projects@procurement",
+        "agent_id": "redwood_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "redwood_projects",
+        "persona_source": "personas/redwood_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "apollo_controls_sales@sales",
+        "agent_id": "apollo_seller",
+        "approval_mandate": "self",
+        "owner_id": "apollo_controls_sales",
+        "persona_source": "personas/apollo_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "redwood_pm_approval@finance",
+        "agent_id": "redwood_pm_approver",
+        "approval_mandate": "self",
+        "owner_id": "redwood_pm_approval",
+        "persona_source": "personas/redwood_pm_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "redwood_buyer",
+      "system_prompt_template": "You are the procurement agent for redwood_projects. Complete transaction TXN-CM-OE-211 for item LINE-INTEGRATION-KIT-5. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "redwood_projects"
+    },
+    {
+      "agent_id": "apollo_seller",
+      "system_prompt_template": "You are the sales agent for apollo_controls_sales. Negotiate transaction TXN-CM-OE-211 for item LINE-INTEGRATION-KIT-5. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "apollo_controls_sales"
+    },
+    {
+      "agent_id": "redwood_pm_approver",
+      "system_prompt_template": "You are the finance approval agent for redwood_pm_approval. Review transaction TXN-CM-OE-211 for item LINE-INTEGRATION-KIT-5. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "redwood_pm_approval"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Line integration kit tied to staged milestone acceptance",
+    "item_id": "LINE-INTEGRATION-KIT-5",
+    "quantity": 5,
+    "required_terms": [
+      "milestone_id",
+      "payment_stage",
+      "acceptance_date"
+    ],
+    "resource_profile": "owned_ecosystem_competitive_staged_milestone",
+    "target_price": 1760.0,
+    "transaction_id": "TXN-CM-OE-211"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "redwood_projects, coordinate procurement for 5 units of Line integration kit tied to staged milestone acceptance. Your target unit price is $1760.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "redwood_buyer"
+  },
+  "scenario_id": "marble_bargaining_competitive_staged_milestone_v11",
+  "task_family": "coordination"
+}

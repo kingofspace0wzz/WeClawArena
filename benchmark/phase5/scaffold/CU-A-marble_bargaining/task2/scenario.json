@@ -2,69 +2,111 @@
   "agent_graph": {
     "edges": [
       {
-        "channel": "market_dm",
+        "channel": "procurement_dm",
         "relationship": "negotiates_with",
-        "source": "xenia_buyer",
-        "target": "yusuf_seller"
+        "source": "evergreen_buyer",
+        "target": "atlas_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "evergreen_buyer",
+        "target": "evergreen_compliance_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "evergreen_compliance_approver",
+        "target": "evergreen_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "atlas_seller",
+        "target": "evergreen_buyer"
       }
     ],
     "nodes": [
       {
-        "active_identity": "xenia@market",
-        "agent_id": "xenia_buyer",
-        "approval_mandate": "self",
-        "owner_id": "xenia",
-        "persona_source": "personas/xenia_buyer.md",
+        "active_identity": "evergreen_procurement@procurement",
+        "agent_id": "evergreen_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "evergreen_procurement",
+        "persona_source": "personas/evergreen_buyer.md",
         "role_label": "buyer",
         "scope": [
-          "read:market_reference",
-          "write:own_offers",
-          "read:own_budget",
-          "accept:offers_within_budget"
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
         ]
       },
       {
-        "active_identity": "yusuf@market",
-        "agent_id": "yusuf_seller",
+        "active_identity": "atlas_supply_sales@sales",
+        "agent_id": "atlas_seller",
         "approval_mandate": "self",
-        "owner_id": "yusuf",
-        "persona_source": "personas/yusuf_seller.md",
+        "owner_id": "atlas_supply_sales",
+        "persona_source": "personas/atlas_seller.md",
         "role_label": "seller",
         "scope": [
-          "read:market_reference",
-          "write:own_offers",
-          "read:own_reservation",
-          "accept:offers_above_reservation"
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "evergreen_compliance@finance",
+        "agent_id": "evergreen_compliance_approver",
+        "approval_mandate": "self",
+        "owner_id": "evergreen_compliance",
+        "persona_source": "personas/evergreen_compliance_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
         ]
       }
     ]
   },
   "agents": [
     {
-      "agent_id": "xenia_buyer",
-      "system_prompt_template": "You are xenia, a buyer negotiating for the item in question. Your private budget ceiling is $700.00 -- you must not accept any offer above this. Do not reveal your budget to the seller. Aim to close at a price below your budget.",
-      "user_id": "xenia"
+      "agent_id": "evergreen_buyer",
+      "system_prompt_template": "You are the procurement agent for evergreen_procurement. Complete transaction TXN-OE-102 for item COLD-CHAIN-SENSOR-40. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "evergreen_procurement"
     },
     {
-      "agent_id": "yusuf_seller",
-      "system_prompt_template": "You are yusuf, a seller negotiating for the item in question. Your private reservation price is $480.00 -- you must not accept any offer below this. Do not reveal your reservation to the buyer. Aim to close at a price above your reservation.",
-      "user_id": "yusuf"
+      "agent_id": "atlas_seller",
+      "system_prompt_template": "You are the sales agent for atlas_supply_sales. Negotiate transaction TXN-OE-102 for item COLD-CHAIN-SENSOR-40. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "atlas_supply_sales"
+    },
+    {
+      "agent_id": "evergreen_compliance_approver",
+      "system_prompt_template": "You are the finance approval agent for evergreen_compliance. Review transaction TXN-OE-102 for item COLD-CHAIN-SENSOR-40. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "evergreen_compliance"
     }
   ],
   "category": "CM",
   "coordination_mode": "graph",
   "family_id": "marble_bargaining",
   "initial_state": {
-    "item_description": "Collection of 120 classic rock vinyl records from the 1970s-80s, including several first pressings; condition ranges from VG to NM",
-    "item_id": "ITEM-21",
-    "market_reference_price": 580.0
+    "item_description": "Cold-chain sensor kits for refrigerated distribution pilot",
+    "item_id": "COLD-CHAIN-SENSOR-40",
+    "quantity": 40,
+    "required_terms": [],
+    "resource_profile": "owned_ecosystem_shipping_terms",
+    "target_price": 186.0,
+    "transaction_id": "TXN-OE-102"
   },
-  "max_turns": 12,
+  "injected_messages": [],
+  "max_turns": 36,
   "opening_message": {
-    "content": "Xenia, you are negotiating to buy the following item: Collection of 120 classic rock vinyl records from the 1970s-80s, including several first pressings; condition ranges fro... The market reference price is $580.00. Open with an offer; the seller's assistant will respond.",
+    "content": "evergreen_procurement, coordinate procurement for 40 units of Cold-chain sensor kits for refrigerated distribution pilot. Your target unit price is $186.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
     "from": "system",
-    "to": "xenia_buyer"
+    "to": "evergreen_buyer"
   },
-  "scenario_id": "marble_bargaining_phase5_v2",
+  "scenario_id": "marble_bargaining_shipping_terms_v2",
   "task_family": "coordination"
 }

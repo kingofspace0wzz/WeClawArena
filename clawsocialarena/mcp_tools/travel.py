@@ -59,6 +59,9 @@ class TravelContext:
     organizer_owner_id: str = ""
     co_traveler_owner_ids: tuple[str, ...] = field(default_factory=tuple)
     delegate_authorization_code: str = ""
+    # Maps owner_id -> agent_id so the tool can resolve the on-disk
+    # resources/agents/<agent_id>/ path (materializer keys by agent_id).
+    owner_to_agent: dict[str, str] = field(default_factory=dict)
 
     @property
     def participants(self) -> tuple[str, ...]:
@@ -369,7 +372,8 @@ def dispatch(
 
 
 def _owner_root(context: TravelContext, owner_id: str) -> Path:
-    return context.resources_root / "agents" / owner_id
+    agent_id = context.owner_to_agent.get(owner_id, owner_id)
+    return context.resources_root / "agents" / agent_id
 
 
 def _files_dir(context: TravelContext, owner_id: str) -> Path:
@@ -505,6 +509,7 @@ def _confirm_booking(arguments: Mapping[str, Any], context: TravelContext) -> di
     unit_rate = float(arguments.get("unit_rate") or context.target_unit_rate)
     quantity = int(arguments.get("quantity") or context.quantity)
     room_type = str(arguments.get("room_type") or context.room_type_target)
+    approval_id = str(arguments.get("approval_id") or "").strip()
     db = _db_path(context, context.partner_hotel_owner_id)
     booking_id = "BKG-" + hashlib.sha256(
         f"{trip_id}|{hotel_id}|{unit_rate}".encode()
@@ -514,9 +519,10 @@ def _confirm_booking(arguments: Mapping[str, Any], context: TravelContext) -> di
         try:
             conn.execute(
                 "INSERT INTO seller_orders(trip_id, hotel_id, room_type, "
-                "unit_rate, quantity, accepted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "unit_rate, quantity, approval_id, accepted_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (trip_id, hotel_id, room_type, unit_rate, quantity,
-                 date.today().isoformat()),
+                 approval_id, date.today().isoformat()),
             )
             conn.commit()
         finally:
@@ -528,6 +534,7 @@ def _confirm_booking(arguments: Mapping[str, Any], context: TravelContext) -> di
         "trip_id": trip_id,
         "unit_rate": unit_rate,
         "quantity": quantity,
+        "approval_id": approval_id,
         "total": round(unit_rate * quantity * 3, 2),
     }
 

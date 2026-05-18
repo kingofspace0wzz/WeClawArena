@@ -68,6 +68,11 @@ class _ScriptedClient:
                 "agent_id": payload["agent_id"],
                 "turn_index": payload["turn_index"],
                 "tools_count": len(tools),
+                "tool_names": [
+                    str(tool.get("name") or "")
+                    for tool in tools
+                    if isinstance(tool, dict)
+                ],
             }
         )
         if self._cursor < len(self.script):
@@ -286,6 +291,156 @@ def test_failed_tool_dispatch_writes_observation_with_error(
     obs_obj = _json.loads(obs_text) if isinstance(obs_text, str) else obs_text
     assert obs_obj.get("ok") is False
     assert "does_not_exist" in obs_obj.get("error", "")
+
+
+def test_loop_filters_tool_schemas_per_agent_allowlist(
+    tmp_path: Path,
+) -> None:
+    session = Session.build(
+        scenario_id="phase5_tool_filter_test",
+        condition=AuditCondition.PASSIVE,
+        db_path=tmp_path / "filter.db",
+        work_dir=tmp_path,
+    )
+    session.mcp_host.register("buyer_tool", lambda _: {"ok": True})
+    session.mcp_host.register("seller_tool", lambda _: {"ok": True})
+    scenario = _two_agent_scenario()
+    scenario["agents"][0]["available_tools"] = ["buyer_tool"]
+    scenario["agents"][1]["available_tools"] = ["seller_tool"]
+    client = _ScriptedClient([{"action": "done"}, {"action": "done"}])
+
+    asyncio.run(
+        run_agent_loop(
+            session=session,
+            scenario=scenario,
+            agent_client=client,
+            agent_model="gpt-4.1-mini-test",
+            max_turns=2,
+            tool_schemas=[
+                {
+                    "type": "function",
+                    "name": "buyer_tool",
+                    "description": "Buyer-only tool.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+                {
+                    "type": "function",
+                    "name": "seller_tool",
+                    "description": "Seller-only tool.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            ],
+        )
+    )
+
+    assert client.calls[0]["tool_names"] == ["buyer_tool"]
+    assert client.calls[1]["tool_names"] == ["seller_tool"]
+
+
+def test_loop_does_not_dispatch_disallowed_agent_tool(
+    tmp_path: Path,
+) -> None:
+    session = Session.build(
+        scenario_id="phase5_tool_acl_test",
+        condition=AuditCondition.PASSIVE,
+        db_path=tmp_path / "acl.db",
+        work_dir=tmp_path,
+    )
+    dispatches: list[str] = []
+
+    def _seller_tool(_: dict[str, Any]) -> dict[str, Any]:
+        dispatches.append("seller_tool")
+        return {"ok": True}
+
+    session.mcp_host.register("buyer_tool", lambda _: {"ok": True})
+    session.mcp_host.register("seller_tool", _seller_tool)
+    scenario = _two_agent_scenario()
+    scenario["agents"][0]["available_tools"] = ["buyer_tool"]
+    scenario["agents"][1]["available_tools"] = ["seller_tool"]
+    client = _ScriptedClient([
+        {"action": "tool_call", "tool_name": "seller_tool", "tool_args": {}},
+        {"action": "done"},
+        {"action": "done"},
+    ])
+
+    asyncio.run(
+        run_agent_loop(
+            session=session,
+            scenario=scenario,
+            agent_client=client,
+            agent_model="gpt-4.1-mini-test",
+            max_turns=2,
+            tool_schemas=[
+                {
+                    "type": "function",
+                    "name": "buyer_tool",
+                    "description": "Buyer-only tool.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+                {
+                    "type": "function",
+                    "name": "seller_tool",
+                    "description": "Seller-only tool.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            ],
+        )
+    )
+
+    assert dispatches == []
+    rows = session.action_log.read_all() if session.action_log else []
+    observations = [
+        r for r in rows
+        if r.action_type.value == "tool_observation_return"
+    ]
+    assert observations
+    import json as _json
+
+    obs_text = observations[0].payload.get("observation", "{}")
+    obs_obj = _json.loads(obs_text) if isinstance(obs_text, str) else obs_text
+    assert obs_obj["ok"] is False
+    assert "not available to agent" in obs_obj["error"]
+
+
+def test_loop_overwrites_spoofed_hidden_agent_id(tmp_path: Path) -> None:
+    session = Session.build(
+        scenario_id="phase5_hidden_agent_test",
+        condition=AuditCondition.PASSIVE,
+        db_path=tmp_path / "hidden-agent.db",
+        work_dir=tmp_path,
+    )
+    seen: list[dict[str, Any]] = []
+
+    def _buyer_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+        seen.append(dict(arguments))
+        return {"ok": True, "agent_id": arguments.get("_agent_id")}
+
+    session.mcp_host.register("buyer_tool", _buyer_tool)
+    scenario = _two_agent_scenario()
+    scenario["agents"][0]["available_tools"] = ["buyer_tool"]
+    client = _ScriptedClient(
+        [
+            {
+                "action": "tool_call",
+                "tool_name": "buyer_tool",
+                "tool_args": {"_agent_id": "bob_assistant", "x": 1},
+            },
+            {"action": "done"},
+            {"action": "done"},
+        ]
+    )
+
+    asyncio.run(
+        run_agent_loop(
+            session=session,
+            scenario=scenario,
+            agent_client=client,
+            agent_model="gpt-4.1-mini-test",
+            max_turns=2,
+        )
+    )
+
+    assert seen == [{"_agent_id": "alice_assistant", "x": 1}]
 
 
 def test_failed_dispatch_lands_in_history_for_next_turn(

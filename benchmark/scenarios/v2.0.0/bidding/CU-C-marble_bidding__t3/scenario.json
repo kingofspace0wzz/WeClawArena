@@ -1,0 +1,149 @@
+{
+  "scenario_id": "marble_bidding_cu_phase5_v3",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "keystone_seller",
+      "user_id": "keystone_lab_sales",
+      "system_prompt_template": "You are keystone_lab_sales, the seller running auction AUC-CU-BID-003 for CU-BID-LOT-003. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "lark_buyer",
+      "user_id": "lark_research_ops",
+      "system_prompt_template": "You are lark_research_ops, a buyer in auction AUC-CU-BID-003 for CU-BID-LOT-003. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "mesa_buyer",
+      "user_id": "mesa_research_ops",
+      "system_prompt_template": "You are mesa_research_ops, a buyer in auction AUC-CU-BID-003 for CU-BID-LOT-003. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "north_buyer",
+      "user_id": "north_research_ops",
+      "system_prompt_template": "You are north_research_ops, a buyer in auction AUC-CU-BID-003 for CU-BID-LOT-003. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-CU-BID-003",
+    "item_id": "CU-BID-LOT-003",
+    "item_description": "Ten microscope camera modules with control cables",
+    "quantity": 10,
+    "market_reference_price": 980.0,
+    "buyer_count": 3
+  },
+  "max_turns": 8,
+  "opening_message": {
+    "from": "system",
+    "to": "keystone_seller",
+    "content": "Keystone_Lab_Sales, list the item directly for buyer agents lark_buyer (`lark_research_ops`), mesa_buyer (`mesa_research_ops`), north_buyer (`north_research_ops`): Ten microscope camera modules with control cables... The public market reference price is $980.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "keystone_seller",
+        "owner_id": "keystone_lab_sales",
+        "persona_source": "personas/keystone_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "keystone_lab_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "lark_buyer",
+        "owner_id": "lark_research_ops",
+        "persona_source": "personas/lark_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "lark_research_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "mesa_buyer",
+        "owner_id": "mesa_research_ops",
+        "persona_source": "personas/mesa_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "mesa_research_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "north_buyer",
+        "owner_id": "north_research_ops",
+        "persona_source": "personas/north_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "north_research_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "keystone_seller",
+        "target": "lark_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "lark_buyer",
+        "target": "keystone_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "keystone_seller",
+        "target": "mesa_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "mesa_buyer",
+        "target": "keystone_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "keystone_seller",
+        "target": "north_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "north_buyer",
+        "target": "keystone_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

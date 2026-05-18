@@ -6,13 +6,17 @@ aligned. A drift here would let a later batch under-generate work or
 fail silently. These invariants run as ordinary unit tests so any
 divergence breaks CI at the source.
 """
+
 from __future__ import annotations
 
 import inspect
 import re
 
 from clawsocialarena.gateway import session as session_module
-from clawsocialarena.generator.cell_allocation import CELL_ALLOCATION
+from clawsocialarena.generator.cell_allocation import (
+    CELL_ALLOCATION,
+    UNALLOCATED_FAMILY_IDS,
+)
 from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
 
 
@@ -20,19 +24,21 @@ def test_every_cell_family_id_is_in_registry() -> None:
     cell_family_ids = {cell.family_id for cell in CELL_ALLOCATION}
     registry_ids = set(FAMILY_LOADERS.keys())
     missing = cell_family_ids - registry_ids
-    assert not missing, (
-        f"cells reference family_ids absent from registry: {missing}"
-    )
+    assert not missing, f"cells reference family_ids absent from registry: {missing}"
 
 
-def test_every_registry_family_id_is_used_by_at_least_one_cell() -> None:
-    """The allocation must exercise every pack -- if a pack ships but no
-    cell uses it, either the spec drifted or the pack is dead code.
+def test_every_registry_family_id_is_allocated_or_explicitly_unallocated() -> None:
+    """The allocation must either exercise a pack or list it as an
+    expansion family outside the locked main grid.
     """
     cell_family_ids = {cell.family_id for cell in CELL_ALLOCATION}
     registry_ids = set(FAMILY_LOADERS.keys())
-    unused = registry_ids - cell_family_ids
-    assert not unused, f"registered packs with no cell allocation: {unused}"
+    unused = registry_ids - cell_family_ids - set(UNALLOCATED_FAMILY_IDS)
+    assert not unused, f"registered packs with no allocation status: {unused}"
+    stale_unallocated = set(UNALLOCATED_FAMILY_IDS) - registry_ids
+    assert not stale_unallocated, (
+        f"unallocated family ids missing from registry: {stale_unallocated}"
+    )
 
 
 def test_session_dispatch_branches_cover_every_registry_family_id() -> None:
@@ -42,9 +48,7 @@ def test_session_dispatch_branches_cover_every_registry_family_id() -> None:
     test immediately."""
     source = inspect.getsource(session_module.Session.register_family_pack_tools)
     # Match patterns like:  if family_id == "tau2_retail":
-    pattern = re.compile(
-        r"family_id\s*==\s*[\"']([a-z0-9_]+)[\"']", re.MULTILINE
-    )
+    pattern = re.compile(r"family_id\s*==\s*[\"']([a-z0-9_]+)[\"']", re.MULTILINE)
     dispatched_ids = set(pattern.findall(source))
     registry_ids = set(FAMILY_LOADERS.keys())
     missing = registry_ids - dispatched_ids
@@ -59,9 +63,7 @@ def test_session_dispatch_does_not_carry_orphan_family_ids() -> None:
     reverse of the previous test).
     """
     source = inspect.getsource(session_module.Session.register_family_pack_tools)
-    pattern = re.compile(
-        r"family_id\s*==\s*[\"']([a-z0-9_]+)[\"']", re.MULTILINE
-    )
+    pattern = re.compile(r"family_id\s*==\s*[\"']([a-z0-9_]+)[\"']", re.MULTILINE)
     dispatched_ids = set(pattern.findall(source))
     registry_ids = set(FAMILY_LOADERS.keys())
     orphans = dispatched_ids - registry_ids
@@ -95,9 +97,7 @@ def test_every_registry_entry_lists_session_context_keys() -> None:
     Session.build time.
     """
     for family_id, entry in FAMILY_LOADERS.items():
-        assert entry.session_context_keys, (
-            f"{family_id} has empty session_context_keys"
-        )
+        assert entry.session_context_keys, f"{family_id} has empty session_context_keys"
         for key in entry.session_context_keys:
             assert isinstance(key, str) and key, (
                 f"{family_id} has a non-string or empty context key"

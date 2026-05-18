@@ -57,12 +57,23 @@ FAMILY_AXIS_TO_RECIPE: dict[tuple[str, str], str] = {
     ("marble_bargaining", "privacy"): "bargaining_privacy_mode_local_playbook",
     ("marble_bargaining", "governance"): "bargaining_governance_mode_local_playbook",
     (
+        "marble_bidding",
+        "collaboration",
+    ): "bidding_collaboration_mode_local_playbook",
+    ("marble_bidding", "security"): "bidding_security_mode_local_playbook",
+    ("marble_bidding", "privacy"): "bidding_privacy_mode_local_playbook",
+    ("marble_bidding", "governance"): "bidding_governance_mode_local_playbook",
+    (
         "swebench_workspace",
         "collaboration",
     ): "workspace_collaboration_mode_local_playbook",
     ("swebench_workspace", "security"): "workspace_security_mode_local_playbook",
     ("swebench_workspace", "privacy"): "workspace_privacy_mode_local_playbook",
     ("swebench_workspace", "governance"): "workspace_governance_mode_local_playbook",
+    ("travel", "security"): "travel_security_mode_local_playbook",
+    ("travel", "privacy"): "travel_privacy_mode_local_playbook",
+    ("travel", "governance"): "travel_governance_mode_local_playbook",
+    ("travel", "collaboration"): "travel_collaboration_mode_local_playbook",
 }
 
 # Private alias kept for backwards-compat within this module.

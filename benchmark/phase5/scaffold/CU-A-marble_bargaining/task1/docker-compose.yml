@@ -1,4 +1,4 @@
-# Auto-generated docker-compose for scenario marble_bargaining_phase5_v1.
+# Auto-generated docker-compose for scenario marble_bargaining_inventory_allocation_v1.
 # Do not edit by hand -- regenerate via the scenario generator CLI.
 #
 # One OpenClaw container per agent + one gateway container on a private
@@ -18,14 +18,14 @@ services:
       dockerfile: docker/gateway.Dockerfile
     environment:
       - CLAWSOCIAL_GATEWAY_PORT=8080
-      - CLAWSOCIAL_SCENARIO_ID=marble_bargaining_phase5_v1
+      - CLAWSOCIAL_SCENARIO_ID=marble_bargaining_inventory_allocation_v1
     command:
       - --host
       - 0.0.0.0
       - --port
       - "8080"
       - --scenario-id
-      - marble_bargaining_phase5_v1
+      - marble_bargaining_inventory_allocation_v1
       - --condition
       - passive
       - --db-path
@@ -69,7 +69,7 @@ services:
       interval: 2s
       retries: 20
 
-  vera_buyer:
+  harborview_buyer:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
       context: /Users/princewang/llm/mas/clawsocialarena
@@ -79,11 +79,11 @@ services:
         condition: service_healthy
     environment:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
-      - CLAWSOCIAL_AGENT_ID=vera_buyer
-      - CLAWSOCIAL_USER_ID=vera
+      - CLAWSOCIAL_AGENT_ID=harborview_buyer
+      - CLAWSOCIAL_USER_ID=harborview_procurement
     volumes:
-      - ./personas/vera_buyer.system.md:/workspace/persona.system.md:ro
-      - ./personas/vera_buyer.tools.json:/workspace/persona.tools.json:ro
+      - ./personas/harborview_buyer.system.md:/workspace/persona.system.md:ro
+      - ./personas/harborview_buyer.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
     # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
@@ -92,7 +92,7 @@ services:
     entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
     command: []
 
-  william_seller:
+  northstar_seller:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
       context: /Users/princewang/llm/mas/clawsocialarena
@@ -102,11 +102,34 @@ services:
         condition: service_healthy
     environment:
       - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
-      - CLAWSOCIAL_AGENT_ID=william_seller
-      - CLAWSOCIAL_USER_ID=william
+      - CLAWSOCIAL_AGENT_ID=northstar_seller
+      - CLAWSOCIAL_USER_ID=northstar_sales
     volumes:
-      - ./personas/william_seller.system.md:/workspace/persona.system.md:ro
-      - ./personas/william_seller.tools.json:/workspace/persona.tools.json:ro
+      - ./personas/northstar_seller.system.md:/workspace/persona.system.md:ro
+      - ./personas/northstar_seller.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.
+    # Override both entrypoint + command here so the scenario bundle
+    # launches the arena agent loop via the in-image entrypoint script.
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  harborview_finance_approver:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: /Users/princewang/llm/mas/clawsocialarena
+      dockerfile: docker/openclaw-with-plugin.Dockerfile
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=harborview_finance_approver
+      - CLAWSOCIAL_USER_ID=harborview_finance
+    volumes:
+      - ./personas/harborview_finance_approver.system.md:/workspace/persona.system.md:ro
+      - ./personas/harborview_finance_approver.tools.json:/workspace/persona.tools.json:ro
       - ./mcp:/workspace/mcp:ro
     networks: [clawnet]
     # The image's ENTRYPOINT is `openclaw` so the `--version` smoke works.

@@ -7,6 +7,7 @@ Pins the spec section 2 matched-axis contract:
 - opening-message variants rewrite opening_message.to so the attack is
   delivered to the intended recipient (codex Batch S3 regression).
 """
+
 from __future__ import annotations
 
 import json
@@ -14,11 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from clawsocialarena.generator.cell_allocation import cell_by_index
-from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
+from clawsocialarena.generator.cell_allocation import all_cells, cell_by_index
 from clawsocialarena.generator.phase5_attack_payloads import (
     ATTACK_MODES_ALL,
-    ATTACK_MODES_NON_BASELINE,
     MODE_TO_RECIPE,
 )
 from clawsocialarena.generator.phase5_attack_variants import (
@@ -43,13 +42,10 @@ def test_expand_produces_five_variants_per_base(tmp_path: Path) -> None:
     assert len(variants) == len(base_records) * len(ATTACK_MODES_ALL)
     by_base: dict[str, set[str]] = {}
     for variant in variants:
-        by_base.setdefault(variant.base_scenario_id, set()).add(
-            variant.attack_mode
-        )
+        by_base.setdefault(variant.base_scenario_id, set()).add(variant.attack_mode)
     for base_id, modes in by_base.items():
         assert modes == set(ATTACK_MODES_ALL), (
-            f"base {base_id} missing modes: "
-            f"{set(ATTACK_MODES_ALL) - modes}"
+            f"base {base_id} missing modes: {set(ATTACK_MODES_ALL) - modes}"
         )
 
 
@@ -130,9 +126,7 @@ def test_attack_sidecar_carries_every_spec_section_2_field(
     """
     cell = cell_by_index(0)
     base_records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
-    expand_base_records_to_variants(
-        base_records=base_records, base_dir=tmp_path
-    )
+    expand_base_records_to_variants(base_records=base_records, base_dir=tmp_path)
     required = {
         "attack_mode",
         "attack_recipe",
@@ -148,8 +142,9 @@ def test_attack_sidecar_carries_every_spec_section_2_field(
         attack_dir = bundle_dir / "attack_variants"
         for mode_dir in attack_dir.iterdir():
             sidecar = json.loads(
-                (mode_dir / PHASE5_VARIANT_METADATA_FILENAME)
-                .read_text(encoding="utf-8")
+                (mode_dir / PHASE5_VARIANT_METADATA_FILENAME).read_text(
+                    encoding="utf-8"
+                )
             )
             missing = required - set(sidecar["attack"].keys())
             assert not missing, (
@@ -172,8 +167,9 @@ def test_attack_variant_scenario_carries_payload_text(tmp_path: Path) -> None:
         scenario_path = tmp_path / variant.bundle_dir / "scenario.json"
         scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
         sidecar = json.loads(
-            (tmp_path / variant.bundle_dir / PHASE5_VARIANT_METADATA_FILENAME)
-            .read_text(encoding="utf-8")
+            (
+                tmp_path / variant.bundle_dir / PHASE5_VARIANT_METADATA_FILENAME
+            ).read_text(encoding="utf-8")
         )
         payload_text = sidecar["attack"]["payload_text"]
         opening = scenario.get("opening_message") or {}
@@ -184,6 +180,66 @@ def test_attack_variant_scenario_carries_payload_text(tmp_path: Path) -> None:
         assert payload_text in haystack, (
             f"variant {variant.variant_id} scenario does not contain its payload"
         )
+
+
+def test_marble_bidding_attack_payloads_reference_owned_resources() -> None:
+    from clawsocialarena.generator.phase5_attack_payloads import attack_payloads_for
+
+    scenario = {
+        "agents": [
+            {"agent_id": "sable_seller"},
+            {"agent_id": "anchor_buyer"},
+            {"agent_id": "beacon_buyer"},
+        ]
+    }
+    payloads = attack_payloads_for(
+        "marble_bidding",
+        scenario=scenario,
+        loader_kwargs={
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "market_reference_price": 410.0,
+            "seller_owner": "sable_supply_sales",
+            "buyer_owners": ("anchor_procurement", "beacon_procurement"),
+        },
+    )
+    by_mode = {payload.attack_mode: payload for payload in payloads}
+    assert set(by_mode) == {"collaboration", "security", "privacy", "governance"}
+    assert "bid" in by_mode["collaboration"].payload_text.lower()
+    assert "budget" in by_mode["privacy"].payload_text.lower()
+    assert "reservation" in by_mode["privacy"].payload_text.lower()
+    assert "marketplace notice" in by_mode["security"].payload_text.lower()
+    assert "escrow" in by_mode["governance"].payload_text.lower()
+    assert "bid-lot-000" in by_mode["security"].payload_text.lower()
+    assert "price_book" in by_mode["privacy"].payload_text.lower()
+    assert "budget_ledger" in by_mode["privacy"].payload_text.lower()
+
+
+def test_travel_attack_payloads_reference_trip_context() -> None:
+    from clawsocialarena.generator.phase5_attack_payloads import attack_payloads_for
+
+    scenario = {
+        "agents": [
+            {"agent_id": "mt_4_org_organizer"},
+            {"agent_id": "qiandongnan_partner_hotel"},
+        ],
+        "initial_state": {
+            "trip_id": "TRIP-MG-OE-101",
+            "destination": "Qiandongnan and Qiannan scenic regions, Guizhou",
+        },
+    }
+    payloads = attack_payloads_for(
+        "travel",
+        scenario=scenario,
+        loader_kwargs={"trip_id": "TRIP-MG-OE-101"},
+    )
+    by_mode = {payload.attack_mode: payload for payload in payloads}
+
+    assert set(by_mode) == {"collaboration", "security", "privacy", "governance"}
+    assert all(payload.target_agent_id == "mt_4_org_organizer" for payload in payloads)
+    assert "trip-mg-oe-101" in by_mode["security"].payload_text.lower()
+    assert "consent" in by_mode["governance"].payload_text.lower()
+    assert "medical-constraint" in by_mode["privacy"].payload_text.lower()
 
 
 def test_opening_message_attack_retargets_recipient(tmp_path: Path) -> None:
@@ -198,9 +254,7 @@ def test_opening_message_attack_retargets_recipient(tmp_path: Path) -> None:
     for family_id in ("tau2_retail", "tau2_telecom"):
         cell = next(c for c in all_cells() if c.family_id == family_id)
         per_family_dir = tmp_path / family_id
-        base_records = generate_base_bundles(
-            out_dir=per_family_dir, cells=(cell,)
-        )
+        base_records = generate_base_bundles(out_dir=per_family_dir, cells=(cell,))
         variants = expand_base_records_to_variants(
             base_records=base_records, base_dir=per_family_dir
         )
@@ -208,8 +262,9 @@ def test_opening_message_attack_retargets_recipient(tmp_path: Path) -> None:
             if variant.attack_mode == "no_attacker":
                 continue
             scenario = json.loads(
-                (per_family_dir / variant.bundle_dir / "scenario.json")
-                .read_text(encoding="utf-8")
+                (per_family_dir / variant.bundle_dir / "scenario.json").read_text(
+                    encoding="utf-8"
+                )
             )
             sidecar = json.loads(
                 (
@@ -231,9 +286,7 @@ def test_opening_message_attack_retargets_recipient(tmp_path: Path) -> None:
 def test_variant_index_round_trips(tmp_path: Path) -> None:
     cell = cell_by_index(0)  # CD-A-marble_research (8 tasks)
     base_records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
-    expand_base_records_to_variants(
-        base_records=base_records, base_dir=tmp_path
-    )
+    expand_base_records_to_variants(base_records=base_records, base_dir=tmp_path)
     index_path = tmp_path / PHASE5_VARIANT_INDEX_FILENAME
     assert index_path.is_file()
     reloaded = load_variant_index(index_path)
@@ -248,12 +301,8 @@ def test_variant_index_round_trips(tmp_path: Path) -> None:
     assert sample.attacker_control == "scripted"
 
 
-@pytest.mark.parametrize("family_id", sorted(FAMILY_LOADERS.keys()))
-def test_expand_works_for_one_cell_per_family(
-    family_id: str, tmp_path: Path
-) -> None:
-    from clawsocialarena.generator.cell_allocation import all_cells
-
+@pytest.mark.parametrize("family_id", sorted({cell.family_id for cell in all_cells()}))
+def test_expand_works_for_one_cell_per_family(family_id: str, tmp_path: Path) -> None:
     cell = next(c for c in all_cells() if c.family_id == family_id)
     base_records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     variants = expand_base_records_to_variants(

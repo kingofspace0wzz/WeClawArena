@@ -8,6 +8,7 @@ missing.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -122,3 +123,44 @@ def test_compose_runner_can_skip_rebuilds_from_env(
         "--no-build",
         "-d",
     ]
+
+
+def test_compose_runner_tears_down_when_up_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(compose_runner.shutil, "which", lambda _name: "/usr/local/bin/docker")
+    calls: list[tuple[list[str], dict]] = []
+
+    def fake_run(cmd: list[str], **kwargs) -> None:
+        calls.append((cmd, kwargs))
+        if "up" in cmd:
+            raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+
+    monkeypatch.setattr(compose_runner.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        with ComposeRunner(Path("/tmp/docker-compose.yml"), project_name="demo"):
+            pytest.fail("ComposeRunner should not yield when compose up fails")
+
+    assert calls[0][0] == [
+        "docker",
+        "compose",
+        "-f",
+        "/tmp/docker-compose.yml",
+        "-p",
+        "demo",
+        "up",
+        "--build",
+        "-d",
+    ]
+    assert calls[1][0] == [
+        "docker",
+        "compose",
+        "-f",
+        "/tmp/docker-compose.yml",
+        "-p",
+        "demo",
+        "down",
+        "-v",
+    ]
+    assert calls[1][1]["check"] is False

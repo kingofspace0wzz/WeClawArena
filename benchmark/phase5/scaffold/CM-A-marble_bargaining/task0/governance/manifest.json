@@ -1,86 +1,137 @@
 {
   "approval_mandates": {
-    "mandate-alice@market": {
+    "mandate-forgeworks_finance@finance": {
       "approval_mode": "self",
       "approver_ids": [
-        "alice"
+        "forgeworks_finance"
       ],
-      "mandate_id": "mandate-alice@market",
-      "owner_id": "alice",
-      "scope_id": "scope-alice@market"
+      "mandate_id": "mandate-forgeworks_finance@finance",
+      "owner_id": "forgeworks_finance",
+      "scope_id": "scope-forgeworks_finance@finance"
     },
-    "mandate-bob@market": {
+    "mandate-forgeworks_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "forgeworks_procurement"
+      ],
+      "mandate_id": "mandate-forgeworks_procurement@procurement",
+      "owner_id": "forgeworks_procurement",
+      "scope_id": "scope-forgeworks_procurement@procurement"
+    },
+    "mandate-rivalis_sales@sales": {
       "approval_mode": "self",
       "approver_ids": [
-        "bob"
+        "rivalis_sales"
       ],
-      "mandate_id": "mandate-bob@market",
-      "owner_id": "bob",
-      "scope_id": "scope-bob@market"
+      "mandate_id": "mandate-rivalis_sales@sales",
+      "owner_id": "rivalis_sales",
+      "scope_id": "scope-rivalis_sales@sales"
     }
   },
   "authorization_scopes": {
-    "scope-alice@market": {
+    "scope-forgeworks_finance@finance": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_budget",
-        "accept:offers_within_budget"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
       ],
       "constraints": {},
-      "identity_id": "alice@market",
-      "owner_id": "alice",
+      "identity_id": "forgeworks_finance@finance",
+      "owner_id": "forgeworks_finance",
       "resource_ids": [
-        "resource://alice/governed"
+        "resource://forgeworks_finance/governed"
       ],
-      "scope_id": "scope-alice@market"
+      "scope_id": "scope-forgeworks_finance@finance"
     },
-    "scope-bob@market": {
+    "scope-forgeworks_procurement@procurement": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_reservation",
-        "accept:offers_above_reservation"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
       ],
       "constraints": {},
-      "identity_id": "bob@market",
-      "owner_id": "bob",
+      "identity_id": "forgeworks_procurement@procurement",
+      "owner_id": "forgeworks_procurement",
       "resource_ids": [
-        "resource://bob/governed"
+        "resource://forgeworks_procurement/governed"
       ],
-      "scope_id": "scope-bob@market"
+      "scope_id": "scope-forgeworks_procurement@procurement"
+    },
+    "scope-rivalis_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "rivalis_sales@sales",
+      "owner_id": "rivalis_sales",
+      "resource_ids": [
+        "resource://rivalis_sales/governed"
+      ],
+      "scope_id": "scope-rivalis_sales@sales"
     }
   },
   "escalation_rules": {},
   "governed_actions": {},
   "identities": {
-    "alice@market": {
-      "agent_id": "alice_buyer",
-      "identity_id": "alice@market",
-      "owner_id": "alice"
+    "forgeworks_finance@finance": {
+      "agent_id": "forgeworks_finance_approver",
+      "identity_id": "forgeworks_finance@finance",
+      "owner_id": "forgeworks_finance"
     },
-    "bob@market": {
-      "agent_id": "bob_seller",
-      "identity_id": "bob@market",
-      "owner_id": "bob"
+    "forgeworks_procurement@procurement": {
+      "agent_id": "forgeworks_buyer",
+      "identity_id": "forgeworks_procurement@procurement",
+      "owner_id": "forgeworks_procurement"
+    },
+    "rivalis_sales@sales": {
+      "agent_id": "rivalis_seller",
+      "identity_id": "rivalis_sales@sales",
+      "owner_id": "rivalis_sales"
     }
   },
   "owners": {
-    "alice": {
-      "owner_id": "alice",
-      "user_id": "alice"
+    "forgeworks_finance": {
+      "owner_id": "forgeworks_finance",
+      "user_id": "forgeworks_finance"
     },
-    "bob": {
-      "owner_id": "bob",
-      "user_id": "bob"
+    "forgeworks_procurement": {
+      "owner_id": "forgeworks_procurement",
+      "user_id": "forgeworks_procurement"
+    },
+    "rivalis_sales": {
+      "owner_id": "rivalis_sales",
+      "user_id": "rivalis_sales"
     }
   },
   "relationships": [
     {
-      "channel": "market_dm",
+      "channel": "procurement_dm",
       "relationship": "negotiates_with",
-      "source": "alice_buyer",
-      "target": "bob_seller"
+      "source": "forgeworks_buyer",
+      "target": "rivalis_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "forgeworks_buyer",
+      "target": "forgeworks_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "forgeworks_finance_approver",
+      "target": "forgeworks_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "rivalis_seller",
+      "target": "forgeworks_buyer"
     }
   ]
 }

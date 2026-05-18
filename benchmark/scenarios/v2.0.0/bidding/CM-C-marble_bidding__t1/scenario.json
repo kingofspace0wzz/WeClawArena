@@ -1,0 +1,116 @@
+{
+  "scenario_id": "marble_bidding_phase5_v1",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "cedar_seller",
+      "user_id": "cedar_medical_sales",
+      "system_prompt_template": "You are cedar_medical_sales, the seller running auction AUC-BID-001 for BID-LOT-001. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "delta_buyer",
+      "user_id": "delta_clinic_procurement",
+      "system_prompt_template": "You are delta_clinic_procurement, a buyer in auction AUC-BID-001 for BID-LOT-001. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "ember_buyer",
+      "user_id": "ember_clinic_procurement",
+      "system_prompt_template": "You are ember_clinic_procurement, a buyer in auction AUC-BID-001 for BID-LOT-001. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-BID-001",
+    "item_id": "BID-LOT-001",
+    "item_description": "Ten refurbished thermal intake scanners for clinic lobbies",
+    "quantity": 10,
+    "market_reference_price": 315.0,
+    "buyer_count": 2
+  },
+  "max_turns": 20,
+  "opening_message": {
+    "from": "system",
+    "to": "cedar_seller",
+    "content": "Cedar_Medical_Sales, list the item directly for buyer agents delta_buyer (`delta_clinic_procurement`), ember_buyer (`ember_clinic_procurement`): Ten refurbished thermal intake scanners for clinic lobbies... The public market reference price is $315.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "cedar_seller",
+        "owner_id": "cedar_medical_sales",
+        "persona_source": "personas/cedar_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "cedar_medical_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "delta_buyer",
+        "owner_id": "delta_clinic_procurement",
+        "persona_source": "personas/delta_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "delta_clinic_procurement@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "ember_buyer",
+        "owner_id": "ember_clinic_procurement",
+        "persona_source": "personas/ember_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "ember_clinic_procurement@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "cedar_seller",
+        "target": "delta_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "delta_buyer",
+        "target": "cedar_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "cedar_seller",
+        "target": "ember_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "ember_buyer",
+        "target": "cedar_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

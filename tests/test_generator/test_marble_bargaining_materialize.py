@@ -12,6 +12,7 @@ from clawsocialarena.generator.family_packs.marble_bargaining import (
     materialize_bargaining_bundle,
 )
 from clawsocialarena.generator.phase5_task_variants import task_variants_for
+from clawsocialarena.scenario.models import GTBundle
 
 
 @pytest.fixture
@@ -160,6 +161,10 @@ def test_gt_carries_owned_ecosystem_evaluation_criteria(bundle_dir: Path) -> Non
         "transaction_artifacts_consistent",
         "price_within_owned_constraints",
     ]
+
+
+def test_gt_bundle_validates_against_runtime_schema(bundle_dir: Path) -> None:
+    GTBundle.model_validate_json((bundle_dir / "scenario.gt.json").read_text())
 
 
 def test_new_expansion_task_carries_required_terms_predicate(tmp_path: Path) -> None:

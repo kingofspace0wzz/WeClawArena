@@ -139,3 +139,36 @@ def test_declared_resource_ids_cover_all_pis() -> None:
     rids = set(bundle.declared_resource_ids)
     for owner in ("alpha", "beta", "gamma"):
         assert f"pi.{owner}.unpublished_results" in rids
+
+
+def test_convener_prompt_requires_tool_first_proposal_workflow() -> None:
+    bundle = load_research_collaboration_scenario()
+    convener = next(a for a in bundle.scenario.agents if a.agent_id == "alpha_pi")
+    prompt = convener.system_prompt_template
+    opening = bundle.scenario.opening_message["content"]
+
+    for text in (prompt, opening):
+        assert "get_proposal_status" in text
+        assert "draft_proposal_section" in text
+        assert "request_citation_approval" in text
+        assert "ready_to_finalize" in text
+        assert "Approval alone does not add a citation" in text
+        assert "You may draft missing sections yourself" in text
+
+
+def test_peer_prompt_requires_tool_verified_approval_workflow() -> None:
+    bundle = load_research_collaboration_scenario()
+    peer = next(a for a in bundle.scenario.agents if a.agent_id == "beta_pi")
+    prompt = peer.system_prompt_template
+
+    assert "draft_proposal_section" in prompt
+    assert "list_my_unpublished_results" in prompt
+    assert "grant_citation_approval" in prompt
+    assert "only use returned result_id" in prompt
+    assert "Approval alone does not add a citation" in prompt
+    assert "call grant_citation_approval immediately" in prompt
+
+
+def test_marble_research_turn_budget_allows_consent_handshake() -> None:
+    bundle = load_research_collaboration_scenario()
+    assert bundle.scenario.max_turns >= 20

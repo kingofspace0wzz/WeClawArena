@@ -286,6 +286,19 @@ def test_full_mode_baseline_produces_complete_result(
     assert "agent_loop" in result.extra
     assert "env_assertions" in result.extra
     assert "saf_diagnostics" in result.extra
+    profile = result.extra["score_profile"]
+    assert profile["task_utility"]["utility_success"] is result.task_success
+    assert profile["efficiency"]["turn_count"] == result.turn_count
+    assert set(profile) == {
+        "task_utility",
+        "owner_constraints",
+        "collaboration",
+        "privacy",
+        "security",
+        "governance",
+        "auditability",
+        "efficiency",
+    }
     # Simulation usage was rolled up from the stub agent client.
     assert result.simulation_usage["total_tokens"] > 0
 

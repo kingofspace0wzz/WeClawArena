@@ -58,6 +58,27 @@ def test_materialize_runtime_variant_no_attacker_copies_base(tmp_path: Path) -> 
     assert "test" in scenario["opening_message"]["content"]
 
 
+def test_materialize_runtime_variant_reads_domain_folder_store(
+    tmp_path: Path,
+) -> None:
+    """Store lookup accepts the organized ``<domain>/<base_id>`` layout."""
+    from clawsocialarena.attacks.runtime_overlay import materialize_runtime_variant
+
+    flat_base = _make_minimal_base(tmp_path)
+    nested_base = tmp_path / "store" / "telecom" / flat_base.name
+    nested_base.parent.mkdir(parents=True)
+    shutil.move(str(flat_base), str(nested_base))
+
+    variant_dir = materialize_runtime_variant(
+        store_dir=tmp_path / "store",
+        base_id="MG-A-tau2_telecom__t0",
+        attack_mode="no_attacker",
+        run_dir=tmp_path / "pilot" / "run1",
+    )
+
+    assert (variant_dir / "scenario.json").is_file()
+
+
 def test_materialize_runtime_variant_security_applies_overlay(tmp_path: Path) -> None:
     """security mode runs the indirect_resource_prompt_injection recipe."""
     from clawsocialarena.attacks.runtime_overlay import materialize_runtime_variant

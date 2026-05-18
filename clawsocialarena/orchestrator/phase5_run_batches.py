@@ -5,16 +5,17 @@ the Phase-5 pilot's incremental review loop executes. With the
 difficulty-tier dimension dropped in v2 (T1-T3), batches are now
 attack-regime-based rather than tier-based.
 
-marble_research redesign (8 tasks per cell) changes main counts:
+Current v2 main-grid counts:
     3 × 8 × 5 = 120  (marble_research)
-    2 × 3 × 5 = 30   (marble_bargaining)
-    9 × 3 × 5 = 135  (other families)
-    Total: 285 main rows
+    2 × 12 × 5 = 120 (marble_bargaining)
+    2 × 6 × 5 = 60   (marble_bidding)
+    11 × 3 × 5 = 165 (other allocated cells)
+    Total: 465 main rows
 
-    Batch 1 (smoke_v2):      1 row per (family, mode) = 6 families x 5 modes = 30
-    Batch 2 (standard):      all 285 main rows
-    Batch 3 (stress):        non-baseline rows = 57 bases x 4 modes = 228
-    Batch 4 (cross_model):   same 285 main rows; orchestrator overrides agent model
+    Batch 1 (smoke_v2):      1 row per (family, mode) = 8 families x 5 modes = 40
+    Batch 2 (standard):      all 465 main rows
+    Batch 3 (stress):        non-baseline rows = 93 bases x 4 modes = 372
+    Batch 4 (cross_model):   same 465 main rows; orchestrator overrides agent model
     Batch 5 (supplementary): 50 supplementary rows
 """
 from __future__ import annotations
@@ -60,7 +61,7 @@ class RunBatchSpec:
 def _select_smoke_v2(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Batch 1: smoke. One row per (family_id, attack_mode).
 
-    6 families x 5 modes = 30 rows at spec-1 scale. Used for fast
+    8 allocated families x 5 modes = 40 rows. Used for fast
     sanity runs that surface attacker and family issues with minimal
     compute.
     """
@@ -79,7 +80,7 @@ def _select_smoke_v2(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 def _select_standard(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Batch 2: all main-stratum rows.
 
-    14 cells x 3 tasks x 5 attack modes = 210 rows at spec-1 scale.
+    93 base bundles x 5 attack modes = 465 rows.
     """
     return list(manifest.get("main") or [])
 
@@ -87,7 +88,7 @@ def _select_standard(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 def _select_stress(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Batch 3: non-baseline rows scored with stress-recipe overlays.
 
-    4 non-baseline attack modes x 42 bases = 168 rows at spec-1 scale.
+    4 non-baseline attack modes x 93 bases = 372 rows.
     """
     rows = manifest.get("main") or []
     return [r for r in rows if str(r.get("attack_mode")) != "no_attacker"]
@@ -111,10 +112,10 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         name="smoke_v2",
         description=(
             "One row per (family, mode). Sanity run. "
-            "6 families x 5 modes = 30 rows at spec-1 scale."
+            "8 allocated families x 5 modes = 40 rows."
         ),
-        expected_rows=30,
-        expected_rows_alternatives=(35, 42),
+        expected_rows=40,
+    expected_rows_alternatives=(25, 30, 35),
         selector_fn=_select_smoke_v2,
     ),
     RunBatchSpec(
@@ -122,10 +123,10 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         name="standard",
         description=(
             "All main-stratum rows with standard attack recipes (or no_attacker). "
-            "57 base bundles x 5 modes = 285 rows."
+            "93 base bundles x 5 modes = 465 rows."
         ),
-        expected_rows=285,
-        expected_rows_alternatives=(210, 425, 630),
+        expected_rows=465,
+        expected_rows_alternatives=(210, 285, 325, 405, 425, 570, 630),
         selector_fn=_select_standard,
     ),
     RunBatchSpec(
@@ -133,10 +134,10 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         name="stress",
         description=(
             "Non-baseline rows scored with stress-recipe overlays. "
-            "4 stress axes x 57 bases = 228 rows."
+            "4 stress axes x 93 bases = 372 rows."
         ),
-        expected_rows=228,
-        expected_rows_alternatives=(168, 340, 504),
+        expected_rows=372,
+        expected_rows_alternatives=(168, 228, 260, 324, 340, 456, 504),
         selector_fn=_select_stress,
     ),
     RunBatchSpec(
@@ -145,8 +146,8 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
         description=(
             "Same row set as R-B 2; agent model overridden for cross-model eval."
         ),
-        expected_rows=285,
-        expected_rows_alternatives=(210, 425, 630),
+        expected_rows=465,
+        expected_rows_alternatives=(210, 285, 325, 405, 425, 570, 630),
         selector_fn=_select_cross_model,
     ),
     RunBatchSpec(
@@ -177,6 +178,6 @@ def total_expected_rows() -> int:
 
     Note: batches 2 and 4 share the same row set (cross-model reuse), so
     the sum does not represent unique pilot rows. The unique row count is
-    285 main + 50 supplementary = 335.
+    465 main + 50 supplementary = 515.
     """
     return sum(spec.expected_rows for spec in PHASE5_RUN_BATCHES)

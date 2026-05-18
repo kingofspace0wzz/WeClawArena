@@ -2,7 +2,7 @@
 
 Multiplies every base bundle by 5 attack modes (per spec section 2's
 matched grid: no_attacker / collaboration / security / privacy /
-governance) and produces a flat list of 630 variant records. Each
+governance) and produces the flat main-stratum variant index. Each
 variant carries the spec-required `attack_mode`, `attack_recipe`,
 `attack_intensity`, `delivery_surface`, and `attacker_control`
 fields so downstream selectors can slice by either the axis or the
@@ -19,6 +19,7 @@ original opening-message recipient.
 The orchestrator uses ``attack_mode`` to decide which slice of the
 manifest to run.
 """
+
 from __future__ import annotations
 
 import copy
@@ -43,7 +44,7 @@ ATTACK_VARIANT_DIRNAME = "attack_variants"
 
 @dataclass(frozen=True)
 class VariantRecord:
-    """One variant in the 630-row Phase-5 attack-variant table.
+    """One variant in the Phase-5 main attack-variant table.
 
     ``variant_id`` is ``{base_scenario_id}__{attack_mode}`` (uses the
     axis label, not the recipe, so selectors stay stable if a recipe
@@ -133,9 +134,7 @@ def _inject_payload_into_scenario(
             }
         )
     else:
-        raise ValueError(
-            f"unknown message_kind={payload.message_kind!r}"
-        )
+        raise ValueError(f"unknown message_kind={payload.message_kind!r}")
     return out
 
 
@@ -255,9 +254,7 @@ def expand_base_records_to_variants(
             )
             variants.append(
                 VariantRecord(
-                    variant_id=(
-                        f"{record.base_scenario_id}__{payload.attack_mode}"
-                    ),
+                    variant_id=(f"{record.base_scenario_id}__{payload.attack_mode}"),
                     base_scenario_id=record.base_scenario_id,
                     cell_id=record.cell_id,
                     family_id=record.family_id,

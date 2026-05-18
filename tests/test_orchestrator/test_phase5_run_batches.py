@@ -38,13 +38,13 @@ def test_run_batch_for_returns_spec_or_raises() -> None:
 def test_total_expected_rows_reflects_overlap() -> None:
     """R-B 2 and R-B 4 share the same row set; total is not unique pilot rows."""
     total = total_expected_rows()
-    # 30 + 210 + 168 + 210 + 50 = 668
+    # 40 + 465 + 372 + 465 + 50 = 1392
     assert total == sum(s.expected_rows for s in PHASE5_RUN_BATCHES)
 
 
 @pytest.fixture(scope="module")
 def full_manifest(tmp_path_factory: pytest.TempPathFactory) -> dict:
-    """One full 210-row main + 50-row supplementary manifest reused across tests."""
+    """One full 465-row main + 50-row supplementary manifest reused across tests."""
     out_dir = tmp_path_factory.mktemp("phase5_full_manifest")
     base_records = generate_base_bundles(out_dir=out_dir)
     expand_base_records_to_variants(

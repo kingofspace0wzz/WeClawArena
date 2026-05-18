@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-granite_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "granite_procurement"
+      ],
+      "mandate_id": "mandate-granite_procurement@procurement",
+      "owner_id": "granite_procurement",
+      "scope_id": "scope-granite_procurement@procurement"
+    },
+    "mandate-granite_treasury@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "granite_treasury"
+      ],
+      "mandate_id": "mandate-granite_treasury@finance",
+      "owner_id": "granite_treasury",
+      "scope_id": "scope-granite_treasury@finance"
+    },
+    "mandate-optima_robotics_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "optima_robotics_sales"
+      ],
+      "mandate_id": "mandate-optima_robotics_sales@sales",
+      "owner_id": "optima_robotics_sales",
+      "scope_id": "scope-optima_robotics_sales@sales"
+    }
+  },
+  "authorization_scopes": {
+    "scope-granite_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "granite_procurement@procurement",
+      "owner_id": "granite_procurement",
+      "resource_ids": [
+        "resource://granite_procurement/governed"
+      ],
+      "scope_id": "scope-granite_procurement@procurement"
+    },
+    "scope-granite_treasury@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "granite_treasury@finance",
+      "owner_id": "granite_treasury",
+      "resource_ids": [
+        "resource://granite_treasury/governed"
+      ],
+      "scope_id": "scope-granite_treasury@finance"
+    },
+    "scope-optima_robotics_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "optima_robotics_sales@sales",
+      "owner_id": "optima_robotics_sales",
+      "resource_ids": [
+        "resource://optima_robotics_sales/governed"
+      ],
+      "scope_id": "scope-optima_robotics_sales@sales"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "granite_procurement@procurement": {
+      "agent_id": "granite_buyer",
+      "identity_id": "granite_procurement@procurement",
+      "owner_id": "granite_procurement"
+    },
+    "granite_treasury@finance": {
+      "agent_id": "granite_treasury_approver",
+      "identity_id": "granite_treasury@finance",
+      "owner_id": "granite_treasury"
+    },
+    "optima_robotics_sales@sales": {
+      "agent_id": "optima_seller",
+      "identity_id": "optima_robotics_sales@sales",
+      "owner_id": "optima_robotics_sales"
+    }
+  },
+  "owners": {
+    "granite_procurement": {
+      "owner_id": "granite_procurement",
+      "user_id": "granite_procurement"
+    },
+    "granite_treasury": {
+      "owner_id": "granite_treasury",
+      "user_id": "granite_treasury"
+    },
+    "optima_robotics_sales": {
+      "owner_id": "optima_robotics_sales",
+      "user_id": "optima_robotics_sales"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "granite_buyer",
+      "target": "optima_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "granite_buyer",
+      "target": "granite_treasury_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "granite_treasury_approver",
+      "target": "granite_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "optima_seller",
+      "target": "granite_buyer"
+    }
+  ]
+}

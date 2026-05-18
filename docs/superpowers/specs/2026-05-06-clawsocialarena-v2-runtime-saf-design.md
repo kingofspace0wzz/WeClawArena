@@ -62,6 +62,8 @@ The table above defines threat groups. The benchmark keeps the five top-level at
 
 A scenario is one `docker-compose.yml`. A run brings up `N` OpenClaw containers plus one ClawSocialArena audit gateway container on a private bridge network with egress firewall rules. The gateway is the sole cross-container hop.
 
+**Runtime substrate decision, 2026-05-13.** The v2.0.0 benchmark construction substrate is `driver_orchestrated_docker`: Docker Compose launches the gateway plus one OpenClaw/plugin container per owner, while the host driver schedules turns and calls the model provider. This substrate is benchmark-valid because scored peer messages, model-call records, tool calls, resource operations, gateway logs, shadow logs, cassettes, and final-state evidence still pass through the live gateway and Docker bundle. `host_session` runs, where Python builds an in-process `Session` and drives the agent loop without Docker, are development diagnostics only. `containerized_multi_agent`, where each owner container runs the full autonomous agent loop, is a stronger demo or future substrate, not a release blocker for v2.0.0.
+
 ```text
                  (real channel bridge, appendix only)
                             .---. Discord / Telegram / Matrix

@@ -19,11 +19,10 @@ thread pool.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import importlib
 import inspect
@@ -365,6 +364,7 @@ _FAMILY_TOOL_MODULES = {
     "marble_research": "clawsocialarena.mcp_tools.marble_research",
     "marble_bargaining": "clawsocialarena.mcp_tools.marble_bargaining",
     "wildclaw_social": "clawsocialarena.mcp_tools.wildclaw_social",
+    "swebench_workspace": "clawsocialarena.mcp_tools.swebench_workspace",
     "travel": "clawsocialarena.mcp_tools.travel",
 }
 
@@ -401,15 +401,6 @@ def discover_tool_docs(
             out[name] = ""
             continue
         doc = inspect.getdoc(candidate) or ""
-        # Add the parameter names so the agent knows the call signature.
-        try:
-            sig = inspect.signature(candidate)
-            param_names = [
-                p.name for p in sig.parameters.values()
-                if p.name not in {"context", "arguments"}
-            ]
-        except (TypeError, ValueError):
-            param_names = []
         # Inspect the handler body for ``arguments.get('X')`` so we
         # can surface argument keys even when not in the signature.
         try:
@@ -523,6 +514,39 @@ def discover_tool_schemas(
     return out
 
 
+def _agent_tool_names(
+    agent: dict[str, Any],
+    registered_tool_names: list[str],
+) -> list[str]:
+    registered = set(registered_tool_names)
+    for key in ("allowed_tools", "available_tools", "tool_names", "tools"):
+        raw = agent.get(key)
+        if isinstance(raw, list):
+            names: list[str] = []
+            seen: set[str] = set()
+            for item in raw:
+                name = str(item)
+                if name in registered and name not in seen:
+                    names.append(name)
+                    seen.add(name)
+            return names
+    return list(registered_tool_names)
+
+
+def _filter_tool_schemas_for_agent(
+    tool_schemas: list[dict[str, Any]] | None,
+    allowed_tool_names: list[str],
+) -> list[dict[str, Any]]:
+    if not tool_schemas:
+        return []
+    allowed = set(allowed_tool_names)
+    return [
+        dict(schema)
+        for schema in tool_schemas
+        if isinstance(schema, dict) and schema.get("name") in allowed
+    ]
+
+
 async def run_agent_loop(
     *,
     session: Session,
@@ -585,6 +609,11 @@ async def run_agent_loop(
     scenario_id = str(scenario.get("scenario_id") or "phase5_scenario")
     opening_message = scenario.get("opening_message") or {}
     tool_names = session.mcp_host.tools()
+    registered_tool_names = set(tool_names)
+    agent_tool_names = {
+        str(agent["agent_id"]): _agent_tool_names(agent, tool_names)
+        for agent in agents
+    }
 
     # Per-agent inbox: any peer-message + injected_messages addressed to them.
     inboxes: dict[str, list[dict[str, Any]]] = {a["agent_id"]: [] for a in agents}
@@ -645,13 +674,14 @@ async def run_agent_loop(
             agent_id = agent["agent_id"]
             if agent_id in done_agents:
                 continue
+            available_tool_names = agent_tool_names.get(agent_id, tool_names)
             system_prompt, payload = build_agent_prompt(
                 agent=agent,
                 scenario_id=scenario_id,
                 opening_message=opening_message,
                 history=history,
                 inbox=inboxes[agent_id],
-                tool_names=tool_names,
+                tool_names=available_tool_names,
                 turn_index=turn_index,
                 max_turns=max_turns,
                 tool_docs=tool_docs,
@@ -663,7 +693,10 @@ async def run_agent_loop(
                     model=agent_model,
                     system_prompt=system_prompt,
                     payload=payload,
-                    tools=tool_schemas or [],
+                    tools=_filter_tool_schemas_for_agent(
+                        tool_schemas,
+                        available_tool_names,
+                    ),
                 )
             except Exception as exc:  # noqa: BLE001
                 turns.append(
@@ -703,23 +736,39 @@ async def run_agent_loop(
                 except Exception as exc:  # noqa: BLE001
                     turn_record.error = f"record_tool_call: {type(exc).__name__}: {exc}"
                 else:
-                    try:
-                        response = await session.mcp_host.dispatch(
-                            tool_name, tool_args
-                        )
-                    except KeyError as exc:
-                        # Unknown tool name. Hand back the registered list
-                        # so the agent can self-correct on the next turn.
-                        registered = sorted(session.mcp_host.tools())
-                        dispatch_error = (
-                            f"tool {tool_name!r} is not registered. "
-                            f"Available tools: {registered}"
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        # Handler-side failure (argument mismatch, etc.).
-                        dispatch_error = (
-                            f"{type(exc).__name__}: {exc}"
-                        )
+                    if tool_name not in available_tool_names:
+                        if tool_name in registered_tool_names:
+                            dispatch_error = (
+                                f"tool {tool_name!r} is not available to "
+                                f"agent {agent_id!r}. Available tools for "
+                                f"this agent: {sorted(available_tool_names)}"
+                            )
+                        else:
+                            registered = sorted(session.mcp_host.tools())
+                            dispatch_error = (
+                                f"tool {tool_name!r} is not registered. "
+                                f"Available tools: {registered}"
+                            )
+                    else:
+                        try:
+                            handler_args = dict(tool_args)
+                            handler_args["_agent_id"] = agent_id
+                            response = await session.mcp_host.dispatch(
+                                tool_name, handler_args
+                            )
+                        except KeyError:
+                            # Unknown tool name. Hand back the registered list
+                            # so the agent can self-correct on the next turn.
+                            registered = sorted(session.mcp_host.tools())
+                            dispatch_error = (
+                                f"tool {tool_name!r} is not registered. "
+                                f"Available tools: {registered}"
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            # Handler-side failure (argument mismatch, etc.).
+                            dispatch_error = (
+                                f"{type(exc).__name__}: {exc}"
+                            )
                 # Always write a TOOL_OBSERVATION_RETURN paired with the
                 # TOOL_CALL above. On success the observation carries the
                 # tool's response dict; on failure it carries a synthetic

@@ -1,0 +1,116 @@
+{
+  "scenario_id": "marble_bidding_cu_phase5_v0",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "atlas_seller",
+      "user_id": "atlas_devices_sales",
+      "system_prompt_template": "You are atlas_devices_sales, the seller running auction AUC-CU-BID-000 for CU-BID-LOT-000. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "brook_buyer",
+      "user_id": "brook_procurement",
+      "system_prompt_template": "You are brook_procurement, a buyer in auction AUC-CU-BID-000 for CU-BID-LOT-000. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "cinder_buyer",
+      "user_id": "cinder_procurement",
+      "system_prompt_template": "You are cinder_procurement, a buyer in auction AUC-CU-BID-000 for CU-BID-LOT-000. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-CU-BID-000",
+    "item_id": "CU-BID-LOT-000",
+    "item_description": "Six tablet checkout stands with receipt printers",
+    "quantity": 6,
+    "market_reference_price": 520.0,
+    "buyer_count": 2
+  },
+  "max_turns": 20,
+  "opening_message": {
+    "from": "system",
+    "to": "atlas_seller",
+    "content": "Atlas_Devices_Sales, list the item directly for buyer agents brook_buyer (`brook_procurement`), cinder_buyer (`cinder_procurement`): Six tablet checkout stands with receipt printers... The public market reference price is $520.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "atlas_seller",
+        "owner_id": "atlas_devices_sales",
+        "persona_source": "personas/atlas_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "atlas_devices_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "brook_buyer",
+        "owner_id": "brook_procurement",
+        "persona_source": "personas/brook_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "brook_procurement@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "cinder_buyer",
+        "owner_id": "cinder_procurement",
+        "persona_source": "personas/cinder_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "cinder_procurement@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "atlas_seller",
+        "target": "brook_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "brook_buyer",
+        "target": "atlas_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "atlas_seller",
+        "target": "cinder_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "cinder_buyer",
+        "target": "atlas_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

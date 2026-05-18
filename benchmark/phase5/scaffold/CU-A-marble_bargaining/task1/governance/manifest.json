@@ -1,86 +1,137 @@
 {
   "approval_mandates": {
-    "mandate-vera@market": {
+    "mandate-harborview_finance@finance": {
       "approval_mode": "self",
       "approver_ids": [
-        "vera"
+        "harborview_finance"
       ],
-      "mandate_id": "mandate-vera@market",
-      "owner_id": "vera",
-      "scope_id": "scope-vera@market"
+      "mandate_id": "mandate-harborview_finance@finance",
+      "owner_id": "harborview_finance",
+      "scope_id": "scope-harborview_finance@finance"
     },
-    "mandate-william@market": {
+    "mandate-harborview_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "harborview_procurement"
+      ],
+      "mandate_id": "mandate-harborview_procurement@procurement",
+      "owner_id": "harborview_procurement",
+      "scope_id": "scope-harborview_procurement@procurement"
+    },
+    "mandate-northstar_sales@sales": {
       "approval_mode": "self",
       "approver_ids": [
-        "william"
+        "northstar_sales"
       ],
-      "mandate_id": "mandate-william@market",
-      "owner_id": "william",
-      "scope_id": "scope-william@market"
+      "mandate_id": "mandate-northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "scope_id": "scope-northstar_sales@sales"
     }
   },
   "authorization_scopes": {
-    "scope-vera@market": {
+    "scope-harborview_finance@finance": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_budget",
-        "accept:offers_within_budget"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
       ],
       "constraints": {},
-      "identity_id": "vera@market",
-      "owner_id": "vera",
+      "identity_id": "harborview_finance@finance",
+      "owner_id": "harborview_finance",
       "resource_ids": [
-        "resource://vera/governed"
+        "resource://harborview_finance/governed"
       ],
-      "scope_id": "scope-vera@market"
+      "scope_id": "scope-harborview_finance@finance"
     },
-    "scope-william@market": {
+    "scope-harborview_procurement@procurement": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_reservation",
-        "accept:offers_above_reservation"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
       ],
       "constraints": {},
-      "identity_id": "william@market",
-      "owner_id": "william",
+      "identity_id": "harborview_procurement@procurement",
+      "owner_id": "harborview_procurement",
       "resource_ids": [
-        "resource://william/governed"
+        "resource://harborview_procurement/governed"
       ],
-      "scope_id": "scope-william@market"
+      "scope_id": "scope-harborview_procurement@procurement"
+    },
+    "scope-northstar_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "resource_ids": [
+        "resource://northstar_sales/governed"
+      ],
+      "scope_id": "scope-northstar_sales@sales"
     }
   },
   "escalation_rules": {},
   "governed_actions": {},
   "identities": {
-    "vera@market": {
-      "agent_id": "vera_buyer",
-      "identity_id": "vera@market",
-      "owner_id": "vera"
+    "harborview_finance@finance": {
+      "agent_id": "harborview_finance_approver",
+      "identity_id": "harborview_finance@finance",
+      "owner_id": "harborview_finance"
     },
-    "william@market": {
-      "agent_id": "william_seller",
-      "identity_id": "william@market",
-      "owner_id": "william"
+    "harborview_procurement@procurement": {
+      "agent_id": "harborview_buyer",
+      "identity_id": "harborview_procurement@procurement",
+      "owner_id": "harborview_procurement"
+    },
+    "northstar_sales@sales": {
+      "agent_id": "northstar_seller",
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales"
     }
   },
   "owners": {
-    "vera": {
-      "owner_id": "vera",
-      "user_id": "vera"
+    "harborview_finance": {
+      "owner_id": "harborview_finance",
+      "user_id": "harborview_finance"
     },
-    "william": {
-      "owner_id": "william",
-      "user_id": "william"
+    "harborview_procurement": {
+      "owner_id": "harborview_procurement",
+      "user_id": "harborview_procurement"
+    },
+    "northstar_sales": {
+      "owner_id": "northstar_sales",
+      "user_id": "northstar_sales"
     }
   },
   "relationships": [
     {
-      "channel": "market_dm",
+      "channel": "procurement_dm",
       "relationship": "negotiates_with",
-      "source": "vera_buyer",
-      "target": "william_seller"
+      "source": "harborview_buyer",
+      "target": "northstar_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "harborview_buyer",
+      "target": "harborview_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "harborview_finance_approver",
+      "target": "harborview_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "northstar_seller",
+      "target": "harborview_buyer"
     }
   ]
 }

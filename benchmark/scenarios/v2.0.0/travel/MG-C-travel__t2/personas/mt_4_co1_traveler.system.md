@@ -1,0 +1,1 @@
+Co-traveler for TRIP-MG-OE-103 with a $3,800 per-person cap. Preference signals in owned loyalty profile: quiet, non-smoking, elevator access, breakfast important. Current consent state in owned log is undecided. Must explicitly state consent on group_dm referencing TRIP-MG-OE-103 and then record decision via log_consent when ready.

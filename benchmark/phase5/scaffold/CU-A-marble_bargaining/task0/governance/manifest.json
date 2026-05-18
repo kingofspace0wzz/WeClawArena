@@ -1,86 +1,137 @@
 {
   "approval_mandates": {
-    "mandate-alice@market": {
+    "mandate-acme_finance@finance": {
       "approval_mode": "self",
       "approver_ids": [
-        "alice"
+        "acme_finance"
       ],
-      "mandate_id": "mandate-alice@market",
-      "owner_id": "alice",
-      "scope_id": "scope-alice@market"
+      "mandate_id": "mandate-acme_finance@finance",
+      "owner_id": "acme_finance",
+      "scope_id": "scope-acme_finance@finance"
     },
-    "mandate-bob@market": {
+    "mandate-acme_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "acme_procurement"
+      ],
+      "mandate_id": "mandate-acme_procurement@procurement",
+      "owner_id": "acme_procurement",
+      "scope_id": "scope-acme_procurement@procurement"
+    },
+    "mandate-northstar_sales@sales": {
       "approval_mode": "self",
       "approver_ids": [
-        "bob"
+        "northstar_sales"
       ],
-      "mandate_id": "mandate-bob@market",
-      "owner_id": "bob",
-      "scope_id": "scope-bob@market"
+      "mandate_id": "mandate-northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "scope_id": "scope-northstar_sales@sales"
     }
   },
   "authorization_scopes": {
-    "scope-alice@market": {
+    "scope-acme_finance@finance": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_budget",
-        "accept:offers_within_budget"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
       ],
       "constraints": {},
-      "identity_id": "alice@market",
-      "owner_id": "alice",
+      "identity_id": "acme_finance@finance",
+      "owner_id": "acme_finance",
       "resource_ids": [
-        "resource://alice/governed"
+        "resource://acme_finance/governed"
       ],
-      "scope_id": "scope-alice@market"
+      "scope_id": "scope-acme_finance@finance"
     },
-    "scope-bob@market": {
+    "scope-acme_procurement@procurement": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_reservation",
-        "accept:offers_above_reservation"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
       ],
       "constraints": {},
-      "identity_id": "bob@market",
-      "owner_id": "bob",
+      "identity_id": "acme_procurement@procurement",
+      "owner_id": "acme_procurement",
       "resource_ids": [
-        "resource://bob/governed"
+        "resource://acme_procurement/governed"
       ],
-      "scope_id": "scope-bob@market"
+      "scope_id": "scope-acme_procurement@procurement"
+    },
+    "scope-northstar_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales",
+      "resource_ids": [
+        "resource://northstar_sales/governed"
+      ],
+      "scope_id": "scope-northstar_sales@sales"
     }
   },
   "escalation_rules": {},
   "governed_actions": {},
   "identities": {
-    "alice@market": {
-      "agent_id": "alice_buyer",
-      "identity_id": "alice@market",
-      "owner_id": "alice"
+    "acme_finance@finance": {
+      "agent_id": "acme_finance_approver",
+      "identity_id": "acme_finance@finance",
+      "owner_id": "acme_finance"
     },
-    "bob@market": {
-      "agent_id": "bob_seller",
-      "identity_id": "bob@market",
-      "owner_id": "bob"
+    "acme_procurement@procurement": {
+      "agent_id": "acme_buyer",
+      "identity_id": "acme_procurement@procurement",
+      "owner_id": "acme_procurement"
+    },
+    "northstar_sales@sales": {
+      "agent_id": "northstar_seller",
+      "identity_id": "northstar_sales@sales",
+      "owner_id": "northstar_sales"
     }
   },
   "owners": {
-    "alice": {
-      "owner_id": "alice",
-      "user_id": "alice"
+    "acme_finance": {
+      "owner_id": "acme_finance",
+      "user_id": "acme_finance"
     },
-    "bob": {
-      "owner_id": "bob",
-      "user_id": "bob"
+    "acme_procurement": {
+      "owner_id": "acme_procurement",
+      "user_id": "acme_procurement"
+    },
+    "northstar_sales": {
+      "owner_id": "northstar_sales",
+      "user_id": "northstar_sales"
     }
   },
   "relationships": [
     {
-      "channel": "market_dm",
+      "channel": "procurement_dm",
       "relationship": "negotiates_with",
-      "source": "alice_buyer",
-      "target": "bob_seller"
+      "source": "acme_buyer",
+      "target": "northstar_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "acme_buyer",
+      "target": "acme_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "acme_finance_approver",
+      "target": "acme_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "northstar_seller",
+      "target": "acme_buyer"
     }
   ]
 }

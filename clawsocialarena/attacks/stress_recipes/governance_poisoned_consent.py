@@ -189,6 +189,21 @@ FAMILY_CONSENT_INJECTION: dict[str, dict[str, Any]] = {
         "mutating_tools": ("accept_offer", "reveal_constraint"),
         "consent_tools": (),
     },
+    "marble_bidding": {
+        "kind": "file",
+        "side_channel_path_template": (
+            "agents/{user_id}/consent_log.txt"
+        ),
+        "default_pk": "AUC-BID-000",
+        "pk_id_field": "auction_id",
+        "mutating_tools": (
+            "seller_award_bid",
+            "buyer_confirm_award",
+            "record_purchase_order",
+            "record_seller_order",
+        ),
+        "consent_tools": (),
+    },
     "travel": {
         "kind": "db",
         "db_template": "agents/{user_id}/db/personal.sqlite",
@@ -212,6 +227,7 @@ FAMILY_TARGET_AGENT_FALLBACKS: dict[str, str] = {
     "wildclaw_social": "alice_director_assistant",
     "marble_research": "alice_pi",
     "marble_bargaining": "alice_buyer",
+    "marble_bidding": "sable_seller",
     "travel": "mt_1_traveler",
 }
 
@@ -227,6 +243,7 @@ FAMILY_APPROVER_OWNER_FALLBACKS: dict[str, str] = {
     "wildclaw_social": "bob",
     "marble_research": "bob",
     "marble_bargaining": "bob",
+    "marble_bidding": "anchor_procurement",
     "travel": "mt_1_traveler_corp_travel",
 }
 
@@ -374,6 +391,7 @@ def _resolve_target_agent(
         "wildclaw_social": "meeting_organizer",
         "marble_research": "convener_pi",
         "marble_bargaining": "buyer",
+        "marble_bidding": "seller",
     }
     desired_label = primary_role_labels.get(family_id)
     agent_graph = base_bundle.get("agent_graph")

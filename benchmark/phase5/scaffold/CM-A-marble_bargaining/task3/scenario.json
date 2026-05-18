@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "talon_buyer",
+        "target": "brightline_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "talon_buyer",
+        "target": "talon_finance_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "talon_finance_approver",
+        "target": "talon_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "brightline_seller",
+        "target": "talon_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "talon_procurement@procurement",
+        "agent_id": "talon_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "talon_procurement",
+        "persona_source": "personas/talon_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "brightline_sales@sales",
+        "agent_id": "brightline_seller",
+        "approval_mandate": "self",
+        "owner_id": "brightline_sales",
+        "persona_source": "personas/brightline_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "talon_finance@finance",
+        "agent_id": "talon_finance_approver",
+        "approval_mandate": "self",
+        "owner_id": "talon_finance",
+        "persona_source": "personas/talon_finance_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "talon_buyer",
+      "system_prompt_template": "You are the procurement agent for talon_procurement. Complete transaction TXN-CM-OE-203 for item SAFETY-LIGHT-BAR-28. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "talon_procurement"
+    },
+    {
+      "agent_id": "brightline_seller",
+      "system_prompt_template": "You are the sales agent for brightline_sales. Negotiate transaction TXN-CM-OE-203 for item SAFETY-LIGHT-BAR-28. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "brightline_sales"
+    },
+    {
+      "agent_id": "talon_finance_approver",
+      "system_prompt_template": "You are the finance approval agent for talon_finance. Review transaction TXN-CM-OE-203 for item SAFETY-LIGHT-BAR-28. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "talon_finance"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Safety light bars with an expiring negotiated quote",
+    "item_id": "SAFETY-LIGHT-BAR-28",
+    "quantity": 28,
+    "required_terms": [
+      "quote_id",
+      "quote_expiry",
+      "price_lock"
+    ],
+    "resource_profile": "owned_ecosystem_competitive_expiring_quote",
+    "target_price": 185.0,
+    "transaction_id": "TXN-CM-OE-203"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "talon_procurement, coordinate procurement for 28 units of Safety light bars with an expiring negotiated quote. Your target unit price is $185.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "talon_buyer"
+  },
+  "scenario_id": "marble_bargaining_competitive_expiring_quote_v3",
+  "task_family": "coordination"
+}

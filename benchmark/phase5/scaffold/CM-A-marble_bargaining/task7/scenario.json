@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "altair_buyer",
+        "target": "novus_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "altair_buyer",
+        "target": "altair_broker_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "altair_broker_approver",
+        "target": "altair_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "novus_seller",
+        "target": "altair_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "altair_procurement@procurement",
+        "agent_id": "altair_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "altair_procurement",
+        "persona_source": "personas/altair_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "novus_supply_sales@sales",
+        "agent_id": "novus_seller",
+        "approval_mandate": "self",
+        "owner_id": "novus_supply_sales",
+        "persona_source": "personas/novus_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "altair_broker_review@finance",
+        "agent_id": "altair_broker_approver",
+        "approval_mandate": "self",
+        "owner_id": "altair_broker_review",
+        "persona_source": "personas/altair_broker_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "altair_buyer",
+      "system_prompt_template": "You are the procurement agent for altair_procurement. Complete transaction TXN-CM-OE-207 for item NETWORK-SWITCH-18. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "altair_procurement"
+    },
+    {
+      "agent_id": "novus_seller",
+      "system_prompt_template": "You are the sales agent for novus_supply_sales. Negotiate transaction TXN-CM-OE-207 for item NETWORK-SWITCH-18. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "novus_supply_sales"
+    },
+    {
+      "agent_id": "altair_broker_approver",
+      "system_prompt_template": "You are the finance approval agent for altair_broker_review. Review transaction TXN-CM-OE-207 for item NETWORK-SWITCH-18. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "altair_broker_review"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Network switches in shortage routed through broker review",
+    "item_id": "NETWORK-SWITCH-18",
+    "quantity": 18,
+    "required_terms": [
+      "broker_id",
+      "commission_rate",
+      "broker_authorization_id"
+    ],
+    "resource_profile": "owned_ecosystem_competitive_brokered_shortage",
+    "target_price": 430.0,
+    "transaction_id": "TXN-CM-OE-207"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "altair_procurement, coordinate procurement for 18 units of Network switches in shortage routed through broker review. Your target unit price is $430.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "altair_buyer"
+  },
+  "scenario_id": "marble_bargaining_competitive_brokered_shortage_v7",
+  "task_family": "coordination"
+}

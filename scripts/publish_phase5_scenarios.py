@@ -3,7 +3,9 @@
 Walks the scaffold directory, computes a sha256 hash of each base's
 pre-naturalization input, and either skips (cache hit) or calls
 the naturalization client (cache miss). Writes the rendered bundle
-plus a naturalization_record.json sidecar to the v2 store. Finally
+plus a naturalization_record.json sidecar to the v2 store. Published
+bundles are grouped by task domain, e.g. ``research/<base_id>/``.
+Finally
 emits scenarios/v2.0.0/manifest.json describing all variants
 (bases x 5 attack modes).
 
@@ -21,6 +23,7 @@ import argparse
 import datetime as _dt
 import hashlib
 import json
+import re
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,6 +34,10 @@ from typing import Any, Protocol
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+from clawsocialarena.generator.phase5_store_layout import (  # noqa: E402
+    bundle_relative_path_for_base,
+)
 
 
 ATTACK_MODES = ("no_attacker", "security", "privacy", "governance", "collaboration")
@@ -161,11 +168,25 @@ def _apply_naturalization_patch(*, store_base: Path, patch: dict[str, Any]) -> N
         out = store_base / "personas"
         out.mkdir(parents=True, exist_ok=True)
         for agent_id, persona in personas.items():
-            (out / f"{agent_id}.system.md").write_text(
-                str(persona.get("system_md") or ""), encoding="utf-8"
+            system_path = out / f"{agent_id}.system.md"
+            tools_path = out / f"{agent_id}.tools.json"
+            existing_system_md = (
+                system_path.read_text(encoding="utf-8")
+                if system_path.is_file()
+                else ""
             )
-            (out / f"{agent_id}.tools.json").write_text(
-                json.dumps(persona.get("tools_json") or {}, indent=2),
+            system_path.write_text(
+                _merge_naturalized_system_md(
+                    existing_system_md=existing_system_md,
+                    naturalized_system_md=str(persona.get("system_md") or ""),
+                ),
+                encoding="utf-8",
+            )
+            tools_json = persona.get("tools_json")
+            if _empty_tool_manifest(tools_json) and tools_path.is_file():
+                continue
+            tools_path.write_text(
+                json.dumps(tools_json or {}, indent=2),
                 encoding="utf-8",
             )
     overrides = patch.get("rendered_scenario_overrides") or {}
@@ -190,6 +211,23 @@ def _apply_naturalization_patch(*, store_base: Path, patch: dict[str, Any]) -> N
         scenario_path.write_text(
             json.dumps(scenario, indent=2, sort_keys=True), encoding="utf-8"
         )
+
+
+def _merge_naturalized_system_md(
+    *,
+    existing_system_md: str,
+    naturalized_system_md: str,
+) -> str:
+    naturalized = naturalized_system_md.strip()
+    if "## Runtime Interface" not in existing_system_md:
+        return naturalized
+    marker = "## Persona prompt"
+    prefix = existing_system_md.split(marker, 1)[0].rstrip()
+    return f"{prefix}\n\n{marker}\n\n{naturalized}\n"
+
+
+def _empty_tool_manifest(value: Any) -> bool:
+    return value is None or value == {} or value == []
 
 
 def publish_all(
@@ -222,7 +260,10 @@ def publish_all(
             ex.submit(
                 _publish_one_base,
                 base_dir=base_dir,
-                store_base=store_dir / base_id,
+                store_base=store_dir / _store_relative_path_for_base(
+                    base_dir=base_dir,
+                    base_id=base_id,
+                ),
                 client=client,
                 naturalization_model=naturalization_model,
                 force=force,
@@ -238,23 +279,24 @@ def publish_all(
     # every row except the one just published. We treat any subdir
     # containing a naturalization_record.json as a published base.
     store_dir.mkdir(parents=True, exist_ok=True)
-    published_base_ids = sorted(
-        d.name for d in store_dir.iterdir()
-        if d.is_dir() and (d / "naturalization_record.json").is_file()
-    )
+    published_bases = _discover_published_bases(store_dir)
     rows: list[dict[str, Any]] = []
-    for base_id in published_base_ids:
+    for base_id, bundle_dir in published_bases:
+        metadata = _manifest_metadata_for_base(store_dir / bundle_dir, base_id=base_id)
         for mode in ATTACK_MODES:
             rows.append({
                 "variant_id": f"{base_id}__{mode}",
                 "base_id": base_id,
+                "base_scenario_id": base_id,
                 "attack_mode": mode,
-                "bundle_dir": base_id,
+                "bundle_dir": bundle_dir.as_posix(),
+                "stratum": "main",
+                **metadata,
             })
     rows.sort(key=lambda r: r["variant_id"])
     manifest = {
         "version": store_dir.name,
-        "n_bases": len(published_base_ids),
+        "n_bases": len(published_bases),
         "n_modes": len(ATTACK_MODES),
         "n_variants": len(rows),
         "naturalization_model": naturalization_model,
@@ -265,6 +307,88 @@ def publish_all(
     )
 
     return outcomes
+
+
+def _store_relative_path_for_base(*, base_dir: Path, base_id: str) -> Path:
+    metadata = _manifest_metadata_for_base(base_dir, base_id=base_id)
+    family_id = str(metadata.get("family_id") or "")
+    return bundle_relative_path_for_base(base_id, family_id=family_id or None)
+
+
+def _discover_published_bases(store_dir: Path) -> list[tuple[str, Path]]:
+    """Return ``[(base_id, bundle_dir)]`` from flat or domain-folder stores."""
+    discovered: dict[str, Path] = {}
+    for record_path in sorted(store_dir.rglob("naturalization_record.json")):
+        base_dir = record_path.parent
+        if base_dir == store_dir:
+            continue
+        rel = base_dir.relative_to(store_dir)
+        base_id = base_dir.name
+        current = discovered.get(base_id)
+        if current is None or len(rel.parts) > len(current.parts):
+            discovered[base_id] = rel
+    return sorted(discovered.items())
+
+
+def _manifest_metadata_for_base(base_dir: Path, *, base_id: str) -> dict[str, Any]:
+    """Return run-batch routing metadata for a published base bundle."""
+    scenario: dict[str, Any] = {}
+    phase5_metadata: dict[str, Any] = {}
+    scenario_path = base_dir / "scenario.json"
+    if scenario_path.is_file():
+        scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
+    metadata_path = base_dir / "phase5_metadata.json"
+    if metadata_path.is_file():
+        phase5_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    cell_metadata = phase5_metadata.get("cell")
+    if not isinstance(cell_metadata, dict):
+        cell_metadata = {}
+    tier_metadata = phase5_metadata.get("tier")
+    if not isinstance(tier_metadata, dict):
+        tier_metadata = {}
+
+    family_id = (
+        scenario.get("family_id")
+        or phase5_metadata.get("family_id")
+        or cell_metadata.get("family_id")
+        or phase5_metadata.get("family")
+        or scenario.get("task_family")
+    )
+    cell_id = (
+        phase5_metadata.get("cell_id")
+        or cell_metadata.get("cell_id")
+        or (phase5_metadata.get("cell") if not cell_metadata else None)
+        or _cell_id_from_base_id(base_id)
+    )
+    return {
+        "cell_id": str(cell_id) if cell_id is not None else "",
+        "family_id": str(family_id) if family_id is not None else "",
+        "task_index": _task_index_for_base(base_id, phase5_metadata),
+        "tier_index": phase5_metadata.get("tier_index", tier_metadata.get("tier_index")),
+    }
+
+
+def _cell_id_from_base_id(base_id: str) -> str:
+    return base_id.split("__t", 1)[0]
+
+
+def _task_index_for_base(base_id: str, metadata: dict[str, Any]) -> int:
+    raw = metadata.get("task_index")
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    variant = metadata.get("task_variant")
+    if isinstance(variant, dict):
+        raw = variant.get("task_index")
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+    if isinstance(variant, int) and not isinstance(variant, bool):
+        return variant
+    if isinstance(variant, str):
+        match = re.search(r"(\d+)$", variant)
+        if match:
+            return int(match.group(1))
+    match = re.search(r"__t(\d+)$", base_id)
+    return int(match.group(1)) if match else 0
 
 
 def main() -> int:

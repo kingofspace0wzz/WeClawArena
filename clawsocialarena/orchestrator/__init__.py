@@ -1,6 +1,6 @@
 """Phase 5 orchestration entry points.
 
-The orchestrator slices the 680-row Phase-5 manifest into five run
+The orchestrator slices the current Phase-5 manifest into five run
 batches and dispatches each scenario through a pluggable
 :class:`ScenarioExecutor`. The mock executor returns deterministic
 results so the orchestration logic stays testable without LLM

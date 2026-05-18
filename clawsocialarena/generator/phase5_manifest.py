@@ -1,27 +1,28 @@
 """Phase-5 manifest assembly (S3 step 7).
 
-Aggregates the 285 main attack-variants and the 50 supplementary
+Aggregates the 465 main attack-variants and the 50 supplementary
 descriptors into a single ``phase5_manifest.json`` index. The
 orchestrator's Run-Batch 1..5 selectors consult this file by stratum,
 attack_mode, and cell to determine which rows belong to a given
 batch.
 
-v2 math (difficulty-tier dim dropped, marble_research redesigned to 8 tasks):
+v2 math (difficulty-tier dim dropped, MARBLE bargaining expanded):
 
     3 marble_research cells × 8 tasks × 5 attack modes = 120
-    2 marble_bargaining cells × 3 tasks × 5 attack modes = 30
-    9 other cells × 3 tasks × 5 attack modes = 135
-    Total main: 285 main variants
+    2 marble_bargaining cells × 12 tasks × 5 attack modes = 120
+    2 marble_bidding cells × 6 tasks × 5 attack modes = 60
+    11 other cells × 3 tasks × 5 attack modes = 165
+    Total main: 465 main variants
     + 50 supplementary descriptors
-    = 335 total rows
+    = 515 total rows
 
 Manifest schema (top level):
 
     {
       "phase5_version": 1,
-      "n_main": 285,
+      "n_main": 465,
       "n_supplementary": 50,
-      "n_total": 335,
+      "n_total": 515,
       "main": [<MainManifestRow>...],
       "supplementary": [<SupplementaryManifestRow>...]
     }
@@ -30,6 +31,7 @@ A main row carries every key the orchestrator needs without having
 to re-read the on-disk sidecar; a supplementary row carries the
 SupplementaryRecord fields plus a stable canonical_index.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,22 +39,37 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
-# v2 counts (difficulty-tier dim dropped, marble_research redesigned to 8 tasks):
-#   3 marble_research cells × 8 × 5 = 120
-#   2 marble_bargaining cells × 3 × 5 = 30
-#   9 other cells × 3 × 5 = 135
-#   Total: 285 main variants
-EXPECTED_MAIN_VARIANTS = 285
-EXPECTED_SUPPLEMENTARY_VARIANTS = 50
-EXPECTED_TOTAL_VARIANTS = (
-    EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
+from clawsocialarena.generator.phase5_attack_variants import (
+    PHASE5_VARIANT_INDEX_FILENAME,
+    VariantRecord,
+    expand_base_records_to_variants,
+    load_variant_index,
 )
+from clawsocialarena.generator.phase5_base_generator import (
+    BaseBundleRecord,
+    generate_base_bundles,
+)
+from clawsocialarena.generator.phase5_supplementary import (
+    SupplementaryRecord,
+    supplementary_records,
+)
+
+
+PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
+# v2 counts (difficulty-tier dim dropped, MARBLE bargaining expanded):
+#   3 marble_research cells × 8 × 5 = 120
+#   2 marble_bargaining cells × 12 × 5 = 120
+#   2 marble_bidding cells × 6 × 5 = 60
+#   11 other cells × 3 × 5 = 165
+#   Total: 465 main variants
+EXPECTED_MAIN_VARIANTS = 465
+EXPECTED_SUPPLEMENTARY_VARIANTS = 50
+EXPECTED_TOTAL_VARIANTS = EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
 
 
 @dataclass(frozen=True)
 class MainManifestRow:
-    """One row of the 285-row main stratum manifest.
+    """One row of the main stratum manifest.
 
     Mirrors :class:`VariantRecord` fields plus a canonical_index for
     stable ordering. ``attack_mode`` is the spec section 2 axis
@@ -162,20 +179,12 @@ def assemble_manifest(
     expansion pass (used by tests).
 
     If ``base_records`` is ``None``, the function materializes the
-    full 42-base × 5-mode = 210-variant set into ``out_dir`` from
-    scratch.
+        full 93-base x 5-mode = 465-variant main set into ``out_dir``
+    from scratch.
 
     Writes ``phase5_manifest.json`` at ``out_dir`` and returns the
     same payload as a Python dict.
     """
-    from clawsocialarena.generator.phase5_attack_variants import (
-        PHASE5_VARIANT_INDEX_FILENAME,
-        expand_base_records_to_variants,
-        load_variant_index,
-    )
-    from clawsocialarena.generator.phase5_base_generator import generate_base_bundles
-    from clawsocialarena.generator.phase5_supplementary import supplementary_records
-
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -193,8 +202,7 @@ def assemble_manifest(
     main_rows = _variants_to_manifest_rows(variants)
     if len(main_rows) != EXPECTED_MAIN_VARIANTS:
         raise ValueError(
-            f"main variants {len(main_rows)} != expected "
-            f"{EXPECTED_MAIN_VARIANTS}"
+            f"main variants {len(main_rows)} != expected {EXPECTED_MAIN_VARIANTS}"
         )
     supp_rows = _supp_records_to_manifest_rows(supplementary_records())
     if len(supp_rows) != EXPECTED_SUPPLEMENTARY_VARIANTS:
@@ -230,13 +238,9 @@ def select_rows(
 ) -> list[dict[str, Any]]:
     """Filter the manifest rows by any subset of fields.
 
-    The orchestrator's Run-Batch selectors consume this:
-    - Run-Batch 1 (smoke): stratum="main", tier_index=1, task_index=0  (70 rows)
-    - Run-Batch 2: stratum="main", tier_index=1, task_index in {1, 2}  (140 rows;
-      Run-Batch 1 already consumed task_index=0)
-    - Run-Batch 3: stratum="main", tier_index=2                         (210 rows)
-    - Run-Batch 4: stratum="main", tier_index=3                         (210 rows)
-    - Run-Batch 5: stratum="supplementary"                              (50 rows)
+    The orchestrator's canonical Run-Batch selectors live in
+    :mod:`clawsocialarena.orchestrator.phase5_run_batches`; this helper
+    is a lower-level field filter used by tests and reports.
     """
     rows: list[dict[str, Any]] = []
     pools: list[list[dict[str, Any]]] = []

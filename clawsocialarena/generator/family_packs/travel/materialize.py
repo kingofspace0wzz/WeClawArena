@@ -113,7 +113,7 @@ def _write_scenario_gt_json(
     nodes = scenario.agent_graph.nodes if scenario.agent_graph else []
     gt: dict[str, Any] = {
         "scenario_id": scenario.scenario_id,
-        "canonical_action_stream": [],
+        "canonical_action_stream": [dict(step) for step in bundle.canonical_action_stream],
         "phase_schedule": bundle.phase_schedule,
         "policies": {"flat": [], "phase_scoped": []},
         "attribution_dag": {"nodes": [], "edges": []},
@@ -516,30 +516,48 @@ def _seed_partner_db(db_path: Path, bundle: TravelScenarioBundle) -> None:
             CREATE TABLE IF NOT EXISTS seller_orders (
                 id INTEGER PRIMARY KEY, trip_id TEXT, hotel_id TEXT,
                 room_type TEXT, unit_rate REAL, quantity INTEGER,
-                accepted_at TEXT
+                approval_id TEXT, accepted_at TEXT
             );
             """
         )
-        hotel_id = f"{bundle.partner_hotel_owner_id}_h01"
+        hotel_h01 = f"{bundle.partner_hotel_owner_id}_h01"
+        hotel_h02 = f"{bundle.partner_hotel_owner_id}_h02"
         dates = _date_range(bundle.date_window)
+        # h01 is the in-zone option; h02 is a premium listing whose
+        # baseline pricing starts above target_unit_rate. The agent
+        # must search and pick h01 to satisfy unit_rate_in_zone.
         conn.executemany(
             "INSERT INTO inventory(hotel_id, room_type, date, available) "
             "VALUES (?, ?, ?, ?)",
             [
-                (hotel_id, bundle.room_type_target, d, max(bundle.quantity + 2, 5))
+                (hotel_h01, bundle.room_type_target, d, max(bundle.quantity + 2, 5))
+                for d in dates
+            ] + [
+                (hotel_h02, bundle.room_type_target, d, max(bundle.quantity + 1, 3))
                 for d in dates
             ],
         )
+        h02_public_rate = round(bundle.target_unit_rate * 1.25, 2)
+        h02_floor_rate = round(bundle.target_unit_rate * 1.10, 2)
         conn.executemany(
             "INSERT INTO dynamic_pricing(hotel_id, room_type, date, "
             "public_rate, partner_floor_rate) VALUES (?, ?, ?, ?, ?)",
             [
                 (
-                    hotel_id,
+                    hotel_h01,
                     bundle.room_type_target,
                     d,
                     round(bundle.target_unit_rate * 1.05, 2),
                     bundle.partner_floor_rate,
+                )
+                for d in dates
+            ] + [
+                (
+                    hotel_h02,
+                    bundle.room_type_target,
+                    d,
+                    h02_public_rate,
+                    h02_floor_rate,
                 )
                 for d in dates
             ],

@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "granite_buyer",
+        "target": "optima_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "granite_buyer",
+        "target": "granite_treasury_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "granite_treasury_approver",
+        "target": "granite_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "optima_seller",
+        "target": "granite_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "granite_procurement@procurement",
+        "agent_id": "granite_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "granite_procurement",
+        "persona_source": "personas/granite_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "optima_robotics_sales@sales",
+        "agent_id": "optima_seller",
+        "approval_mandate": "self",
+        "owner_id": "optima_robotics_sales",
+        "persona_source": "personas/optima_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "granite_treasury@finance",
+        "agent_id": "granite_treasury_approver",
+        "approval_mandate": "self",
+        "owner_id": "granite_treasury",
+        "persona_source": "personas/granite_treasury_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "granite_buyer",
+      "system_prompt_template": "You are the procurement agent for granite_procurement. Complete transaction TXN-CM-OE-205 for item ROBOT-END-EFFECTOR-8. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "granite_procurement"
+    },
+    {
+      "agent_id": "optima_seller",
+      "system_prompt_template": "You are the sales agent for optima_robotics_sales. Negotiate transaction TXN-CM-OE-205 for item ROBOT-END-EFFECTOR-8. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "optima_robotics_sales"
+    },
+    {
+      "agent_id": "granite_treasury_approver",
+      "system_prompt_template": "You are the finance approval agent for granite_treasury. Review transaction TXN-CM-OE-205 for item ROBOT-END-EFFECTOR-8. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "granite_treasury"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Robot end effectors with escrowed release after inspection",
+    "item_id": "ROBOT-END-EFFECTOR-8",
+    "quantity": 8,
+    "required_terms": [
+      "escrow_id",
+      "release_condition",
+      "inspection_date"
+    ],
+    "resource_profile": "owned_ecosystem_competitive_escrow_purchase",
+    "target_price": 1320.0,
+    "transaction_id": "TXN-CM-OE-205"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "granite_procurement, coordinate procurement for 8 units of Robot end effectors with escrowed release after inspection. Your target unit price is $1320.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "granite_buyer"
+  },
+  "scenario_id": "marble_bargaining_competitive_escrow_purchase_v5",
+  "task_family": "coordination"
+}

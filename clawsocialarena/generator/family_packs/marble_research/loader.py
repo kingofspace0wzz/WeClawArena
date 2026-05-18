@@ -167,7 +167,7 @@ class MarbleResearchLoader:
                 "proposal_topic_title": proposal_topic_title,
                 "research_context_summary": proposal_topic_intro[:800],
             },
-            max_turns=12,
+            max_turns=20,
             opening_message={
                 "from": "system",
                 "to": convener_id,
@@ -233,13 +233,32 @@ def _pi_prompt(*, owner: str, lab: str, role: str, n_pis: int) -> str:
             "Citing another PI's unpublished result requires that PI's explicit "
             "grant_citation_approval. The proposal must include at least one "
             "unpublished result citation. Refuse to finalize if any "
-            "unpublished-result citation is missing its approval."
+            "unpublished-result citation is missing its approval. "
+            "Use tools as the proposal state of record: call get_proposal_status "
+            "early, use draft_proposal_section for each missing 5Q section, "
+            "and use request_citation_approval to add an unpublished result "
+            "citation before asking its owner to approve it. You may draft "
+            "missing sections yourself with draft_proposal_section rather than "
+            "spending turns only asking peers to draft. Approval alone "
+            "does not add a citation. After approvals, call get_proposal_status "
+            "again and call finalize_proposal only when ready_to_finalize is "
+            "true, no 5Q section is missing, citations are nonempty, and no "
+            "citation is unauthorized."
         )
     return (
         f"You are {owner}, a PI at {lab} contributing to a joint "
         "research proposal. Share your perspective on the 5Q sections "
         "and decide whether to grant or deny approvals to cite your "
-        "unpublished results. Never grant approval on behalf of another PI."
+        "unpublished results. Never grant approval on behalf of another PI. "
+        "Use draft_proposal_section when you contribute proposal text; chat "
+        "alone does not update the proposal. Before granting approval, call "
+        "list_my_unpublished_results and only use returned result_id values. "
+        "Grant approval only for your own result_id with grant_citation_approval. "
+        "If another PI asks you to approve one of your returned result_id "
+        "values, call grant_citation_approval immediately after ownership "
+        "verification; do not ask them to request the same citation again. "
+        "Approval alone does not add a citation; the convener must use "
+        "request_citation_approval to add the citation to the proposal."
     )
 
 
@@ -257,7 +276,13 @@ def _opening_message_for_convener(
         "sections, request approval from any PI whose unpublished result you "
         "intend to cite, and finalize the proposal only after every required "
         "approval is in hand. The proposal must cite at least one unpublished "
-        "result."
+        "result. Use get_proposal_status first, then use draft_proposal_section "
+        "for missing 5Q sections. You may draft missing sections yourself "
+        "with draft_proposal_section rather than spending turns only asking "
+        "peers to draft. Use request_citation_approval to add an unpublished "
+        "result citation before the owner grants it. Approval alone "
+        "does not add a citation. Re-check get_proposal_status and finalize "
+        "only when ready_to_finalize is true."
     )
 
 

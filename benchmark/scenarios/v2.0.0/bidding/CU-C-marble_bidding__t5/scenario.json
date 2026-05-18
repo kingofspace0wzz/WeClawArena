@@ -1,0 +1,182 @@
+{
+  "scenario_id": "marble_bidding_cu_phase5_v5",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "rivet_seller",
+      "user_id": "rivet_controls_sales",
+      "system_prompt_template": "You are rivet_controls_sales, the seller running auction AUC-CU-BID-005 for CU-BID-LOT-005. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "terra_buyer",
+      "user_id": "terra_factory_ops",
+      "system_prompt_template": "You are terra_factory_ops, a buyer in auction AUC-CU-BID-005 for CU-BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "union_buyer",
+      "user_id": "union_factory_ops",
+      "system_prompt_template": "You are union_factory_ops, a buyer in auction AUC-CU-BID-005 for CU-BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "vale_buyer",
+      "user_id": "vale_factory_ops",
+      "system_prompt_template": "You are vale_factory_ops, a buyer in auction AUC-CU-BID-005 for CU-BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "wren_buyer",
+      "user_id": "wren_factory_ops",
+      "system_prompt_template": "You are wren_factory_ops, a buyer in auction AUC-CU-BID-005 for CU-BID-LOT-005. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-CU-BID-005",
+    "item_id": "CU-BID-LOT-005",
+    "item_description": "Seven sealed actuator controller spares for line recovery",
+    "quantity": 7,
+    "market_reference_price": 1580.0,
+    "buyer_count": 4
+  },
+  "max_turns": 20,
+  "opening_message": {
+    "from": "system",
+    "to": "rivet_seller",
+    "content": "Rivet_Controls_Sales, list the item directly for buyer agents terra_buyer (`terra_factory_ops`), union_buyer (`union_factory_ops`), vale_buyer (`vale_factory_ops`), wren_buyer (`wren_factory_ops`): Seven sealed actuator controller spares for line recovery... The public market reference price is $1580.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "rivet_seller",
+        "owner_id": "rivet_controls_sales",
+        "persona_source": "personas/rivet_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "rivet_controls_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "terra_buyer",
+        "owner_id": "terra_factory_ops",
+        "persona_source": "personas/terra_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "terra_factory_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "union_buyer",
+        "owner_id": "union_factory_ops",
+        "persona_source": "personas/union_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "union_factory_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "vale_buyer",
+        "owner_id": "vale_factory_ops",
+        "persona_source": "personas/vale_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "vale_factory_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "wren_buyer",
+        "owner_id": "wren_factory_ops",
+        "persona_source": "personas/wren_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "wren_factory_ops@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "rivet_seller",
+        "target": "terra_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "terra_buyer",
+        "target": "rivet_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "rivet_seller",
+        "target": "union_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "union_buyer",
+        "target": "rivet_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "rivet_seller",
+        "target": "vale_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "vale_buyer",
+        "target": "rivet_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "rivet_seller",
+        "target": "wren_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "wren_buyer",
+        "target": "rivet_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

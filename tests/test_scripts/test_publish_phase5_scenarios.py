@@ -92,6 +92,50 @@ def test_publish_force_flag_bypasses_cache(tmp_path: Path) -> None:
     assert client.calls == 4
 
 
+def test_naturalization_preserves_runtime_identity_contract_and_tools(
+    tmp_path: Path,
+) -> None:
+    from scripts.publish_phase5_scenarios import _apply_naturalization_patch
+
+    store_base = tmp_path / "store" / "bargaining" / "CASE__t0"
+    personas = store_base / "personas"
+    personas.mkdir(parents=True)
+    (personas / "buyer.system.md").write_text(
+        "# buyer\n\n"
+        "## Runtime Interface\n\n"
+        "- Agent ID: `buyer`\n"
+        "- Owner ID: `buyer_owner`\n\n"
+        "## Persona prompt\n\n"
+        "Old deterministic prompt.\n",
+        encoding="utf-8",
+    )
+    (personas / "buyer.tools.json").write_text(
+        json.dumps(["read_owned_file", "request_purchase_approval"]),
+        encoding="utf-8",
+    )
+
+    _apply_naturalization_patch(
+        store_base=store_base,
+        patch={
+            "personas": {
+                "buyer": {
+                    "system_md": "Naturalized buyer prose.",
+                    "tools_json": {},
+                }
+            }
+        },
+    )
+
+    system_md = (personas / "buyer.system.md").read_text(encoding="utf-8")
+    tools = json.loads((personas / "buyer.tools.json").read_text(encoding="utf-8"))
+    assert "## Runtime Interface" in system_md
+    assert "Agent ID: `buyer`" in system_md
+    assert "Owner ID: `buyer_owner`" in system_md
+    assert "Naturalized buyer prose." in system_md
+    assert "Old deterministic prompt." not in system_md
+    assert tools == ["read_owned_file", "request_purchase_approval"]
+
+
 def test_publish_emits_manifest_with_expected_rows(tmp_path: Path) -> None:
     """After publish, manifest.json has N_bases x 5 rows sorted by variant_id."""
     from scripts.publish_phase5_scenarios import publish_all
@@ -107,11 +151,64 @@ def test_publish_emits_manifest_with_expected_rows(tmp_path: Path) -> None:
     assert manifest["n_bases"] == 2
     assert manifest["n_modes"] == 5
     assert manifest["n_variants"] == 10
+    assert sorted(
+        p.relative_to(store).as_posix() for p in store.glob("telecom/CELL-*__t0")
+    ) == [
+        "telecom/CELL-0__t0",
+        "telecom/CELL-1__t0",
+    ]
     variant_ids = [r["variant_id"] for r in manifest["rows"]]
     assert variant_ids == sorted(variant_ids)
     modes = {r["attack_mode"] for r in manifest["rows"]}
     assert modes == {"no_attacker", "collaboration", "security",
                       "privacy", "governance"}
+    for row in manifest["rows"]:
+        assert row["family_id"] == "tau2_telecom"
+        assert row["cell_id"] in {"CELL-0", "CELL-1"}
+        assert row["task_index"] == 0
+        assert row["bundle_dir"] == f"telecom/{row['base_id']}"
+
+
+def test_publish_manifest_uses_nested_phase5_metadata(tmp_path: Path) -> None:
+    """Manifest rows use normalized routing fields from scaffold metadata."""
+    from scripts.publish_phase5_scenarios import publish_all
+
+    scaffold = _make_fake_scaffold(tmp_path, n_bases=1)
+    base = scaffold / "CELL-0" / "task0"
+    (base / "scenario.json").write_text(json.dumps({
+        "scenario_id": "CELL-0__t0",
+        "agents": [{"agent_id": "a1"}],
+    }))
+    (base / "phase5_metadata.json").write_text(json.dumps({
+        "base_scenario_id": "CD-A-marble_research__t1",
+        "cell": {
+            "category": "CD",
+            "cell_id": "CD-A-marble_research",
+            "family_id": "marble_research",
+            "slot": "A",
+        },
+        "task_variant": {
+            "task_index": 1,
+            "task_label": "alpha_beta_gamma_delta_PROP-12",
+        },
+        "tier": {
+            "tier_index": None,
+            "tier_name": None,
+        },
+    }))
+    store = tmp_path / "store"
+    client = _FakeNaturalizationClient()
+
+    publish_all(scaffold_dir=scaffold, store_dir=store, client=client,
+                naturalization_model="test-model")
+
+    manifest = json.loads((store / "manifest.json").read_text())
+    row = manifest["rows"][0]
+    assert row["cell_id"] == "CD-A-marble_research"
+    assert row["family_id"] == "marble_research"
+    assert row["task_index"] == 1
+    assert row["tier_index"] is None
+    assert row["bundle_dir"] == "research/CELL-0__t0"
 
 
 def test_publish_with_base_id_filter_preserves_existing_manifest_rows(

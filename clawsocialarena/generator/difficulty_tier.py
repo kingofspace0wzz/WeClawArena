@@ -9,7 +9,7 @@ use them for new code; new scenarios have no tier dimension.
 Difficulty tier scaffolding for the Phase-5 pilot.
 
 Three tiers (1=easy, 2=realistic, 3=stress) drive variation per base
-task across the 14 cells. Tier names match spec section 5
+task across the original cells. Tier names match spec section 5
 ("Designed and Observed Difficulty") of the benchmark design.
 Tiers are intentionally implemented as post-loader bundle decorators
 rather than loader-level kwargs so every family pack supports them
@@ -36,9 +36,10 @@ can refine its tier semantics without affecting other packs. The
 marble_bargaining pack additionally narrows the negotiation window
 at higher tiers via :func:`bargaining_window_kwargs`.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
@@ -135,9 +136,7 @@ def bargaining_window_kwargs(
     }
 
 
-def _bargaining_tier_override(
-    bundle: dict[str, Any], tier: TierSpec
-) -> dict[str, Any]:
+def _bargaining_tier_override(bundle: dict[str, Any], tier: TierSpec) -> dict[str, Any]:
     """Surface the tier-narrowed window in the bundle metadata.
 
     Used by :func:`apply_tier` so a caller that wants to introspect
@@ -167,6 +166,8 @@ PER_PACK_TIER_OVERRIDES: dict[str, PerPackTierOverride] = {
     "tau2_telecom": _no_op_override,
     "marble_research": _no_op_override,
     "marble_bargaining": _bargaining_tier_override,
+    "marble_bidding": _no_op_override,
+    "swebench_workspace": _no_op_override,
     "wildclaw_social": _no_op_override,
 }
 
@@ -218,9 +219,7 @@ def apply_tier(
     working.update(base_overrides)
     override_hook = PER_PACK_TIER_OVERRIDES.get(family_id, _no_op_override)
     working = override_hook(working, tier)
-    pack_extras = {
-        k: v for k, v in working.items() if k.startswith("_phase_5_")
-    }
+    pack_extras = {k: v for k, v in working.items() if k.startswith("_phase_5_")}
 
     return TierApplyResult(
         tier=tier,

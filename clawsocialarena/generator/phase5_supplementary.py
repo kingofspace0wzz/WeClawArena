@@ -1,6 +1,6 @@
 """Supplementary stratum scaffolding for the Phase-5 pilot (S3 step 6).
 
-The pilot's 680-variant target breaks down as 630 matched main
+The current v2 target breaks down as 465 matched main
 variants + 50 supplementary. The supplementary stratum has three
 sub-strata declared by spec section 1 of the benchmark design:
 
@@ -22,6 +22,7 @@ S3 declares the 50 supplementary records as a flat list of
 consumes the list and materializes each row at run-time (rather than
 at S3 time) so we do not have to load the Phase-E templates eagerly.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,9 +34,7 @@ from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
 HARD_VERIFICATION_COUNT = 25
 EPISODE_GRAPH_COUNT = 20
 NAMED_AUDIT_COUNT = 5
-SUPPLEMENTARY_TOTAL = (
-    HARD_VERIFICATION_COUNT + EPISODE_GRAPH_COUNT + NAMED_AUDIT_COUNT
-)
+SUPPLEMENTARY_TOTAL = HARD_VERIFICATION_COUNT + EPISODE_GRAPH_COUNT + NAMED_AUDIT_COUNT
 
 
 SUB_STRATA: tuple[str, ...] = (
@@ -139,9 +138,7 @@ def _episode_graph_records() -> list[SupplementaryRecord]:
         for episode_idx in range(4):
             records.append(
                 SupplementaryRecord(
-                    variant_id=(
-                        f"supp-eg-{graph_idx:02d}-{episode_idx}-{family_id}"
-                    ),
+                    variant_id=(f"supp-eg-{graph_idx:02d}-{episode_idx}-{family_id}"),
                     sub_stratum="episode_graph",
                     sub_index=sub_index,
                     recipe="episode_graph",
@@ -239,9 +236,7 @@ def supplementary_records() -> list[SupplementaryRecord]:
     safely without affecting subsequent calls.
     """
     return (
-        _hard_verification_records()
-        + _episode_graph_records()
-        + _named_audit_records()
+        _hard_verification_records() + _episode_graph_records() + _named_audit_records()
     )
 
 

@@ -1,6 +1,6 @@
 # ClawSocialArena Current Project Status
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-16
 
 This is the current entry point for project state. Older design specs and plans remain useful as historical records, but they should not be used as execution instructions unless this file points to them. Specs earlier than 2026-05-06 are historical and are no longer active Phase 5 design references.
 
@@ -27,6 +27,7 @@ Do not remove either worktree or branch without an explicit cleanup review. The 
 | Benchmark construction design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |
 | Experimental design | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md` |
 | Attack vector and stress-attack design | `docs/superpowers/specs/2026-05-08-clawsocialarena-v2-attack-vector-design.md` |
+| MARBLE bargaining task construction, attack vectors, and metrics | `docs/superpowers/specs/bargaining/README.md` |
 | Family pack design | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md` |
 | Topology design | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-topology-design.md` |
 | Task contract design | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-task-contract-design.md` |
@@ -37,6 +38,8 @@ The April 17 implementation plan has been archived because it had become a long 
 ## Current Benchmark Target
 
 The current benchmark design is the Phase 5 family-pack scaffold under `benchmark/phase5/scaffold`. The scaffold is structurally complete for the 680-row balanced pilot, but the paid scenario-naturalization and full simulation pass are not complete. The release-ready dataset should not be claimed until the naturalized bundles, trajectories, scorecards, and QC reports are materialized under `benchmark/phase5/v2.0.0`.
+
+Runtime substrate decision, 2026-05-13: `driver_orchestrated_docker` is benchmark-valid for v2.0.0 construction. A valid row launches the gateway plus one OpenClaw/plugin container per owner, routes scored messages, tool calls, model-call records, and resource operations through the gateway, and records Docker run artifacts. The host may schedule turns and call the model provider. `host_session` remains development-only because it bypasses Docker. `containerized_multi_agent`, where each container owns its full autonomous agent loop, is a stronger demo or future substrate rather than a blocker for the benchmark release.
 
 The active Phase 5 scaffold target is:
 
@@ -51,6 +54,8 @@ The active Phase 5 scaffold target is:
 The 630 main matched variants come from 126 base tasks. The base tasks are distributed as 14 category/family cells × 3 task variants × 3 scaffold-tier slots. The `tier1`, `tier2`, and `tier3` path names are legacy scaffold identifiers kept for index stability; they should not be described as validated task-complexity tiers. Each base task has five attack-mode variants: `no_attacker`, `collaboration`, `security`, `privacy`, and `governance`.
 
 The earlier 550-variant tree and the pre-Phase 5 category-sweep batches are historical diagnostics, not the current benchmark target. The later release grid may expand to 1100 variants if the 680-variant pilot validates task quality, trajectory quality, attack pressure, and audit evidence coverage.
+
+MARBLE bargaining has an active owned-ecosystem override under `benchmark/scenarios/v2.0.0/bargaining/`: 24 base tasks, 120 matched rows, and `max_turns = 36`. The bargaining design entry point is `docs/superpowers/specs/bargaining/README.md`.
 
 | Stage | Main base tasks | Main variants | Total variants | Current role |
 |---|---:|---:|---:|---|

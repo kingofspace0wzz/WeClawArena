@@ -16,9 +16,9 @@ runtime; the live executor reads the mutated resources via normal MCP
 tool dispatch and the attack lands without any new runtime substrate.
 Some generic adaptive recipes still declare ``requires_runtime_peer``
 and supply an ``attacker_peer_prompt``. Family-specific owned-resource
-playbooks, such as bargaining, prefer static scenario/resource
-overlays so the docker runner does not need family-specific delivery
-branches.
+playbooks, such as bargaining, bidding, and workspace, prefer static
+scenario/resource overlays so the docker runner does not need
+family-specific delivery branches.
 
 Wiring: the orchestrator selects the recipe by looking up
 ``variant_metadata.attack_recipe`` against :data:`STRESS_RECIPE_REGISTRY`.
@@ -56,7 +56,9 @@ from clawsocialarena.attacks.stress_recipes import (  # noqa: E402,F401
     governance_poisoned_consent,
     collaboration_adaptive_peer,
     bargaining_mode_local_playbooks,
+    bidding_mode_local_playbooks,
     workspace_mode_local_playbooks,
+    travel_mode_local_playbooks,
 )
 
 

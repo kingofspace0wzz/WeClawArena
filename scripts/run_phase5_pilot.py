@@ -33,8 +33,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -45,6 +45,9 @@ from clawsocialarena.orchestrator.phase5_executor import (  # noqa: E402
     MockScenarioExecutor,
     ScenarioExecutor,
 )
+from clawsocialarena.orchestrator.phase5_docker_executor import (  # noqa: E402
+    DriverOrchestratedDockerExecutor,
+)
 from clawsocialarena.orchestrator.phase5_live_executor import (  # noqa: E402
     LiveScenarioExecutor,
     PHASE5_DEFAULT_AGENT_MODEL,
@@ -53,6 +56,7 @@ from clawsocialarena.orchestrator.phase5_live_executor import (  # noqa: E402
 )
 from clawsocialarena.orchestrator.phase5_orchestrator import (  # noqa: E402
     PHASE5_BATCH_REPORT_FILENAME_TEMPLATE,
+    PHASE5_DEFAULT_MAX_WORKERS,
     PHASE5_RUN_BATCHES,
     RunBatchSummary,
     aggregate_pilot_report,
@@ -157,6 +161,16 @@ def _truncate_manifest_for_limit(
 def _select_executor(args: argparse.Namespace) -> ScenarioExecutor:
     if args.executor == "mock":
         return MockScenarioExecutor(seed=args.mock_seed)
+    if args.executor == "docker":
+        store = getattr(args, "store", None)
+        if store is None:
+            raise ValueError("--executor docker requires --store")
+        return DriverOrchestratedDockerExecutor(
+            store_dir=store,
+            run_dir=args.out_dir,
+            agent_model=args.agent_model,
+            max_turns_override=args.max_turns,
+        )
     if args.executor == "live":
         mode = _resolve_live_mode(args)
         store = getattr(args, "store", None)
@@ -209,16 +223,33 @@ def _apply_filter_to_manifest(manifest: dict, filter_spec: str) -> dict:
     return out
 
 
+def _relax_batch_expected_rows_for_filtered_manifest(
+    *,
+    manifest: dict,
+    batch_number: int,
+) -> None:
+    from clawsocialarena.orchestrator.phase5_run_batches import run_batch_for
+
+    spec = run_batch_for(batch_number)
+    rows = spec.selector_fn(manifest)
+    object.__setattr__(spec, "expected_rows", len(rows))
+
+
 def _cmd_run_batch(args: argparse.Namespace) -> int:
     store: Path | None = getattr(args, "store", None)
     if store is not None:
         store_manifest_path = store / "manifest.json"
-        manifest = load_manifest(store_manifest_path)
+        manifest = normalize_store_manifest_for_batches(load_manifest(store_manifest_path))
     else:
         manifest = load_manifest(args.manifest)
     filter_spec: str = getattr(args, "filter", "")
     if filter_spec:
         manifest = _apply_filter_to_manifest(manifest, filter_spec)
+        if args.limit is None or args.limit <= 0:
+            _relax_batch_expected_rows_for_filtered_manifest(
+                manifest=manifest,
+                batch_number=args.batch,
+            )
     if args.limit is not None and args.limit > 0:
         # Truncate the batch's slice in-place so we can do a small live
         # validation before committing to a full batch's cost. The
@@ -235,6 +266,7 @@ def _cmd_run_batch(args: argparse.Namespace) -> int:
         executor=executor,
         base_dir=args.base_dir,
         out_dir=args.out_dir,
+        max_workers=args.max_workers,
     )
     if not args.quiet:
         print(
@@ -304,7 +336,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--base-dir", required=True, type=Path)
     run.add_argument("--out-dir", required=True, type=Path)
     run.add_argument("--batch", required=True, type=int, choices=(1, 2, 3, 4, 5))
-    run.add_argument("--executor", choices=("mock", "live"), default="mock")
+    run.add_argument("--executor", choices=("mock", "live", "docker"), default="mock")
     run.add_argument(
         "--naturalization-model",
         default=PHASE5_DEFAULT_NATURALIZATION_MODEL,
@@ -317,6 +349,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--max-turns", type=int, default=PHASE5_DEFAULT_MAX_TURNS
+    )
+    run.add_argument(
+        "--max-workers",
+        type=int,
+        default=PHASE5_DEFAULT_MAX_WORKERS,
+        help=(
+            "Maximum concurrent scenario rows for this batch. Use 1 for "
+            "Docker sweeps when shared image builds must be serialized."
+        ),
     )
     run.add_argument(
         "--mode",
@@ -370,6 +411,16 @@ def _build_parser() -> argparse.ArgumentParser:
     agg.set_defaults(func=_cmd_aggregate)
 
     return parser
+
+
+def normalize_store_manifest_for_batches(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Expose a v2 store manifest's ``rows`` list as run-batch ``main`` rows."""
+    if "rows" not in manifest or "main" in manifest:
+        return manifest
+    out = dict(manifest)
+    out["main"] = list(manifest.get("rows") or [])
+    out["supplementary"] = list(manifest.get("supplementary") or [])
+    return out
 
 
 def main() -> int:

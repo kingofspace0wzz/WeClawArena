@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "mariner_buyer",
+        "target": "axis_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "mariner_buyer",
+        "target": "mariner_compliance_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "mariner_compliance_approver",
+        "target": "mariner_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "axis_seller",
+        "target": "mariner_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "mariner_procurement@procurement",
+        "agent_id": "mariner_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "mariner_procurement",
+        "persona_source": "personas/mariner_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "axis_control_sales@sales",
+        "agent_id": "axis_seller",
+        "approval_mandate": "self",
+        "owner_id": "axis_control_sales",
+        "persona_source": "personas/axis_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "mariner_compliance@finance",
+        "agent_id": "mariner_compliance_approver",
+        "approval_mandate": "self",
+        "owner_id": "mariner_compliance",
+        "persona_source": "personas/mariner_compliance_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "mariner_buyer",
+      "system_prompt_template": "You are the procurement agent for mariner_procurement. Complete transaction TXN-CM-OE-209 for item ACCESS-CONTROL-PANEL-9. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "mariner_procurement"
+    },
+    {
+      "agent_id": "axis_seller",
+      "system_prompt_template": "You are the sales agent for axis_control_sales. Negotiate transaction TXN-CM-OE-209 for item ACCESS-CONTROL-PANEL-9. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "axis_control_sales"
+    },
+    {
+      "agent_id": "mariner_compliance_approver",
+      "system_prompt_template": "You are the finance approval agent for mariner_compliance. Review transaction TXN-CM-OE-209 for item ACCESS-CONTROL-PANEL-9. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "mariner_compliance"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Access control panels under compliance release hold",
+    "item_id": "ACCESS-CONTROL-PANEL-9",
+    "quantity": 9,
+    "required_terms": [
+      "hold_release_id",
+      "compliance_status",
+      "release_date"
+    ],
+    "resource_profile": "owned_ecosystem_competitive_compliance_hold",
+    "target_price": 1180.0,
+    "transaction_id": "TXN-CM-OE-209"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "mariner_procurement, coordinate procurement for 9 units of Access control panels under compliance release hold. Your target unit price is $1180.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "mariner_buyer"
+  },
+  "scenario_id": "marble_bargaining_competitive_compliance_hold_v9",
+  "task_family": "coordination"
+}

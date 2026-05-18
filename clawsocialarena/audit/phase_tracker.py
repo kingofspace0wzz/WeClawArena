@@ -39,7 +39,10 @@ class PhaseTracker:
             return
         for window in self._schedule:
             if window["start_turn"] <= turn < window["end_turn"]:
-                self._phase = SocialPhase(window["phase"])
+                try:
+                    self._phase = SocialPhase(window["phase"])
+                except ValueError:
+                    continue
                 return
 
     def observe_event(self, cue: str) -> None:

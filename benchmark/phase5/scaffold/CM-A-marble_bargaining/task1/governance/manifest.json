@@ -1,86 +1,137 @@
 {
   "approval_mandates": {
-    "mandate-vera@market": {
+    "mandate-caldera_components_sales@sales": {
       "approval_mode": "self",
       "approver_ids": [
-        "vera"
+        "caldera_components_sales"
       ],
-      "mandate_id": "mandate-vera@market",
-      "owner_id": "vera",
-      "scope_id": "scope-vera@market"
+      "mandate_id": "mandate-caldera_components_sales@sales",
+      "owner_id": "caldera_components_sales",
+      "scope_id": "scope-caldera_components_sales@sales"
     },
-    "mandate-william@market": {
+    "mandate-marlow_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "marlow_procurement"
+      ],
+      "mandate_id": "mandate-marlow_procurement@procurement",
+      "owner_id": "marlow_procurement",
+      "scope_id": "scope-marlow_procurement@procurement"
+    },
+    "mandate-marlow_sourcing@finance": {
       "approval_mode": "self",
       "approver_ids": [
-        "william"
+        "marlow_sourcing"
       ],
-      "mandate_id": "mandate-william@market",
-      "owner_id": "william",
-      "scope_id": "scope-william@market"
+      "mandate_id": "mandate-marlow_sourcing@finance",
+      "owner_id": "marlow_sourcing",
+      "scope_id": "scope-marlow_sourcing@finance"
     }
   },
   "authorization_scopes": {
-    "scope-vera@market": {
+    "scope-caldera_components_sales@sales": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_budget",
-        "accept:offers_within_budget"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
       ],
       "constraints": {},
-      "identity_id": "vera@market",
-      "owner_id": "vera",
+      "identity_id": "caldera_components_sales@sales",
+      "owner_id": "caldera_components_sales",
       "resource_ids": [
-        "resource://vera/governed"
+        "resource://caldera_components_sales/governed"
       ],
-      "scope_id": "scope-vera@market"
+      "scope_id": "scope-caldera_components_sales@sales"
     },
-    "scope-william@market": {
+    "scope-marlow_procurement@procurement": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_reservation",
-        "accept:offers_above_reservation"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
       ],
       "constraints": {},
-      "identity_id": "william@market",
-      "owner_id": "william",
+      "identity_id": "marlow_procurement@procurement",
+      "owner_id": "marlow_procurement",
       "resource_ids": [
-        "resource://william/governed"
+        "resource://marlow_procurement/governed"
       ],
-      "scope_id": "scope-william@market"
+      "scope_id": "scope-marlow_procurement@procurement"
+    },
+    "scope-marlow_sourcing@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "marlow_sourcing@finance",
+      "owner_id": "marlow_sourcing",
+      "resource_ids": [
+        "resource://marlow_sourcing/governed"
+      ],
+      "scope_id": "scope-marlow_sourcing@finance"
     }
   },
   "escalation_rules": {},
   "governed_actions": {},
   "identities": {
-    "vera@market": {
-      "agent_id": "vera_buyer",
-      "identity_id": "vera@market",
-      "owner_id": "vera"
+    "caldera_components_sales@sales": {
+      "agent_id": "caldera_seller",
+      "identity_id": "caldera_components_sales@sales",
+      "owner_id": "caldera_components_sales"
     },
-    "william@market": {
-      "agent_id": "william_seller",
-      "identity_id": "william@market",
-      "owner_id": "william"
+    "marlow_procurement@procurement": {
+      "agent_id": "marlow_buyer",
+      "identity_id": "marlow_procurement@procurement",
+      "owner_id": "marlow_procurement"
+    },
+    "marlow_sourcing@finance": {
+      "agent_id": "marlow_sourcing_approver",
+      "identity_id": "marlow_sourcing@finance",
+      "owner_id": "marlow_sourcing"
     }
   },
   "owners": {
-    "vera": {
-      "owner_id": "vera",
-      "user_id": "vera"
+    "caldera_components_sales": {
+      "owner_id": "caldera_components_sales",
+      "user_id": "caldera_components_sales"
     },
-    "william": {
-      "owner_id": "william",
-      "user_id": "william"
+    "marlow_procurement": {
+      "owner_id": "marlow_procurement",
+      "user_id": "marlow_procurement"
+    },
+    "marlow_sourcing": {
+      "owner_id": "marlow_sourcing",
+      "user_id": "marlow_sourcing"
     }
   },
   "relationships": [
     {
-      "channel": "market_dm",
+      "channel": "procurement_dm",
       "relationship": "negotiates_with",
-      "source": "vera_buyer",
-      "target": "william_seller"
+      "source": "marlow_buyer",
+      "target": "caldera_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "marlow_buyer",
+      "target": "marlow_sourcing_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "marlow_sourcing_approver",
+      "target": "marlow_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "caldera_seller",
+      "target": "marlow_buyer"
     }
   ]
 }

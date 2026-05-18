@@ -12,7 +12,7 @@ def _fake_v2_store(tmp_path: Path) -> Path:
     """Create a minimal v2 store with one base, fully naturalized shape."""
     store = tmp_path / "store"
     base_id = "MG-A-tau2_telecom__t0"
-    base_dir = store / base_id
+    base_dir = store / "telecom" / base_id
     base_dir.mkdir(parents=True)
     (base_dir / "scenario.json").write_text(json.dumps({
         "scenario_id": "smoke",
@@ -53,7 +53,7 @@ def _fake_v2_store(tmp_path: Path) -> Path:
         "naturalization_model": "gpt-5.2",
         "rows": [
             {"variant_id": f"{base_id}__no_attacker", "base_id": base_id,
-             "attack_mode": "no_attacker", "bundle_dir": base_id},
+             "attack_mode": "no_attacker", "bundle_dir": f"telecom/{base_id}"},
         ],
     }
     (store / "manifest.json").write_text(json.dumps(manifest))
@@ -87,10 +87,55 @@ def test_store_mode_writes_session_db_under_run_dir(tmp_path: Path) -> None:
         "variant_id": "MG-A-tau2_telecom__t0__no_attacker",
         "base_id": "MG-A-tau2_telecom__t0",
         "attack_mode": "no_attacker",
-        "bundle_dir": "MG-A-tau2_telecom__t0",
+        "bundle_dir": "telecom/MG-A-tau2_telecom__t0",
         "family_id": "tau2_telecom",
     }
     result = executor.execute(row=row, base_dir=store)
     assert result.error is None or result.error == ""
     variant_dir = run_dir / "variants" / row["variant_id"]
     assert (variant_dir / "phase5_session" / "session.db").is_file()
+
+
+def test_persona_tool_manifests_are_applied_to_scenario_agents(
+    tmp_path: Path,
+) -> None:
+    from clawsocialarena.orchestrator.phase5_live_executor import (
+        _apply_persona_tool_manifests,
+    )
+
+    variant_dir = tmp_path / "variant"
+    personas = variant_dir / "personas"
+    personas.mkdir(parents=True)
+    (personas / "buyer.tools.json").write_text(
+        json.dumps(["read_owned_file", "record_purchase_order"]),
+        encoding="utf-8",
+    )
+    (personas / "seller.tools.json").write_text(
+        json.dumps(["read_owned_file", "record_seller_acceptance"]),
+        encoding="utf-8",
+    )
+    scenario = {
+        "agents": [
+            {"agent_id": "buyer", "system_prompt_template": "Buyer."},
+            {"agent_id": "seller", "system_prompt_template": "Seller."},
+        ]
+    }
+
+    _apply_persona_tool_manifests(scenario, variant_dir)
+
+    assert scenario["agents"][0]["available_tools"] == [
+        "read_owned_file",
+        "record_purchase_order",
+    ]
+    assert scenario["agents"][0]["allowed_tools"] == [
+        "read_owned_file",
+        "record_purchase_order",
+    ]
+    assert scenario["agents"][1]["available_tools"] == [
+        "read_owned_file",
+        "record_seller_acceptance",
+    ]
+    assert scenario["agents"][1]["allowed_tools"] == [
+        "read_owned_file",
+        "record_seller_acceptance",
+    ]

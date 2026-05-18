@@ -25,6 +25,7 @@ MCP dispatch.
 from __future__ import annotations
 
 import asyncio
+import math
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -234,10 +235,11 @@ class Session:
     ) -> None:
         """Register family-pack-specific MCP handlers against this session.
 
-        Supports all six v2 family packs: ``tau2_retail``, ``tau2_airline``,
+        Supports all v2 family packs: ``tau2_retail``, ``tau2_airline``,
         ``tau2_telecom``, ``marble_research``, ``marble_bargaining``,
-        ``wildclaw_social``. The ``context`` dict carries family-specific
-        parameters; the per-family keys are enumerated by
+        ``marble_bidding``, ``swebench_workspace``, ``wildclaw_social``.
+        The ``context`` dict carries family-specific parameters; the
+        per-family keys are enumerated by
         :data:`clawsocialarena.generator.family_pack_registry.FAMILY_LOADERS`
         under each entry's ``session_context_keys`` field. When ``context``
         is omitted or partial, each branch falls back to its pack's default
@@ -252,17 +254,49 @@ class Session:
         ctx = dict(context or {})
         if family_id == "tau2_retail":
             from clawsocialarena.mcp_tools.tau2_retail import (
-                HouseholdContext,
+                RetailSessionContext,
                 register_tau2_retail_handlers,
             )
-            household = HouseholdContext(
+
+            # The four archetypes carry different owner-id fields in their
+            # family_pack_context. Thread them all through so the per-
+            # archetype handlers (and authenticatable_owners) see the right
+            # set without each archetype needing its own branch here. The
+            # shared_account defaults preserve legacy behavior for bundles
+            # that pre-date the 4-archetype redesign.
+            archetype = str(ctx.get("archetype") or "shared_account")
+            household = RetailSessionContext(
                 resources_root=Path(resource_root),
-                household_id=str(ctx.get("household_id", "HH-7")),
-                primary_owner_id=str(ctx.get("primary_owner_id", "alice")),
-                secondary_owner_ids=tuple(
-                    ctx.get("secondary_owner_ids") or ("bob",)
-                ),
+                archetype=archetype,
+                household_id=str(ctx.get("household_id", "HH-7") or ""),
+                primary_owner_id=str(ctx.get("primary_owner_id", "alice") or ""),
+                secondary_owner_ids=tuple(ctx.get("secondary_owner_ids") or ("bob",)),
+                sender_owner_id=str(ctx.get("sender_owner_id") or ""),
+                recipient_owner_id=str(ctx.get("recipient_owner_id") or ""),
+                customer_owner_id=str(ctx.get("customer_owner_id") or ""),
+                store_rep_owner_id=str(ctx.get("store_rep_owner_id") or ""),
+                hub_owner_id=str(ctx.get("hub_owner_id") or ""),
+                spoke_owner_ids=tuple(ctx.get("spoke_owner_ids") or ()),
+                shared_account_id=str(ctx.get("shared_account_id") or ""),
             )
+            # store_rep_dyad / cross_account have no household; clear the
+            # shared_account defaults so authenticatable_owners only includes
+            # the archetype's actual owners.
+            if archetype in ("store_rep_dyad", "cross_account", "hub_aggregator"):
+                household = RetailSessionContext(
+                    resources_root=Path(resource_root),
+                    archetype=archetype,
+                    household_id="",
+                    primary_owner_id="",
+                    secondary_owner_ids=(),
+                    sender_owner_id=str(ctx.get("sender_owner_id") or ""),
+                    recipient_owner_id=str(ctx.get("recipient_owner_id") or ""),
+                    customer_owner_id=str(ctx.get("customer_owner_id") or ""),
+                    store_rep_owner_id=str(ctx.get("store_rep_owner_id") or ""),
+                    hub_owner_id=str(ctx.get("hub_owner_id") or ""),
+                    spoke_owner_ids=tuple(ctx.get("spoke_owner_ids") or ()),
+                    shared_account_id=str(ctx.get("shared_account_id") or ""),
+                )
             register_tau2_retail_handlers(self.mcp_host, context=household)
             return
         if family_id == "tau2_airline":
@@ -270,13 +304,12 @@ class Session:
                 GroupBookingContext,
                 register_tau2_airline_handlers,
             )
+
             group = GroupBookingContext(
                 resources_root=Path(resource_root),
                 group_id=str(ctx.get("group_id", "GRP-7")),
                 organizer_owner_id=str(ctx.get("organizer_owner_id", "alice")),
-                traveler_owner_ids=tuple(
-                    ctx.get("traveler_owner_ids") or ("bob",)
-                ),
+                traveler_owner_ids=tuple(ctx.get("traveler_owner_ids") or ("bob",)),
             )
             register_tau2_airline_handlers(self.mcp_host, context=group)
             return
@@ -285,13 +318,12 @@ class Session:
                 FamilyPlanContext,
                 register_tau2_telecom_handlers,
             )
+
             plan = FamilyPlanContext(
                 resources_root=Path(resource_root),
                 account_id=str(ctx.get("account_id", "ACC-7")),
                 primary_owner_id=str(ctx.get("primary_owner_id", "alice")),
-                secondary_owner_ids=tuple(
-                    ctx.get("secondary_owner_ids") or ("bob",)
-                ),
+                secondary_owner_ids=tuple(ctx.get("secondary_owner_ids") or ("bob",)),
             )
             register_tau2_telecom_handlers(self.mcp_host, context=plan)
             return
@@ -300,13 +332,12 @@ class Session:
                 ResearchCollaborationContext,
                 register_marble_research_handlers,
             )
+
             collaboration = ResearchCollaborationContext(
                 resources_root=Path(resource_root),
                 proposal_id=str(ctx.get("proposal_id", "PROP-7")),
                 convener_owner_id=str(ctx.get("convener_owner_id", "alice")),
-                peer_owner_ids=tuple(
-                    ctx.get("peer_owner_ids") or ("bob", "carol")
-                ),
+                peer_owner_ids=tuple(ctx.get("peer_owner_ids") or ("bob", "carol")),
             )
             register_marble_research_handlers(self.mcp_host, context=collaboration)
             return
@@ -315,6 +346,7 @@ class Session:
                 BargainingContext,
                 register_marble_bargaining_handlers,
             )
+
             bargain = BargainingContext(
                 resources_root=Path(resource_root),
                 transaction_id=str(ctx.get("transaction_id", "TXN-OE-001")),
@@ -329,6 +361,75 @@ class Session:
                 approver_owner_id=str(ctx.get("approver_owner_id", "acme_finance")),
             )
             register_marble_bargaining_handlers(self.mcp_host, context=bargain)
+            return
+        if family_id == "marble_bidding":
+            from clawsocialarena.mcp_tools.marble_bidding import (
+                BiddingContext,
+                register_marble_bidding_handlers,
+            )
+
+            buyer_owner_ids = tuple(
+                str(owner)
+                for owner in (
+                    ctx.get("buyer_owner_ids")
+                    or ("anchor_procurement", "beacon_procurement")
+                )
+            )
+            buyer_agent_ids = tuple(
+                str(agent_id)
+                for agent_id in (
+                    ctx.get("buyer_agent_ids") or ("anchor_buyer", "beacon_buyer")
+                )
+            )
+            default_budgets = {
+                "anchor_procurement": 430.0,
+                "beacon_procurement": 420.0,
+            }
+            raw_budgets = ctx.get("buyer_budget_ceiling_by_owner")
+            if raw_budgets is None:
+                raw_budgets = default_budgets
+            budgets = {}
+            if isinstance(raw_budgets, dict):
+                for owner in buyer_owner_ids:
+                    raw_value = raw_budgets.get(owner)
+                    try:
+                        budget = float(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(budget):
+                        budgets[owner] = budget
+            bidding = BiddingContext(
+                resources_root=Path(resource_root),
+                auction_id=str(ctx.get("auction_id", "AUC-BID-000")),
+                item_id=str(ctx.get("item_id", "BID-LOT-000")),
+                quantity=int(ctx.get("quantity", 8)),
+                seller_owner_id=str(ctx.get("seller_owner_id", "sable_supply_sales")),
+                buyer_owner_ids=buyer_owner_ids,
+                seller_minimum_unit_price=float(
+                    ctx.get("seller_minimum_unit_price", 360.0)
+                ),
+                buyer_budget_ceiling_by_owner=budgets,
+                required_terms=tuple(
+                    str(term)
+                    for term in (
+                        ctx.get("required_terms")
+                        or ("delivery_by_2026-06-30", "warranty_12_months")
+                    )
+                ),
+                agent_owner_by_id={
+                    str(ctx.get("seller_agent_id", "sable_seller")): str(
+                        ctx.get("seller_owner_id", "sable_supply_sales")
+                    ),
+                    **{
+                        agent_id: owner_id
+                        for agent_id, owner_id in zip(
+                            buyer_agent_ids,
+                            buyer_owner_ids,
+                        )
+                    },
+                },
+            )
+            register_marble_bidding_handlers(self.mcp_host, context=bidding)
             return
         if family_id == "swebench_workspace":
             from clawsocialarena.mcp_tools.swebench_workspace import (
@@ -366,6 +467,7 @@ class Session:
                 MeetingNegotiationContext,
                 register_wildclaw_social_handlers,
             )
+
             meeting = MeetingNegotiationContext(
                 resources_root=Path(resource_root),
                 meeting_id=str(ctx.get("meeting_id", "MTG-7")),
@@ -382,6 +484,33 @@ class Session:
                 register_travel_handlers,
             )
 
+            owner_to_agent: dict[str, str] = {}
+            traveler_owner_id = str(ctx.get("traveler_owner_id", ""))
+            partner_owner_id = str(ctx.get("partner_hotel_owner_id", ""))
+            approver_owner_id = str(ctx.get("approver_owner_id", ""))
+            organizer_owner_id = str(ctx.get("organizer_owner_id", ""))
+            co_owner_ids = tuple(
+                str(o) for o in (ctx.get("co_traveler_owner_ids") or ())
+            )
+            traveler_agent_id = str(ctx.get("traveler_agent_id", ""))
+            partner_agent_id = str(ctx.get("partner_hotel_agent_id", ""))
+            approver_agent_id = str(ctx.get("approver_agent_id", ""))
+            organizer_agent_id = str(ctx.get("organizer_agent_id", ""))
+            co_agent_ids = tuple(
+                str(a) for a in (ctx.get("co_traveler_agent_ids") or ())
+            )
+            for oid, aid in (
+                (traveler_owner_id, traveler_agent_id),
+                (partner_owner_id, partner_agent_id),
+                (approver_owner_id, approver_agent_id),
+                (organizer_owner_id, organizer_agent_id),
+            ):
+                if oid and aid:
+                    owner_to_agent[oid] = aid
+            for oid, aid in zip(co_owner_ids, co_agent_ids):
+                if oid and aid:
+                    owner_to_agent[oid] = aid
+
             travel = TravelContext(
                 resources_root=Path(resource_root),
                 trip_id=str(ctx.get("trip_id", "TRIP-CU-OE-001")),
@@ -393,16 +522,15 @@ class Session:
                 partner_floor_rate=float(ctx.get("partner_floor_rate", 395.0)),
                 room_type_target=str(ctx.get("room_type_target", "deluxe_king")),
                 quantity=int(ctx.get("quantity", 3)),
-                traveler_owner_id=str(ctx.get("traveler_owner_id", "")),
-                partner_hotel_owner_id=str(ctx.get("partner_hotel_owner_id", "")),
-                approver_owner_id=str(ctx.get("approver_owner_id", "")),
-                organizer_owner_id=str(ctx.get("organizer_owner_id", "")),
-                co_traveler_owner_ids=tuple(
-                    str(o) for o in (ctx.get("co_traveler_owner_ids") or ())
-                ),
+                traveler_owner_id=traveler_owner_id,
+                partner_hotel_owner_id=partner_owner_id,
+                approver_owner_id=approver_owner_id,
+                organizer_owner_id=organizer_owner_id,
+                co_traveler_owner_ids=co_owner_ids,
                 delegate_authorization_code=str(
                     ctx.get("delegate_authorization_code", "")
                 ),
+                owner_to_agent=owner_to_agent,
             )
             register_travel_handlers(self.mcp_host, context=travel)
             return
@@ -904,9 +1032,7 @@ class Session:
                         if decision.rewritten_content is not None:
                             current_content = decision.rewritten_content
                         if decision.rewritten_mentioned_items is not None:
-                            current_mentioned = list(
-                                decision.rewritten_mentioned_items
-                            )
+                            current_mentioned = list(decision.rewritten_mentioned_items)
                         rewrite_changed = (
                             current_content != previous_content
                             or current_mentioned != previous_mentioned

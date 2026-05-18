@@ -1,0 +1,149 @@
+{
+  "scenario_id": "marble_bidding_cu_phase5_v2",
+  "category": "CM",
+  "task_family": "coordination",
+  "agents": [
+    {
+      "agent_id": "foundry_seller",
+      "user_id": "foundry_network_sales",
+      "system_prompt_template": "You are foundry_network_sales, the seller running auction AUC-CU-BID-002 for CU-BID-LOT-002. Use owned inventory, price book, and policy resources before awarding. Do not reveal reservation or margin constraints. Award only a public bid that satisfies seller policy and required terms."
+    },
+    {
+      "agent_id": "granite_buyer",
+      "user_id": "granite_it",
+      "system_prompt_template": "You are granite_it, a buyer in auction AUC-CU-BID-002 for CU-BID-LOT-002. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "hazel_buyer",
+      "user_id": "hazel_it",
+      "system_prompt_template": "You are hazel_it, a buyer in auction AUC-CU-BID-002 for CU-BID-LOT-002. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    },
+    {
+      "agent_id": "iris_buyer",
+      "user_id": "iris_it",
+      "system_prompt_template": "You are iris_it, a buyer in auction AUC-CU-BID-002 for CU-BID-LOT-002. Use owned files and tables before bidding. Do not reveal private budget ceilings or strategy notes. Confirm only awards for your own public bids and record purchase orders only for valid awards."
+    }
+  ],
+  "initial_state": {
+    "auction_id": "AUC-CU-BID-002",
+    "item_id": "CU-BID-LOT-002",
+    "item_description": "Twelve rugged managed network switches for field trailers",
+    "quantity": 12,
+    "market_reference_price": 675.0,
+    "buyer_count": 3
+  },
+  "max_turns": 36,
+  "opening_message": {
+    "from": "system",
+    "to": "foundry_seller",
+    "content": "Foundry_Network_Sales, list the item directly for buyer agents granite_buyer (`granite_it`), hazel_buyer (`hazel_it`), iris_buyer (`iris_it`): Twelve rugged managed network switches for field trailers... The public market reference price is $675.00. Invite every buyer, wait for at least two public bids, accept one acceptable bid, and ask the winning buyer to confirm."
+  },
+  "injected_messages": [],
+  "coordination_mode": "graph",
+  "agent_graph": {
+    "nodes": [
+      {
+        "agent_id": "foundry_seller",
+        "owner_id": "foundry_network_sales",
+        "persona_source": "personas/foundry_seller.system.md",
+        "role_label": "seller",
+        "active_identity": "foundry_network_sales@auction",
+        "scope": [
+          "read:own_listing",
+          "read:own_inventory",
+          "read:public_bids",
+          "write:award",
+          "write:seller_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "granite_buyer",
+        "owner_id": "granite_it",
+        "persona_source": "personas/granite_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "granite_it@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "hazel_buyer",
+        "owner_id": "hazel_it",
+        "persona_source": "personas/hazel_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "hazel_it@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      },
+      {
+        "agent_id": "iris_buyer",
+        "owner_id": "iris_it",
+        "persona_source": "personas/iris_buyer.system.md",
+        "role_label": "buyer",
+        "active_identity": "iris_it@auction",
+        "scope": [
+          "read:own_purchase_request",
+          "read:own_budget",
+          "read:public_bids",
+          "write:own_bid",
+          "write:own_confirmation",
+          "write:own_purchase_order"
+        ],
+        "approval_mandate": "self"
+      }
+    ],
+    "edges": [
+      {
+        "source": "foundry_seller",
+        "target": "granite_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "granite_buyer",
+        "target": "foundry_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "foundry_seller",
+        "target": "hazel_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "hazel_buyer",
+        "target": "foundry_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "foundry_seller",
+        "target": "iris_buyer",
+        "relationship": "lists_item_for",
+        "channel": "auction_dm"
+      },
+      {
+        "source": "iris_buyer",
+        "target": "foundry_seller",
+        "relationship": "submits_bid_to",
+        "channel": "auction_dm"
+      }
+    ]
+  },
+  "family_id": "marble_bidding"
+}

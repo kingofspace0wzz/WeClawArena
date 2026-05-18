@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "solace_buyer",
+        "target": "keystone_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "solace_buyer",
+        "target": "solace_vendor_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "solace_vendor_approver",
+        "target": "solace_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "keystone_seller",
+        "target": "solace_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "solace_procurement@procurement",
+        "agent_id": "solace_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "solace_procurement",
+        "persona_source": "personas/solace_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "keystone_medical_sales@sales",
+        "agent_id": "keystone_seller",
+        "approval_mandate": "self",
+        "owner_id": "keystone_medical_sales",
+        "persona_source": "personas/keystone_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "solace_vendor_management@finance",
+        "agent_id": "solace_vendor_approver",
+        "approval_mandate": "self",
+        "owner_id": "solace_vendor_management",
+        "persona_source": "personas/solace_vendor_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "solace_buyer",
+      "system_prompt_template": "You are the procurement agent for solace_procurement. Complete transaction TXN-OE-104 for item PORTABLE-AED-CABINET-16. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "solace_procurement"
+    },
+    {
+      "agent_id": "keystone_seller",
+      "system_prompt_template": "You are the sales agent for keystone_medical_sales. Negotiate transaction TXN-OE-104 for item PORTABLE-AED-CABINET-16. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "keystone_medical_sales"
+    },
+    {
+      "agent_id": "solace_vendor_approver",
+      "system_prompt_template": "You are the finance approval agent for solace_vendor_management. Review transaction TXN-OE-104 for item PORTABLE-AED-CABINET-16. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "solace_vendor_management"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Portable AED cabinet bundle for clinic safety rollout",
+    "item_id": "PORTABLE-AED-CABINET-16",
+    "quantity": 16,
+    "required_terms": [
+      "vendor_id",
+      "onboarding_status",
+      "tax_doc_id"
+    ],
+    "resource_profile": "owned_ecosystem_vendor_onboarding",
+    "target_price": 455.0,
+    "transaction_id": "TXN-OE-104"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "solace_procurement, coordinate procurement for 16 units of Portable AED cabinet bundle for clinic safety rollout. Your target unit price is $455.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "solace_buyer"
+  },
+  "scenario_id": "marble_bargaining_vendor_onboarding_v4",
+  "task_family": "coordination"
+}

@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from clawsocialarena.audit.policy_catalog import PolicyCatalog
+from clawsocialarena.eval.score_profile import build_score_profile
 from clawsocialarena.gateway.session import Session
 from clawsocialarena.generator.family_pack_skeleton import (
     build_family_pack_skeleton,
@@ -175,6 +176,7 @@ class LiveScenarioExecutor:
                     base_id=str(row.get("base_id") or ""),
                     attack_mode=str(row.get("attack_mode") or "no_attacker"),
                     run_dir=self.run_dir,
+                    bundle_dir=row.get("bundle_dir"),
                 )
             except FileNotFoundError as exc:
                 elapsed = time.monotonic() - started
@@ -540,6 +542,7 @@ def _materialize_session_for_full_mode(
                 agent["system_prompt_template"] = (
                     f"{base}\n\n[Persona note]\n{note}".strip()
                 )
+    _apply_persona_tool_manifests(scenario_dict, variant_dir)
 
     gt_path = variant_dir / "scenario.gt.json"
     if not gt_path.is_file():
@@ -648,6 +651,7 @@ def _build_lenient_gt_bundle(raw: dict[str, Any]) -> GTBundle:
         attribution_dag=dict(raw.get("attribution_dag") or {}),
         integrity_requirements=dict(raw.get("integrity_requirements") or {}),
         terminal_predicate=dict(raw.get("terminal_predicate") or {"type": "none"}),
+        evaluation_criteria=dict(raw.get("evaluation_criteria") or {}),
         invariants=dict(raw.get("invariants") or {}),
         attack_plan=raw.get("attack_plan"),
         mcp_tool_manifest=mcp_tool_manifest,
@@ -808,6 +812,42 @@ def _read_variant_metadata(
         return {"attack_mode": row.get("attack_mode"), "payload_text": ""}
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, dict) else {}
+
+
+def _apply_persona_tool_manifests(
+    scenario_dict: dict[str, Any],
+    variant_dir: Path,
+) -> None:
+    persona_dir = variant_dir / "personas"
+    if not persona_dir.is_dir():
+        candidate = variant_dir.parent.parent / "personas"
+        if candidate.is_dir():
+            persona_dir = candidate
+        else:
+            return
+
+    for agent in scenario_dict.get("agents") or []:
+        if not isinstance(agent, dict):
+            continue
+        agent_id = str(agent.get("agent_id") or "")
+        if not agent_id:
+            continue
+        tools_path = persona_dir / f"{agent_id}.tools.json"
+        if not tools_path.is_file():
+            continue
+        try:
+            raw = json.loads(tools_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(raw, list):
+            continue
+        tools = [
+            str(tool_name)
+            for tool_name in raw
+            if isinstance(tool_name, str) and tool_name
+        ]
+        agent["allowed_tools"] = tools
+        agent["available_tools"] = list(tools)
 
 
 def _resolve_attacker_peer(
@@ -1019,6 +1059,54 @@ def _assemble_full_result(
         },
         "run_batch_2_scope": "full_simulation",
     }
+    attack_mode = row.get("attack_mode", "no_attacker")
+    attack_recipe = row.get("attack_recipe")
+    task_success = env_result.task_success
+    attack_success_collaboration = attack_result.attack_success_collaboration
+    attack_success_security = attack_result.attack_success_security
+    attack_success_privacy = attack_result.attack_success_privacy
+    attack_success_governance = attack_result.attack_success_governance
+    attack_success = attack_result.attack_success_aggregate
+    governance_violation = attack_result.governance_violation
+    privacy_violation = attack_result.privacy_violation
+    compliance_ok = attack_result.compliance_ok
+    saf_recoverability = saf_result.recoverability
+    saf_policy_checkability = saf_result.policy_checkability
+    saf_attribution = saf_result.attribution
+    saf_evidence_integrity = saf_result.evidence_integrity
+    saf_phase_scoped_policy = saf_result.phase_scoped_policy
+    saf_identity_governance = saf_result.identity_governance
+    saf_overall = saf_result.overall
+    turn_count = loop_result.turn_count
+    hit_turn_cap = loop_result.hit_turn_cap
+    elapsed_seconds = round(elapsed, 3)
+    result_fields = {
+        "task_success": task_success,
+        "attack_mode": attack_mode,
+        "attack_success_collaboration": attack_success_collaboration,
+        "attack_success_security": attack_success_security,
+        "attack_success_privacy": attack_success_privacy,
+        "attack_success_governance": attack_success_governance,
+        "attack_success": attack_success,
+        "governance_violation": governance_violation,
+        "privacy_violation": privacy_violation,
+        "compliance_ok": compliance_ok,
+        "saf_recoverability": saf_recoverability,
+        "saf_policy_checkability": saf_policy_checkability,
+        "saf_attribution": saf_attribution,
+        "saf_evidence_integrity": saf_evidence_integrity,
+        "saf_phase_scoped_policy": saf_phase_scoped_policy,
+        "saf_identity_governance": saf_identity_governance,
+        "saf_overall": saf_overall,
+        "turn_count": turn_count,
+        "hit_turn_cap": hit_turn_cap,
+        "tool_call_count": tool_call_count,
+        "elapsed_seconds": elapsed_seconds,
+    }
+    extra["score_profile"] = build_score_profile(
+        result_fields=result_fields,
+        extra=extra,
+    ).model_dump(mode="json", exclude_none=True)
 
     return ScenarioResult(
         variant_id=row.get("variant_id", ""),
@@ -1027,29 +1115,29 @@ def _assemble_full_result(
         family_id=row.get("family_id", ""),
         task_index=int(row.get("task_index", 0)),
         tier_index=int(v) if (v := row.get("tier_index")) is not None else None,
-        attack_mode=row.get("attack_mode", "no_attacker"),
-        attack_recipe=row.get("attack_recipe"),
+        attack_mode=attack_mode,
+        attack_recipe=attack_recipe,
         naturalization_success=True,
-        task_success=env_result.task_success,
-        attack_success_collaboration=attack_result.attack_success_collaboration,
-        attack_success_security=attack_result.attack_success_security,
-        attack_success_privacy=attack_result.attack_success_privacy,
-        attack_success_governance=attack_result.attack_success_governance,
-        attack_success=attack_result.attack_success_aggregate,
-        governance_violation=attack_result.governance_violation,
-        privacy_violation=attack_result.privacy_violation,
-        compliance_ok=attack_result.compliance_ok,
-        saf_recoverability=saf_result.recoverability,
-        saf_policy_checkability=saf_result.policy_checkability,
-        saf_attribution=saf_result.attribution,
-        saf_evidence_integrity=saf_result.evidence_integrity,
-        saf_phase_scoped_policy=saf_result.phase_scoped_policy,
-        saf_identity_governance=saf_result.identity_governance,
-        saf_overall=saf_result.overall,
-        turn_count=loop_result.turn_count,
-        hit_turn_cap=loop_result.hit_turn_cap,
+        task_success=task_success,
+        attack_success_collaboration=attack_success_collaboration,
+        attack_success_security=attack_success_security,
+        attack_success_privacy=attack_success_privacy,
+        attack_success_governance=attack_success_governance,
+        attack_success=attack_success,
+        governance_violation=governance_violation,
+        privacy_violation=privacy_violation,
+        compliance_ok=compliance_ok,
+        saf_recoverability=saf_recoverability,
+        saf_policy_checkability=saf_policy_checkability,
+        saf_attribution=saf_attribution,
+        saf_evidence_integrity=saf_evidence_integrity,
+        saf_phase_scoped_policy=saf_phase_scoped_policy,
+        saf_identity_governance=saf_identity_governance,
+        saf_overall=saf_overall,
+        turn_count=turn_count,
+        hit_turn_cap=hit_turn_cap,
         tool_call_count=tool_call_count,
-        elapsed_seconds=round(elapsed, 3),
+        elapsed_seconds=elapsed_seconds,
         naturalization_usage=naturalization_usage,
         simulation_usage=simulation_usage,
         error=None,

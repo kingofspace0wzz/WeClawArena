@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -70,8 +71,24 @@ def required_task_evidence_tools(gt: GTBundle) -> list[str]:
     """
 
     declared_tools = set(gt.mcp_tool_manifest.keys())
+    declared_tools.update(_evaluation_criteria_action_tools(gt))
     declared_tools.update(_implicit_terminal_tools(gt))
-    return sorted(declared_tools & TASK_EVIDENCE_TOOL_NAMES)
+    legacy_tools = declared_tools & TASK_EVIDENCE_TOOL_NAMES
+    return sorted(legacy_tools | _evaluation_criteria_action_tools(gt))
+
+
+def _evaluation_criteria_action_tools(gt: GTBundle) -> set[str]:
+    criteria = getattr(gt, "evaluation_criteria", None)
+    if not isinstance(criteria, dict):
+        return set()
+    tools: set[str] = set()
+    for action in criteria.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        tool_name = action.get("tool_name")
+        if isinstance(tool_name, str) and tool_name:
+            tools.add(tool_name)
+    return tools
 
 
 def _implicit_terminal_tools(gt: GTBundle) -> set[str]:
@@ -109,7 +126,13 @@ def score_task_tool_evidence(
     completion_mode = task_completion_mode(gt)
     required_tools = required_task_evidence_tools(gt)
     observed_tool_ops = _observed_tool_operations(records)
-    observed_tools = sorted(observed_tool_ops.keys())
+    observed_tools = sorted(
+        set(observed_tool_ops.keys())
+        | _observed_successful_evaluation_tools(
+            records,
+            _evaluation_criteria_action_tools(gt),
+        )
+    )
     missing_tools = sorted(set(required_tools) - set(observed_tools))
     required_operations = _required_tool_operations(gt)
     observed_operations = [
@@ -229,6 +252,49 @@ def _observed_tool_operations(records: list[ActionRecord]) -> dict[str, set[str]
         if isinstance(op, str) and op:
             observed.setdefault(tool_name, set()).add(op)
     return observed
+
+
+def _observed_successful_evaluation_tools(
+    records: list[ActionRecord],
+    tool_names: set[str],
+) -> set[str]:
+    if not tool_names:
+        return set()
+    pending: dict[str, str] = {}
+    observed: set[str] = set()
+    for record in records:
+        if record.action_type == ActionType.TOOL_CALL:
+            tool_name = _tool_name_from_payload(record.payload)
+            if tool_name in tool_names:
+                pending[record.action_id] = tool_name
+            continue
+        if record.action_type != ActionType.TOOL_OBSERVATION_RETURN:
+            continue
+        ref_id = record.payload.get("tool_call_action_id") or record.payload.get(
+            "call_action_id"
+        )
+        if not isinstance(ref_id, str) or ref_id not in pending:
+            continue
+        tool_name = pending.pop(ref_id)
+        if not _observation_payload_indicates_failure(record.payload):
+            observed.add(tool_name)
+    return observed
+
+
+def _observation_payload_indicates_failure(payload: dict[str, Any]) -> bool:
+    observation = payload.get("observation")
+    decoded: Any = observation
+    if isinstance(observation, str):
+        try:
+            decoded = json.loads(observation)
+        except json.JSONDecodeError:
+            decoded = observation
+    if isinstance(decoded, dict):
+        if decoded.get("ok") is False:
+            return True
+        if decoded.get("error"):
+            return True
+    return False
 
 
 def _observed_bug_comments(records: list[ActionRecord]) -> list[str]:

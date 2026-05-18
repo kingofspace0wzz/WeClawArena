@@ -29,6 +29,8 @@ from clawsocialarena.eval.llm_judge import (
     build_judge_payload,
     llm_judge_rescore_batch,
     llm_judge_score_row,
+    load_trajectory_for_row,
+    load_variant_metadata_for_row,
 )
 from clawsocialarena.llm.costing import TokenUsage
 from clawsocialarena.llm.openai_client import OpenAIJsonResult
@@ -389,6 +391,126 @@ def test_invalid_response_yields_all_none_with_error_captured(
     assert result.error is not None
     assert "judge_call_failed" in result.error
     assert "openai timeout simulated" in result.error
+
+
+def test_runtime_variant_metadata_preferred_over_copied_attack_variant(
+    tmp_path: Path,
+) -> None:
+    variant_dir = tmp_path / "variants" / "CM-A-marble_bargaining__t0__privacy"
+    attack_variant_dir = variant_dir / "attack_variants" / "privacy"
+    attack_variant_dir.mkdir(parents=True)
+    (attack_variant_dir / "phase5_variant_metadata.json").write_text(
+        json.dumps({"attack": {"attack_recipe": "adaptive_exfiltration"}}),
+        encoding="utf-8",
+    )
+    (variant_dir / "phase5_variant_metadata.json").write_text(
+        json.dumps(
+            {
+                "attack": {
+                    "attack_recipe": "mode_local_playbook",
+                    "metadata": {"playbook_id": "privacy_bargaining_stress_v1"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = load_variant_metadata_for_row(
+        row={
+            "attack_mode": "privacy",
+            "extra": {"bundle_dir": str(variant_dir)},
+        },
+        base_dir=tmp_path,
+    )
+
+    assert metadata["attack"]["attack_recipe"] == "mode_local_playbook"
+
+
+def test_action_log_observation_pairs_by_tool_call_action_id(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "variant" / "run"
+    run_dir.mkdir(parents=True)
+    report_path = run_dir / "simulation_report.json"
+    report_path.write_text("{}", encoding="utf-8")
+    db_path = run_dir / "action_log.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(_SCHEMA)
+        rows = [
+            (
+                "alice_buyer",
+                "tc-1",
+                "GENESIS",
+                "hash-1",
+                "tool_call",
+                json.dumps(
+                    {
+                        "tool_name": "accept_offer",
+                        "arguments": {"accepter_id": "alice", "price": 77.0},
+                    }
+                ),
+                "[]",
+            ),
+            (
+                "alice_buyer",
+                "tr-1",
+                "hash-1",
+                "hash-2",
+                "tool_observation_return",
+                json.dumps(
+                    {
+                        "tool_call_action_id": "tc-1",
+                        "tool_name": "accept_offer",
+                        "observation": json.dumps(
+                            {"ok": True, "status": "agreed"}
+                        ),
+                    }
+                ),
+                "[]",
+            ),
+        ]
+        for agent_id, action_id, prev, record_hash, action_type, payload, source_ids in rows:
+            conn.execute(
+                "INSERT INTO actions (agent_id, action_id, prev_hash,"
+                " record_hash, action_type, timestamp, execution_phase,"
+                " social_phase, payload_json, integrity_level, signature,"
+                " source_action_ids, governance_json) VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    agent_id,
+                    action_id,
+                    prev,
+                    record_hash,
+                    action_type,
+                    "2026-01-01T00:00:00Z",
+                    "nominal",
+                    "discovery",
+                    payload,
+                    1,
+                    None,
+                    source_ids,
+                    None,
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    trajectory = load_trajectory_for_row(
+        row={"transcript_path": str(report_path)},
+        base_dir=tmp_path,
+    )
+
+    assert trajectory["tool_dispatches"] == [
+        {
+            "agent_id": "alice_buyer",
+            "tool_name": "accept_offer",
+            "arguments": {"accepter_id": "alice", "price": 77.0},
+            "audit_class": None,
+            "observation": {"ok": True, "status": "agreed"},
+        }
+    ]
 
 
 def test_batch_driver_preserves_canonical_row_order(tmp_path):

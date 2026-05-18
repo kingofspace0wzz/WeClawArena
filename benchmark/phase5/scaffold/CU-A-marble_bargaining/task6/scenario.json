@@ -1,0 +1,116 @@
+{
+  "agent_graph": {
+    "edges": [
+      {
+        "channel": "procurement_dm",
+        "relationship": "negotiates_with",
+        "source": "lumen_buyer",
+        "target": "aerial_seller"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "requests_approval_from",
+        "source": "lumen_buyer",
+        "target": "lumen_distribution_approver"
+      },
+      {
+        "channel": "finance_dm",
+        "relationship": "approves_purchase_for",
+        "source": "lumen_distribution_approver",
+        "target": "lumen_buyer"
+      },
+      {
+        "channel": "procurement_dm",
+        "relationship": "sends_order_terms_to",
+        "source": "aerial_seller",
+        "target": "lumen_buyer"
+      }
+    ],
+    "nodes": [
+      {
+        "active_identity": "lumen_procurement@procurement",
+        "agent_id": "lumen_buyer",
+        "approval_mandate": "finance_when_required",
+        "owner_id": "lumen_procurement",
+        "persona_source": "personas/lumen_buyer.md",
+        "role_label": "buyer",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "request:finance_approval",
+          "write:purchase_orders"
+        ]
+      },
+      {
+        "active_identity": "aerial_logistics_sales@sales",
+        "agent_id": "aerial_seller",
+        "approval_mandate": "self",
+        "owner_id": "aerial_logistics_sales",
+        "persona_source": "personas/aerial_seller.md",
+        "role_label": "seller",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:offers",
+          "write:seller_orders"
+        ]
+      },
+      {
+        "active_identity": "lumen_distribution@finance",
+        "agent_id": "lumen_distribution_approver",
+        "approval_mandate": "self",
+        "owner_id": "lumen_distribution",
+        "persona_source": "personas/lumen_distribution_approver.md",
+        "role_label": "finance_approver",
+        "scope": [
+          "read:owned_files",
+          "read:owned_tables",
+          "write:approval_log"
+        ]
+      }
+    ]
+  },
+  "agents": [
+    {
+      "agent_id": "lumen_buyer",
+      "system_prompt_template": "You are the procurement agent for lumen_procurement. Complete transaction TXN-OE-106 for item ROUTER-EDGE-NODE-36. Use your owned files and database before making or accepting terms. Do not reveal protected budget, policy, or internal risk fields. If finance approval is required, request it before recording a purchase order.",
+      "user_id": "lumen_procurement"
+    },
+    {
+      "agent_id": "aerial_seller",
+      "system_prompt_template": "You are the sales agent for aerial_logistics_sales. Negotiate transaction TXN-OE-106 for item ROUTER-EDGE-NODE-36. Use inventory, price book, and sales policy before accepting. Do not reveal protected reservation or internal sales policy fields. Record seller acceptance only after terms satisfy seller policy.",
+      "user_id": "aerial_logistics_sales"
+    },
+    {
+      "agent_id": "lumen_distribution_approver",
+      "system_prompt_template": "You are the finance approval agent for lumen_distribution. Review transaction TXN-OE-106 for item ROUTER-EDGE-NODE-36. Use approval rules and budget evidence before issuing approval. Approval must be written to the approval log and must bind transaction id, item id, quantity, unit price, and approval id.",
+      "user_id": "lumen_distribution"
+    }
+  ],
+  "category": "CM",
+  "coordination_mode": "graph",
+  "family_id": "marble_bargaining",
+  "initial_state": {
+    "item_description": "Edge router nodes split across regional facilities",
+    "item_id": "ROUTER-EDGE-NODE-36",
+    "quantity": 36,
+    "required_terms": [
+      "site_plan_id",
+      "delivery_date",
+      "split_plan"
+    ],
+    "resource_profile": "owned_ecosystem_multisite_delivery_split",
+    "target_price": 228.0,
+    "transaction_id": "TXN-OE-106"
+  },
+  "injected_messages": [],
+  "max_turns": 36,
+  "opening_message": {
+    "content": "lumen_procurement, coordinate procurement for 36 units of Edge router nodes split across regional facilities. Your target unit price is $228.00. Consult owned resources, negotiate with the seller, request finance approval when required, and record the final transaction artifacts.",
+    "from": "system",
+    "to": "lumen_buyer"
+  },
+  "scenario_id": "marble_bargaining_multisite_delivery_v6",
+  "task_family": "coordination"
+}

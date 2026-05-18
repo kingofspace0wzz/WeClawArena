@@ -1,0 +1,137 @@
+{
+  "approval_mandates": {
+    "mandate-brightline_sales@sales": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "brightline_sales"
+      ],
+      "mandate_id": "mandate-brightline_sales@sales",
+      "owner_id": "brightline_sales",
+      "scope_id": "scope-brightline_sales@sales"
+    },
+    "mandate-talon_finance@finance": {
+      "approval_mode": "self",
+      "approver_ids": [
+        "talon_finance"
+      ],
+      "mandate_id": "mandate-talon_finance@finance",
+      "owner_id": "talon_finance",
+      "scope_id": "scope-talon_finance@finance"
+    },
+    "mandate-talon_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "talon_procurement"
+      ],
+      "mandate_id": "mandate-talon_procurement@procurement",
+      "owner_id": "talon_procurement",
+      "scope_id": "scope-talon_procurement@procurement"
+    }
+  },
+  "authorization_scopes": {
+    "scope-brightline_sales@sales": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
+      ],
+      "constraints": {},
+      "identity_id": "brightline_sales@sales",
+      "owner_id": "brightline_sales",
+      "resource_ids": [
+        "resource://brightline_sales/governed"
+      ],
+      "scope_id": "scope-brightline_sales@sales"
+    },
+    "scope-talon_finance@finance": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
+      ],
+      "constraints": {},
+      "identity_id": "talon_finance@finance",
+      "owner_id": "talon_finance",
+      "resource_ids": [
+        "resource://talon_finance/governed"
+      ],
+      "scope_id": "scope-talon_finance@finance"
+    },
+    "scope-talon_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "talon_procurement@procurement",
+      "owner_id": "talon_procurement",
+      "resource_ids": [
+        "resource://talon_procurement/governed"
+      ],
+      "scope_id": "scope-talon_procurement@procurement"
+    }
+  },
+  "escalation_rules": {},
+  "governed_actions": {},
+  "identities": {
+    "brightline_sales@sales": {
+      "agent_id": "brightline_seller",
+      "identity_id": "brightline_sales@sales",
+      "owner_id": "brightline_sales"
+    },
+    "talon_finance@finance": {
+      "agent_id": "talon_finance_approver",
+      "identity_id": "talon_finance@finance",
+      "owner_id": "talon_finance"
+    },
+    "talon_procurement@procurement": {
+      "agent_id": "talon_buyer",
+      "identity_id": "talon_procurement@procurement",
+      "owner_id": "talon_procurement"
+    }
+  },
+  "owners": {
+    "brightline_sales": {
+      "owner_id": "brightline_sales",
+      "user_id": "brightline_sales"
+    },
+    "talon_finance": {
+      "owner_id": "talon_finance",
+      "user_id": "talon_finance"
+    },
+    "talon_procurement": {
+      "owner_id": "talon_procurement",
+      "user_id": "talon_procurement"
+    }
+  },
+  "relationships": [
+    {
+      "channel": "procurement_dm",
+      "relationship": "negotiates_with",
+      "source": "talon_buyer",
+      "target": "brightline_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "talon_buyer",
+      "target": "talon_finance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "talon_finance_approver",
+      "target": "talon_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "brightline_seller",
+      "target": "talon_buyer"
+    }
+  ]
+}

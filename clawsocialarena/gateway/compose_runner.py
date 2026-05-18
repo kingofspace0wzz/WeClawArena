@@ -150,7 +150,21 @@ def ComposeRunner(
         build_flag,
         "-d",
     ]
-    subprocess.run(up_cmd, check=True, env=env)
+    down_cmd = [
+        "docker",
+        "compose",
+        "-f",
+        str(template_path),
+        "-p",
+        project_name,
+        "down",
+        "-v",
+    ]
+    try:
+        subprocess.run(up_cmd, check=True, env=env)
+    except Exception:
+        subprocess.run(down_cmd, check=False)
+        raise
     try:
         url = f"http://localhost:{gateway_port}"
         _wait_for_healthz(url, timeout=health_timeout)
@@ -164,16 +178,6 @@ def ComposeRunner(
         # the test does not inherit stale state. ``check=False`` keeps
         # teardown best-effort: if setup raised before the compose was
         # fully up, there may be nothing to tear down and that is fine.
-        down_cmd = [
-            "docker",
-            "compose",
-            "-f",
-            str(template_path),
-            "-p",
-            project_name,
-            "down",
-            "-v",
-        ]
         subprocess.run(down_cmd, check=False)
 
 

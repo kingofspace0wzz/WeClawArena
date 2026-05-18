@@ -57,7 +57,10 @@ async def test_mcp_noop_tool_logs_both_actions(tmp_path: Path) -> None:
     assert body["tool_call_action_id"] != ""
     assert isinstance(body["tool_observation_action_id"], str)
     assert body["tool_observation_action_id"] != ""
-    assert body["observation"] == {"ok": True, "echo": {"foo": "bar"}}
+    assert body["observation"] == {
+        "ok": True,
+        "echo": {"_agent_id": "alice", "foo": "bar"},
+    }
 
     assert session.action_log is not None
     records = session.action_log.read_all()
@@ -80,7 +83,7 @@ async def test_mcp_noop_tool_logs_both_actions(tmp_path: Path) -> None:
     import json
     assert json.loads(obs_rec.payload["observation"]) == {
         "ok": True,
-        "echo": {"foo": "bar"},
+        "echo": {"_agent_id": "alice", "foo": "bar"},
     }
     assert obs_rec.action_id == body["tool_observation_action_id"]
 
@@ -135,6 +138,35 @@ async def test_mcp_validates_required_fields(tmp_path: Path) -> None:
             json={"agent_id": "alice", "arguments": "not-a-dict"},
         )
         assert resp.status == 400
+
+
+@pytest.mark.asyncio
+async def test_mcp_dispatch_overwrites_spoofed_hidden_agent_id(
+    tmp_path: Path,
+) -> None:
+    session = _make_passive_session(tmp_path, "hidden-agent")
+    seen: list[dict] = []
+
+    def inspect_args(arguments: dict) -> dict:
+        seen.append(dict(arguments))
+        return {"ok": True, "agent_id": arguments.get("_agent_id")}
+
+    session.mcp_host.register("inspect_args", inspect_args)
+    app = build_app(session)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.post(
+            "/mcp/inspect_args",
+            json={
+                "agent_id": "alice",
+                "arguments": {"_agent_id": "bob", "x": 1},
+            },
+        )
+        assert resp.status == 200
+        body = await resp.json()
+
+    assert body["observation"] == {"ok": True, "agent_id": "alice"}
+    assert seen == [{"_agent_id": "alice", "x": 1}]
 
 
 @pytest.mark.asyncio
@@ -220,7 +252,10 @@ async def test_mcp_noop_under_baseline_runs_but_does_not_log() -> None:
         assert resp.status == 200
         body = await resp.json()
 
-    assert body["observation"] == {"ok": True, "echo": {"hello": "world"}}
+    assert body["observation"] == {
+        "ok": True,
+        "echo": {"_agent_id": "alice", "hello": "world"},
+    }
     assert body["tool_call_action_id"] is None
     assert body["tool_observation_action_id"] is None
     assert session.action_log is None

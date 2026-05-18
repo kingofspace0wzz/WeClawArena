@@ -2,12 +2,13 @@
 
 These tests use a slice of cells to keep runtime manageable; one
 parametrized test covers every family to catch loader-kwarg drift.
-A full materialization sanity test runs once at the end across all 14
-cells (tier dim dropped):
+A full materialization sanity test runs once at the end across all cells
+(tier dim dropped):
 
-    3 marble_research cells * 8 tasks + 2 marble_bargaining cells * 3 tasks
-    + 9 other cells * 3 tasks = 24 + 6 + 27 = 57
+    3 marble_research cells * 8 tasks + 2 marble_bargaining cells * 12 tasks
+    + 2 marble_bidding cells * 6 tasks + 11 other cells * 3 tasks = 93
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ from pathlib import Path
 import pytest
 
 from clawsocialarena.generator.cell_allocation import all_cells
-from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
 from clawsocialarena.generator.phase5_base_generator import (
     PHASE5_BASE_INDEX_FILENAME,
     PHASE5_METADATA_FILENAME,
@@ -49,6 +49,7 @@ def test_generate_base_bundles_for_three_task_family_produces_three_records(
 ) -> None:
     """A non-marble family cell (tau2_airline) still produces 3 base bundles."""
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(
         out_dir=tmp_path,
@@ -62,6 +63,7 @@ def test_generate_base_bundles_for_three_task_family_produces_three_records(
 
 def test_each_bundle_has_phase5_metadata_sidecar(tmp_path: Path) -> None:
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     for record in records:
@@ -76,6 +78,7 @@ def test_each_bundle_has_phase5_metadata_sidecar(tmp_path: Path) -> None:
 
 def test_base_scenario_ids_are_unique(tmp_path: Path) -> None:
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     ids = [r.base_scenario_id for r in records]
@@ -92,6 +95,7 @@ def test_attack_intensity_matches_easy_tier_default(tmp_path: Path) -> None:
     must match what the difficulty-tier table declares for tier 1.
     """
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     assert {r.attack_intensity for r in records} == {0.4}
@@ -102,6 +106,7 @@ def test_easy_tier_scenario_json_keeps_full_turn_budget(tmp_path: Path) -> None:
     default (no tier multiplier shrinks it).
     """
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     seen_max_turns: set[int] = set()
@@ -116,42 +121,51 @@ def test_easy_tier_scenario_json_keeps_full_turn_budget(tmp_path: Path) -> None:
     assert all(v > 0 for v in seen_max_turns)
 
 
-def test_bargaining_cell_keeps_full_window_on_disk(tmp_path: Path) -> None:
+def test_bargaining_cell_keeps_full_turn_budget_on_disk(tmp_path: Path) -> None:
     """For a marble_bargaining cell at the easy/tier-1 baseline, the
-    materialized agent prompts must encode the loader's default
-    (permissive) budget/reservation window. No narrowing applies
-    because the tier dim was dropped.
+    materialized scenarios must keep the loader's full turn budget.
+    No tier narrowing applies because the tier dim was dropped.
     """
-    import re
-
     bargaining_cells = [c for c in all_cells() if c.family_id == "marble_bargaining"]
     assert bargaining_cells, "no marble_bargaining cell in allocation"
     cell = bargaining_cells[0]
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
-    money = re.compile(r"\$(\d+(?:\.\d+)?)")
-    spreads: list[float] = []
     for record in records:
         scenario_path = tmp_path / record.bundle_dir / "scenario.json"
         scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
-        buyer_prompt = next(
-            a["system_prompt_template"]
-            for a in scenario["agents"]
-            if a["agent_id"].endswith("_buyer")
+        assert scenario["max_turns"] == 36
+        assert scenario["initial_state"]["resource_profile"].startswith(
+            "owned_ecosystem_"
         )
-        seller_prompt = next(
-            a["system_prompt_template"]
-            for a in scenario["agents"]
-            if a["agent_id"].endswith("_seller")
-        )
-        ceiling = float(money.search(buyer_prompt).group(1))
-        reservation = float(money.search(seller_prompt).group(1))
-        spreads.append(ceiling - reservation)
-    # The default (un-narrowed) spread should be strictly positive.
-    assert all(s > 0 for s in spreads)
+
+
+def test_bargaining_cells_materialize_24_cell_specific_tasks(tmp_path: Path) -> None:
+    bargaining_cells = tuple(
+        cell for cell in all_cells() if cell.family_id == "marble_bargaining"
+    )
+    records = generate_base_bundles(out_dir=tmp_path, cells=bargaining_cells)
+
+    assert len(records) == 24
+    assert {record.cell_id for record in records} == {
+        "CU-A-marble_bargaining",
+        "CM-A-marble_bargaining",
+    }
+    assert {
+        record.task_index
+        for record in records
+        if record.cell_id == "CU-A-marble_bargaining"
+    } == set(range(12))
+    assert {
+        record.task_index
+        for record in records
+        if record.cell_id == "CM-A-marble_bargaining"
+    } == set(range(12))
+    assert len({record.loader_kwargs["transaction_id"] for record in records}) == 24
 
 
 def test_index_file_is_written_and_round_trips(tmp_path: Path) -> None:
     from clawsocialarena.generator.cell_allocation import all_cells
+
     cell = next(c for c in all_cells() if c.family_id == "tau2_airline")
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
     index_path = tmp_path / PHASE5_BASE_INDEX_FILENAME
@@ -161,7 +175,10 @@ def test_index_file_is_written_and_round_trips(tmp_path: Path) -> None:
     assert all(isinstance(r, BaseBundleRecord) for r in reloaded)
 
 
-@pytest.mark.parametrize("family_id", sorted(FAMILY_LOADERS.keys()))
+@pytest.mark.parametrize(
+    "family_id",
+    sorted({cell.family_id for cell in all_cells()}),
+)
 def test_generator_works_for_one_cell_per_family(
     family_id: str, tmp_path: Path
 ) -> None:
@@ -170,9 +187,10 @@ def test_generator_works_for_one_cell_per_family(
     without errors.
     """
     from clawsocialarena.generator.phase5_task_variants import task_variants_for
+
     cell = next(c for c in all_cells() if c.family_id == family_id)
     records = generate_base_bundles(out_dir=tmp_path, cells=(cell,))
-    expected = len(task_variants_for(family_id))
+    expected = len(task_variants_for(family_id, cell_id=cell.cell_id))
     assert len(records) == expected, (
         f"{family_id}: expected {expected} records, got {len(records)}"
     )
@@ -182,17 +200,28 @@ def test_generator_works_for_one_cell_per_family(
         assert (bundle_dir / PHASE5_METADATA_FILENAME).is_file()
 
 
+def test_swebench_workspace_variants_are_registered_but_unallocated() -> None:
+    """The coding family is available without changing current v2 row counts."""
+    from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
+    from clawsocialarena.generator.phase5_task_variants import task_variants_for
+
+    assert "swebench_workspace" in FAMILY_LOADERS
+    assert "swebench_workspace" not in {cell.family_id for cell in all_cells()}
+    assert len(task_variants_for("swebench_workspace")) == 24
+
+
 @pytest.mark.slow
 def test_n_records_after_tier_drop(tmp_path: Path) -> None:
     """End-to-end materialization across every cell with tier dimension dropped.
     Marked slow so the default `pytest -q` run skips it via `-m "not slow"`; CI can
     flip on the marker when the full benchmark scaffolding lands.
 
-    Cell allocation: 3 marble_research cells (8 tasks each) + 2 marble_bargaining
-    cells (3 tasks each) + 9 other cells (3 tasks each):
+    Cell allocation: 3 marble_research cells (8 tasks each), 2 marble_bargaining
+    cells (12 tasks each), 2 marble_bidding cells (6 tasks each), and 11 other cells
+    (3 tasks each):
 
-        3 * 8 + 2 * 3 + 9 * 3 = 24 + 6 + 27 = 57 base bundles
+        3 * 8 + 2 * 12 + 2 * 6 + 11 * 3 = 93 base bundles
     """
     records = generate_base_bundles(out_dir=tmp_path)
-    assert len(records) == 57
-    assert len({r.base_scenario_id for r in records}) == 57
+    assert len(records) == 93
+    assert len({r.base_scenario_id for r in records}) == 93

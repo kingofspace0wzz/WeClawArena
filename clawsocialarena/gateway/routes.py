@@ -511,8 +511,10 @@ async def mcp_dispatch(request: web.Request) -> web.Response:
             }
         )
 
+    handler_arguments = dict(arguments)
+    handler_arguments["_agent_id"] = agent_id
     try:
-        observation = await session.mcp_host.dispatch(tool_name, arguments)
+        observation = await session.mcp_host.dispatch(tool_name, handler_arguments)
     except KeyError:
         return web.json_response(
             {"error": "unknown tool", "tool_name": tool_name},

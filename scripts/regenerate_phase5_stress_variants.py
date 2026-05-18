@@ -62,11 +62,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from clawsocialarena.attacks.runtime_overlay import (  # noqa: E402
-    AXIS_TO_RECIPE as _AXIS_TO_RECIPE,
-)
+from clawsocialarena.attacks.runtime_overlay import _recipe_name_for  # noqa: E402
 from clawsocialarena.attacks.stress_recipes import (  # noqa: E402
-    STRESS_RECIPE_REGISTRY,
     StressVariantArtifacts,
 )
 from clawsocialarena.generator.phase5_attack_variants import (  # noqa: E402
@@ -108,6 +105,14 @@ def _load_base_bundle(variant_dir: Path) -> dict[str, Any]:
     for key, value in gt.items():
         if key not in merged:
             merged[key] = value
+    context_path = base_dir / "family_pack_context.json"
+    if context_path.is_file():
+        try:
+            context = json.loads(context_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            context = None
+        if isinstance(context, dict):
+            merged["family_pack_context"] = context
     return merged
 
 
@@ -130,7 +135,9 @@ def _rewrite_variant_metadata(
         )
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     attack = dict(meta.get("attack") or {})
-    attack["attack_recipe"] = recipe_name
+    attack["attack_recipe"] = artifacts.recipe_metadata.get(
+        "attack_recipe", recipe_name
+    )
     attack["payload_text"] = artifacts.payload_text
     attack["target_agent_id"] = artifacts.target_agent_id
     # Merge recipe metadata under attack.metadata; don't clobber any
@@ -287,7 +294,10 @@ def main() -> int:
             )
             outcome = {
                 "axis": row["attack_mode"],
-                "recipe": _AXIS_TO_RECIPE.get(row["attack_mode"]),
+                "recipe": _recipe_name_for(
+                    family_id=row["family_id"],
+                    attack_mode=row["attack_mode"],
+                ),
                 "applied": False,
                 "error": f"{type(exc).__name__}: {exc}",
             }

@@ -61,12 +61,13 @@ A run is accepted into the benchmark denominator only if all infrastructure and 
 | Evidence class | Required artifacts |
 |---|---|
 | Scenario bundle | `scenario.json`, `scenario.gt.json`, `docker-compose.yml`, persona prompts, MCP manifests, governance manifest when declared, resource manifest when declared, and resource fixtures when declared. |
+| Runtime substrate | `runtime_substrate="driver_orchestrated_docker"` in the scorecard or run manifest; gateway plus one OpenClaw/plugin container per owner; model-call records, messages, tools, and resource operations reported through the gateway. |
 | Docker execution | Bounded trajectory, enforced turn cap, normal teardown or logged runtime error, and no leftover containers or network resources. |
 | Gateway evidence | Primary action log, shadow log, cassette, policy decisions, tool-call / tool-observation pairs, side-channel records, and final resource hashes or database digests when applicable. |
 | Integrity | Hash-chain verification, shadow-log comparison, cassette hash match, and no sole-egress bypass. |
 | Scorecard | `run_scorecard.json` with evaluator version, model, condition, scenario hash, runtime artifact paths, SAF scores where applicable, task scores, privacy/security/governance scores, diagnostics, and outcome status. |
 
-Only readiness failures are excluded from headline denominators. Examples include malformed bundles, missing persona files, Docker failure with no usable gateway log, missing action log, missing cassette, broken hash chain, evaluator crash, stale internal routing artifacts in user-facing messages, unscorable resource final state, and egress bypass.
+Only readiness failures are excluded from headline denominators. Examples include malformed bundles, missing persona files, Docker failure with no usable gateway log, missing action log, missing cassette, broken hash chain, evaluator crash, stale internal routing artifacts in user-facing messages, unscorable resource final state, egress bypass, and any `host_session` run submitted as release evidence. `containerized_multi_agent` runs may be reported as a stronger demo or future substrate, but are not required for v2.0.0 benchmark acceptance.
 
 ## 5. Measured Outcomes
 

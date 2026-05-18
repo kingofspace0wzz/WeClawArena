@@ -19,6 +19,23 @@ def test_phase_schedule_from_gt():
     assert pt.current_phase() == SocialPhase.NEGOTIATION
 
 
+def test_phase_schedule_ignores_task_specific_phase_names():
+    pt = PhaseTracker.from_schedule([
+        {"phase": "discovery", "start_turn": 0, "end_turn": 2},
+        {"phase": "negotiation", "start_turn": 2, "end_turn": 6},
+        {"phase": "synthesis", "start_turn": 6, "end_turn": 9},
+        {"phase": "approval", "start_turn": 9, "end_turn": 12},
+    ])
+    pt.advance_to_turn(1)
+    assert pt.current_phase() == SocialPhase.DISCOVERY
+    pt.advance_to_turn(3)
+    assert pt.current_phase() == SocialPhase.NEGOTIATION
+    pt.advance_to_turn(6)
+    assert pt.current_phase() == SocialPhase.NEGOTIATION
+    pt.advance_to_turn(10)
+    assert pt.current_phase() == SocialPhase.NEGOTIATION
+
+
 def test_no_schedule_stays_in_discovery():
     pt = PhaseTracker()
     pt.advance_to_turn(99)

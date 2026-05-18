@@ -95,6 +95,7 @@ class Scenario(BaseModel):
     initial_state: dict[str, Any]
     max_turns: int
     opening_message: dict[str, Any]
+    injected_messages: list[dict[str, Any]] = Field(default_factory=list)
     # Topology fields added in 2026-05-09. Backward compatible: bundles
     # produced before the topology refactor lack these fields and use the
     # legacy per-category template path. Bundles produced by family-pack
@@ -486,6 +487,7 @@ class GTBundle(BaseModel):
     attribution_dag: dict[str, Any] = Field(default_factory=dict)
     integrity_requirements: dict[str, int] = Field(default_factory=dict)
     terminal_predicate: dict[str, Any]
+    evaluation_criteria: dict[str, Any] = Field(default_factory=dict)
     invariants: dict[str, Any] = Field(default_factory=dict)
     attack_plan: dict[str, Any] | None = None
     # v2 additions (spec §4.6)

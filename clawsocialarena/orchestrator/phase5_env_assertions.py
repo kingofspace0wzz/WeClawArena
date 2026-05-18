@@ -30,6 +30,7 @@ predicate_passes != [])`` when env_assertions are declared, or
 
 ``communicate_info`` is captured but never gates the verdict.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -39,7 +40,6 @@ from pathlib import Path
 from typing import Any
 
 from clawsocialarena.eval.env_state_builder import build_env_state
-from clawsocialarena.eval.predicates.types import EnvState
 from clawsocialarena.scenario.models import GTBundle
 from clawsocialarena.types import ActionRecord, ActionType
 
@@ -47,11 +47,13 @@ from clawsocialarena.types import ActionRecord, ActionType
 _FAMILY_PREDICATE_MODULE: dict[str, str] = {
     "marble_research": "clawsocialarena.eval.predicates.marble_research",
     "marble_bargaining": "clawsocialarena.eval.predicates.marble_bargaining",
+    "marble_bidding": "clawsocialarena.eval.predicates.marble_bidding",
     "tau2_airline": "clawsocialarena.eval.predicates.tau2_airline",
     "tau2_retail": "clawsocialarena.eval.predicates.tau2_retail",
     "tau2_telecom": "clawsocialarena.eval.predicates.tau2_telecom",
     "swebench_workspace": "clawsocialarena.eval.predicates.swebench_workspace",
     "wildclaw_social": "clawsocialarena.eval.predicates.wildclaw_social",
+    "travel": "clawsocialarena.eval.predicates.travel",
 }
 
 
@@ -166,9 +168,9 @@ def evaluate_evaluation_criteria(
         # action_id under either ``tool_call_action_id`` (preferred)
         # or ``call_action_id`` (legacy); fall back to popping the
         # most recent pending call if neither is present.
-        ref_id = record.payload.get(
-            "tool_call_action_id"
-        ) or record.payload.get("call_action_id")
+        ref_id = record.payload.get("tool_call_action_id") or record.payload.get(
+            "call_action_id"
+        )
         call_meta = None
         if isinstance(ref_id, str) and ref_id in pending_calls:
             call_meta = pending_calls.pop(ref_id)
@@ -205,7 +207,11 @@ def evaluate_evaluation_criteria(
         agent_id = str(check.get("agent_id") or "")
         tool_name = str(check.get("tool_name") or "")
         compare_args = list(check.get("compare_args") or [])
-        observed_calls = tool_calls_by_agent.get((agent_id, tool_name), [])
+        observed_calls = _observed_calls_for_action_check(
+            tool_calls_by_agent=tool_calls_by_agent,
+            agent_id=agent_id,
+            tool_name=tool_name,
+        )
         if not observed_calls:
             action_failures.append(
                 {
@@ -273,9 +279,7 @@ def evaluate_evaluation_criteria(
                 }
             )
         else:
-            communicate_passes.append(
-                {"agent_id": agent_id, "must_say": must_say}
-            )
+            communicate_passes.append({"agent_id": agent_id, "must_say": must_say})
 
     predicate_passes, predicate_failures, predicate_diagnostics = _evaluate_predicates(
         env_assertions=env_assertions,
@@ -283,24 +287,20 @@ def evaluate_evaluation_criteria(
         family_id=family_id,
     )
 
-    actions_ok = (
-        not action_failures and (
-            bool(action_passes) or not action_checks
-        )
-    )
-    predicates_ok = (
-        not predicate_failures and (
-            bool(predicate_passes) or not env_assertions
-        )
+    actions_ok = not action_failures and (bool(action_passes) or not action_checks)
+    predicates_ok = not predicate_failures and (
+        bool(predicate_passes) or not env_assertions
     )
     has_any_check = bool(action_checks) or bool(env_assertions)
     task_success = bool(has_any_check and actions_ok and predicates_ok)
 
-    required_canonical_tools = sorted({
-        str(check.get("tool_name") or "")
-        for check in action_checks
-        if check.get("tool_name")
-    })
+    required_canonical_tools = sorted(
+        {
+            str(check.get("tool_name") or "")
+            for check in action_checks
+            if check.get("tool_name")
+        }
+    )
     return EnvAssertionResult(
         task_success=task_success,
         canonical_actions_dispatched=canonical_tools_dispatched,
@@ -349,11 +349,15 @@ def _evaluate_predicates(
             }
             for item in env_assertions
         ]
-        return [], failures, {
-            "predicate_pass_count": 0,
-            "predicate_fail_count": len(failures),
-            "predicate_error": "resources_dir_unavailable",
-        }
+        return (
+            [],
+            failures,
+            {
+                "predicate_pass_count": 0,
+                "predicate_fail_count": len(failures),
+                "predicate_error": "resources_dir_unavailable",
+            },
+        )
     state = build_env_state(resources_dir=Path(resources_dir))
     registry = _resolve_predicate_registry(family_id)
     passes: list[dict[str, Any]] = []
@@ -397,10 +401,14 @@ def _evaluate_predicates(
             passes.append(entry)
         else:
             failures.append(entry)
-    return passes, failures, {
-        "predicate_pass_count": len(passes),
-        "predicate_fail_count": len(failures),
-    }
+    return (
+        passes,
+        failures,
+        {
+            "predicate_pass_count": len(passes),
+            "predicate_fail_count": len(failures),
+        },
+    )
 
 
 def evaluate_from_bundle_dir(
@@ -445,9 +453,7 @@ def evaluate_from_bundle_dir(
         gt_bundle=gt,
         action_log=action_log,
         outbound_messages=outbound_messages,
-        evaluation_criteria_override=(
-            criteria if isinstance(criteria, dict) else None
-        ),
+        evaluation_criteria_override=(criteria if isinstance(criteria, dict) else None),
         resources_dir=resources_dir if resources_dir.is_dir() else None,
         family_id=family_id,
     )
@@ -528,6 +534,26 @@ def _index_canonical_args(
         if isinstance(args, dict):
             out[(agent_id, tool_name)] = dict(args)
     return out
+
+
+def _observed_calls_for_action_check(
+    *,
+    tool_calls_by_agent: dict[tuple[str, str], list[dict[str, Any]]],
+    agent_id: str,
+    tool_name: str,
+) -> list[dict[str, Any]]:
+    """Return observed tool calls for one action check.
+
+    ``agent_id="*"`` is used by multi-party tasks where any buyer
+    may satisfy a role-generic close action.
+    """
+    if agent_id != "*":
+        return list(tool_calls_by_agent.get((agent_id, tool_name), []))
+    observed: list[dict[str, Any]] = []
+    for (_observed_agent, observed_tool), calls in tool_calls_by_agent.items():
+        if observed_tool == tool_name:
+            observed.extend(calls)
+    return observed
 
 
 def _arg_mismatch(

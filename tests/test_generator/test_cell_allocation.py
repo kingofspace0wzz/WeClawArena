@@ -144,7 +144,9 @@ def test_total_base_task_count_matches_pilot_math() -> None:
         len(task_variants_for(cell.family_id, cell_id=cell.cell_id))
         for cell in CELL_ALLOCATION
     )
-    assert total == 87
+    # 87 (pre-travel: 14 matched-grid baseline + 12 marble_bidding C-slot)
+    # + 6 travel task variants (3 CU-D-travel + 3 MG-C-travel) = 93.
+    assert total == 93
 
 
 def test_cellspec_is_frozen() -> None:

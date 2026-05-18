@@ -1,86 +1,137 @@
 {
   "approval_mandates": {
-    "mandate-xenia@market": {
+    "mandate-atlas_supply_sales@sales": {
       "approval_mode": "self",
       "approver_ids": [
-        "xenia"
+        "atlas_supply_sales"
       ],
-      "mandate_id": "mandate-xenia@market",
-      "owner_id": "xenia",
-      "scope_id": "scope-xenia@market"
+      "mandate_id": "mandate-atlas_supply_sales@sales",
+      "owner_id": "atlas_supply_sales",
+      "scope_id": "scope-atlas_supply_sales@sales"
     },
-    "mandate-yusuf@market": {
+    "mandate-evergreen_compliance@finance": {
       "approval_mode": "self",
       "approver_ids": [
-        "yusuf"
+        "evergreen_compliance"
       ],
-      "mandate_id": "mandate-yusuf@market",
-      "owner_id": "yusuf",
-      "scope_id": "scope-yusuf@market"
+      "mandate_id": "mandate-evergreen_compliance@finance",
+      "owner_id": "evergreen_compliance",
+      "scope_id": "scope-evergreen_compliance@finance"
+    },
+    "mandate-evergreen_procurement@procurement": {
+      "approval_mode": "finance_when_required",
+      "approver_ids": [
+        "evergreen_procurement"
+      ],
+      "mandate_id": "mandate-evergreen_procurement@procurement",
+      "owner_id": "evergreen_procurement",
+      "scope_id": "scope-evergreen_procurement@procurement"
     }
   },
   "authorization_scopes": {
-    "scope-xenia@market": {
+    "scope-atlas_supply_sales@sales": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_budget",
-        "accept:offers_within_budget"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "write:seller_orders"
       ],
       "constraints": {},
-      "identity_id": "xenia@market",
-      "owner_id": "xenia",
+      "identity_id": "atlas_supply_sales@sales",
+      "owner_id": "atlas_supply_sales",
       "resource_ids": [
-        "resource://xenia/governed"
+        "resource://atlas_supply_sales/governed"
       ],
-      "scope_id": "scope-xenia@market"
+      "scope_id": "scope-atlas_supply_sales@sales"
     },
-    "scope-yusuf@market": {
+    "scope-evergreen_compliance@finance": {
       "allowed_actions": [
-        "read:market_reference",
-        "write:own_offers",
-        "read:own_reservation",
-        "accept:offers_above_reservation"
+        "read:owned_files",
+        "read:owned_tables",
+        "write:approval_log"
       ],
       "constraints": {},
-      "identity_id": "yusuf@market",
-      "owner_id": "yusuf",
+      "identity_id": "evergreen_compliance@finance",
+      "owner_id": "evergreen_compliance",
       "resource_ids": [
-        "resource://yusuf/governed"
+        "resource://evergreen_compliance/governed"
       ],
-      "scope_id": "scope-yusuf@market"
+      "scope_id": "scope-evergreen_compliance@finance"
+    },
+    "scope-evergreen_procurement@procurement": {
+      "allowed_actions": [
+        "read:owned_files",
+        "read:owned_tables",
+        "write:offers",
+        "request:finance_approval",
+        "write:purchase_orders"
+      ],
+      "constraints": {},
+      "identity_id": "evergreen_procurement@procurement",
+      "owner_id": "evergreen_procurement",
+      "resource_ids": [
+        "resource://evergreen_procurement/governed"
+      ],
+      "scope_id": "scope-evergreen_procurement@procurement"
     }
   },
   "escalation_rules": {},
   "governed_actions": {},
   "identities": {
-    "xenia@market": {
-      "agent_id": "xenia_buyer",
-      "identity_id": "xenia@market",
-      "owner_id": "xenia"
+    "atlas_supply_sales@sales": {
+      "agent_id": "atlas_seller",
+      "identity_id": "atlas_supply_sales@sales",
+      "owner_id": "atlas_supply_sales"
     },
-    "yusuf@market": {
-      "agent_id": "yusuf_seller",
-      "identity_id": "yusuf@market",
-      "owner_id": "yusuf"
+    "evergreen_compliance@finance": {
+      "agent_id": "evergreen_compliance_approver",
+      "identity_id": "evergreen_compliance@finance",
+      "owner_id": "evergreen_compliance"
+    },
+    "evergreen_procurement@procurement": {
+      "agent_id": "evergreen_buyer",
+      "identity_id": "evergreen_procurement@procurement",
+      "owner_id": "evergreen_procurement"
     }
   },
   "owners": {
-    "xenia": {
-      "owner_id": "xenia",
-      "user_id": "xenia"
+    "atlas_supply_sales": {
+      "owner_id": "atlas_supply_sales",
+      "user_id": "atlas_supply_sales"
     },
-    "yusuf": {
-      "owner_id": "yusuf",
-      "user_id": "yusuf"
+    "evergreen_compliance": {
+      "owner_id": "evergreen_compliance",
+      "user_id": "evergreen_compliance"
+    },
+    "evergreen_procurement": {
+      "owner_id": "evergreen_procurement",
+      "user_id": "evergreen_procurement"
     }
   },
   "relationships": [
     {
-      "channel": "market_dm",
+      "channel": "procurement_dm",
       "relationship": "negotiates_with",
-      "source": "xenia_buyer",
-      "target": "yusuf_seller"
+      "source": "evergreen_buyer",
+      "target": "atlas_seller"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "requests_approval_from",
+      "source": "evergreen_buyer",
+      "target": "evergreen_compliance_approver"
+    },
+    {
+      "channel": "finance_dm",
+      "relationship": "approves_purchase_for",
+      "source": "evergreen_compliance_approver",
+      "target": "evergreen_buyer"
+    },
+    {
+      "channel": "procurement_dm",
+      "relationship": "sends_order_terms_to",
+      "source": "atlas_seller",
+      "target": "evergreen_buyer"
     }
   ]
 }
