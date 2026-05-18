@@ -85,11 +85,21 @@ _ADDRESSES_SCHEMA = (
     "zip TEXT NOT NULL, is_default INTEGER NOT NULL, consent_default TEXT NOT NULL)"
 )
 _GIFT_ORDERS_SCHEMA = (
-    "CREATE TABLE gift_orders ("
-    "order_id TEXT PRIMARY KEY, recipient_owner_id TEXT NOT NULL, "
-    "shipping_address_id TEXT, consent_state TEXT NOT NULL, "
-    "payment_share_state TEXT NOT NULL, total REAL NOT NULL, "
-    "committed_at TEXT, payment_history TEXT)"
+    "CREATE TABLE orders ("
+    "order_id TEXT PRIMARY KEY, "
+    "user_id TEXT, "
+    "placed_by_owner_id TEXT, "
+    "household_id TEXT, "
+    "status TEXT, "
+    "total REAL NOT NULL, "
+    "payment_method_id TEXT, "
+    "payment_authorized_by TEXT, "
+    "shipping_address TEXT, "
+    "committed_at TEXT, "
+    "payment_history TEXT, "
+    "recipient_owner_id TEXT NOT NULL, "
+    "consent_state TEXT NOT NULL, "
+    "payment_share_state TEXT NOT NULL)"
 )
 _INCOMING_GIFT_REQUESTS_SCHEMA = (
     "CREATE TABLE incoming_gift_requests ("
@@ -175,18 +185,24 @@ CROSS_ACCOUNT_T0 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-001",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "pending",
+                        "total": 95.00,
+                        "payment_method_id": "pm_carla_cc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "11 Pine Ave", "city": "Brooklyn", "state": "NY", "zip": "11201"}',
+                        "committed_at": "2026-05-12T10:00:00Z",
+                        "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_cc_01", "amount": 95.00}]',
                         "recipient_owner_id": "diego",
-                        "shipping_address_id": None,
                         "consent_state": "pending",
                         "payment_share_state": "n/a",
-                        "total": 95.00,
-                        "committed_at": None,
-                        "payment_history": "[]",
                     },
                 ),
             ),
@@ -289,18 +305,24 @@ CROSS_ACCOUNT_T1 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-002",
-                        "recipient_owner_id": "diego",
-                        "shipping_address_id": "addr_diego_home",
-                        "consent_state": "granted",
-                        "payment_share_state": "n/a",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "delivered",
                         "total": 145.00,
+                        "payment_method_id": "pm_carla_cc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "88 Oak St", "city": "Chicago", "state": "IL", "zip": "60614"}',
                         "committed_at": "2026-04-12T09:00:00Z",
                         "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_cc_01", "amount": 145.00}]',
+                        "recipient_owner_id": "diego",
+                        "consent_state": "granted",
+                        "payment_share_state": "n/a",
                     },
                 ),
             ),
@@ -402,18 +424,24 @@ CROSS_ACCOUNT_T2 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-003",
-                        "recipient_owner_id": "diego",
-                        "shipping_address_id": "addr_diego_home",
-                        "consent_state": "granted",
-                        "payment_share_state": "n/a",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "delivered",
                         "total": 68.00,
+                        "payment_method_id": "pm_carla_cc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "88 Oak St", "city": "Chicago", "state": "IL", "zip": "60614"}',
                         "committed_at": "2026-04-20T14:30:00Z",
                         "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_cc_01", "amount": 68.00}]',
+                        "recipient_owner_id": "diego",
+                        "consent_state": "granted",
+                        "payment_share_state": "n/a",
                     },
                 ),
             ),
@@ -515,18 +543,24 @@ CROSS_ACCOUNT_T3 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-004",
-                        "recipient_owner_id": "diego",
-                        "shipping_address_id": "addr_diego_home",
-                        "consent_state": "granted",
-                        "payment_share_state": "n/a",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "pending",
                         "total": 180.00,
+                        "payment_method_id": "pm_carla_cc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "88 Oak St", "city": "Chicago", "state": "IL", "zip": "60614"}',
                         "committed_at": "2026-05-10T12:00:00Z",
                         "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_cc_01", "amount": 180.00}]',
+                        "recipient_owner_id": "diego",
+                        "consent_state": "granted",
+                        "payment_share_state": "n/a",
                     },
                 ),
             ),
@@ -633,18 +667,24 @@ CROSS_ACCOUNT_T4 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-005",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "pending",
+                        "total": 145.00,
+                        "payment_method_id": "pm_carla_gc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "88 Oak St", "city": "Chicago", "state": "IL", "zip": "60614"}',
+                        "committed_at": "2026-05-05T10:00:00Z",
+                        "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_gc_01", "amount": 80.00}]',
                         "recipient_owner_id": "diego",
-                        "shipping_address_id": "addr_diego_home",
                         "consent_state": "granted",
                         "payment_share_state": "pending",
-                        "total": 145.00,
-                        "committed_at": None,
-                        "payment_history": "[]",
                     },
                 ),
             ),
@@ -705,7 +745,7 @@ CROSS_ACCOUNT_T4 = CrossAccountTaskSeed(
 # t5: cancel_pending_order (tau2#30) — recipient asks sender to cancel
 # ---------------------------------------------------------------------------
 # Order is pending. Recipient asks sender to cancel; only the sender can
-# call cancel_pending_order on their own gift_orders table.
+# call cancel_pending_order on their own orders table.
 
 CROSS_ACCOUNT_T5 = CrossAccountTaskSeed(
     task_index=5,
@@ -747,18 +787,24 @@ CROSS_ACCOUNT_T5 = CrossAccountTaskSeed(
                 ),
             ),
             WorkspaceTableSeed(
-                name="gift_orders",
+                name="orders",
                 schema=_GIFT_ORDERS_SCHEMA,
                 rows=(
                     {
                         "order_id": "#W-GIFT-006",
+                        "user_id": "carla",
+                        "placed_by_owner_id": "carla",
+                        "household_id": "",
+                        "status": "pending",
+                        "total": 72.00,
+                        "payment_method_id": "pm_carla_cc_01",
+                        "payment_authorized_by": "carla",
+                        "shipping_address": '{"line1": "88 Oak St", "city": "Chicago", "state": "IL", "zip": "60614"}',
+                        "committed_at": "2026-05-15T08:00:00Z",
+                        "payment_history": '[{"type": "charge", "payment_method_id": "pm_carla_cc_01", "amount": 72.00}]',
                         "recipient_owner_id": "diego",
-                        "shipping_address_id": "addr_diego_home",
                         "consent_state": "granted",
                         "payment_share_state": "n/a",
-                        "total": 72.00,
-                        "committed_at": None,
-                        "payment_history": "[]",
                     },
                 ),
             ),

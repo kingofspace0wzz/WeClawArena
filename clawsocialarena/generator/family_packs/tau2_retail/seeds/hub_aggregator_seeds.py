@@ -82,13 +82,20 @@ class HubAggregatorTaskSeed:
 _ORDERS_SCHEMA = (
     "CREATE TABLE orders ("
     "order_id TEXT PRIMARY KEY, "
+    "user_id TEXT, "
+    "placed_by_owner_id TEXT, "
+    "household_id TEXT, "
+    "status TEXT, "
+    "total REAL, "
+    "payment_method_id TEXT, "
+    "payment_authorized_by TEXT, "
+    "shipping_address TEXT, "
+    "committed_at TEXT, "
+    "payment_history TEXT, "
     "cycle_id TEXT, "
     "placed_at TEXT, "
-    "status TEXT, "
     "total_amount REAL, "
-    "payment_method_id TEXT, "
-    "shipping_address_id TEXT, "
-    "placed_by_owner_id TEXT)"
+    "shipping_address_id TEXT)"
 )
 
 _ORDER_LINE_ITEMS_SCHEMA = (
@@ -679,13 +686,20 @@ HUB_AGGREGATOR_T1 = HubAggregatorTaskSeed(
     shared_resources=_shared_resources_for_order(
         order_row={
             "order_id": "#W_FAM_A_1001",
+            "user_id": "harriet",
+            "placed_by_owner_id": "harriet",
+            "household_id": "FAM-A",
+            "status": "pending",
+            "total": 128.00,
+            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
+            "payment_authorized_by": "harriet",
+            "shipping_address": '{"shared_account_id": "FAM-A", "household_id": "FAM-A", "line1": "410 Lincoln Park", "city": "Chicago", "state": "IL", "zip": "60614"}',
+            "committed_at": "2026-05-14T10:00:00Z",
+            "payment_history": f'[{{"type": "charge", "payment_method_id": "{_HUB_PAYMENT_METHOD_ID}", "amount": 128.00}}]',
             "cycle_id": "agg_cycle_t0",
             "placed_at": "2026-05-14T10:00:00Z",
-            "status": "pending",
             "total_amount": 128.00,
-            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
             "shipping_address_id": "addr_hub_primary",
-            "placed_by_owner_id": "harriet",
         },
         line_item_rows=(
             {
@@ -793,13 +807,20 @@ HUB_AGGREGATOR_T2 = HubAggregatorTaskSeed(
     shared_resources=_shared_resources_for_order(
         order_row={
             "order_id": "#W_FAM_A_2001",
+            "user_id": "harriet",
+            "placed_by_owner_id": "harriet",
+            "household_id": "FAM-A",
+            "status": "delivered",
+            "total": 128.00,
+            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
+            "payment_authorized_by": "harriet",
+            "shipping_address": '{"shared_account_id": "FAM-A", "household_id": "FAM-A", "line1": "410 Lincoln Park", "city": "Chicago", "state": "IL", "zip": "60614"}',
+            "committed_at": "2026-04-22T10:30:00Z",
+            "payment_history": f'[{{"type": "charge", "payment_method_id": "{_HUB_PAYMENT_METHOD_ID}", "amount": 128.00}}]',
             "cycle_id": "agg_cycle_t0",
             "placed_at": "2026-04-22T10:30:00Z",
-            "status": "delivered",
             "total_amount": 128.00,
-            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
             "shipping_address_id": "addr_hub_primary",
-            "placed_by_owner_id": "harriet",
         },
         line_item_rows=(
             {
@@ -906,13 +927,20 @@ HUB_AGGREGATOR_T3 = HubAggregatorTaskSeed(
     shared_resources=_shared_resources_for_order(
         order_row={
             "order_id": "#W_FAM_A_3001",
+            "user_id": "harriet",
+            "placed_by_owner_id": "harriet",
+            "household_id": "FAM-A",
+            "status": "delivered",
+            "total": 128.00,
+            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
+            "payment_authorized_by": "harriet",
+            "shipping_address": '{"shared_account_id": "FAM-A", "household_id": "FAM-A", "line1": "410 Lincoln Park", "city": "Chicago", "state": "IL", "zip": "60614"}',
+            "committed_at": "2026-04-22T10:30:00Z",
+            "payment_history": f'[{{"type": "charge", "payment_method_id": "{_HUB_PAYMENT_METHOD_ID}", "amount": 128.00}}]',
             "cycle_id": "agg_cycle_t0",
             "placed_at": "2026-04-22T10:30:00Z",
-            "status": "delivered",
             "total_amount": 128.00,
-            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
             "shipping_address_id": "addr_hub_primary",
-            "placed_by_owner_id": "harriet",
         },
         line_item_rows=(
             {
@@ -1023,13 +1051,20 @@ HUB_AGGREGATOR_T4 = HubAggregatorTaskSeed(
     shared_resources=_shared_resources_for_order(
         order_row={
             "order_id": "#W_FAM_A_4001",
+            "user_id": "harriet",
+            "placed_by_owner_id": "harriet",
+            "household_id": "FAM-A",
+            "status": "pending",
+            "total": 128.00,
+            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
+            "payment_authorized_by": "harriet",
+            "shipping_address": '{"shared_account_id": "FAM-A", "household_id": "FAM-A", "line1": "410 Lincoln Park", "city": "Chicago", "state": "IL", "zip": "60614"}',
+            "committed_at": "2026-05-15T22:10:00Z",
+            "payment_history": f'[{{"type": "charge", "payment_method_id": "{_HUB_PAYMENT_METHOD_ID}", "amount": 128.00}}]',
             "cycle_id": "agg_cycle_t0",
             "placed_at": "2026-05-15T22:10:00Z",
-            "status": "pending",
             "total_amount": 128.00,
-            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
             "shipping_address_id": "addr_hub_primary",
-            "placed_by_owner_id": "harriet",
         },
         line_item_rows=(
             {
@@ -1141,13 +1176,20 @@ HUB_AGGREGATOR_T5 = HubAggregatorTaskSeed(
     shared_resources=_shared_resources_for_order(
         order_row={
             "order_id": "#W_FAM_A_5001",
+            "user_id": "harriet",
+            "placed_by_owner_id": "harriet",
+            "household_id": "FAM-A",
+            "status": "pending",
+            "total": 128.00,
+            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
+            "payment_authorized_by": "harriet",
+            "shipping_address": '{"shared_account_id": "FAM-A", "household_id": "FAM-A", "line1": "410 Lincoln Park", "city": "Chicago", "state": "IL", "zip": "60614"}',
+            "committed_at": "2026-05-14T16:45:00Z",
+            "payment_history": f'[{{"type": "charge", "payment_method_id": "{_HUB_PAYMENT_METHOD_ID}", "amount": 128.00}}]',
             "cycle_id": "agg_cycle_t0",
             "placed_at": "2026-05-14T16:45:00Z",
-            "status": "pending",
             "total_amount": 128.00,
-            "payment_method_id": _HUB_PAYMENT_METHOD_ID,
             "shipping_address_id": "addr_hub_primary",
-            "placed_by_owner_id": "harriet",
         },
         line_item_rows=(
             {

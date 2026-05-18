@@ -90,9 +90,18 @@ _ADDRESSES_SCHEMA = (
     "state TEXT NOT NULL, zip TEXT NOT NULL, is_default INTEGER NOT NULL)"
 )
 _MY_ORDER_HISTORY_SCHEMA = (
-    "CREATE TABLE my_order_history ("
-    "order_id TEXT PRIMARY KEY, status TEXT NOT NULL, total REAL NOT NULL, "
-    "payment_method_id TEXT NOT NULL)"
+    "CREATE TABLE orders ("
+    "order_id TEXT PRIMARY KEY, "
+    "user_id TEXT, "
+    "placed_by_owner_id TEXT, "
+    "household_id TEXT, "
+    "status TEXT NOT NULL, "
+    "total REAL NOT NULL, "
+    "payment_method_id TEXT NOT NULL, "
+    "payment_authorized_by TEXT, "
+    "shipping_address TEXT, "
+    "committed_at TEXT, "
+    "payment_history TEXT)"
 )
 _INVENTORY_SCHEMA = (
     "CREATE TABLE inventory ("
@@ -204,6 +213,46 @@ _EVELYN_ADDRESSES_ROWS = (
 )
 
 
+_EVELYN_SHIPPING_ADDRESS_JSON = (
+    '{"line1":"215 Pine St","city":"Philadelphia","state":"PA","zip":"19122"}'
+)
+
+
+def _evelyn_order_row(
+    *,
+    order_id: str,
+    status: str,
+    total: float,
+    payment_method_id: str,
+    committed_at: str = "2026-04-22T10:30:00Z",
+) -> dict[str, Any]:
+    """Build a canonical orders row for evelyn (the customer).
+
+    All store_rep_dyad orders use the customer's personal sqlite under
+    ``resources/agents/evelyn/db/personal.sqlite`` with the canonical
+    ``orders`` schema. Each row populates the gateway-handler-expected
+    columns: ``user_id`` = ``placed_by_owner_id`` = ``evelyn``,
+    ``household_id`` = empty (no shared account), ``payment_authorized_by``
+    = ``evelyn``, ``shipping_address`` as JSON string, and a
+    ``payment_history`` JSON array with one charge entry.
+    """
+    return {
+        "order_id": order_id,
+        "user_id": "evelyn",
+        "placed_by_owner_id": "evelyn",
+        "household_id": "",
+        "status": status,
+        "total": total,
+        "payment_method_id": payment_method_id,
+        "payment_authorized_by": "evelyn",
+        "shipping_address": _EVELYN_SHIPPING_ADDRESS_JSON,
+        "committed_at": committed_at,
+        "payment_history": (
+            f'[{{"type": "charge", "payment_method_id": "{payment_method_id}", "amount": {total}}}]'
+        ),
+    }
+
+
 def _evelyn_customer_workspace(
     *,
     order_history_rows: tuple[dict[str, Any], ...],
@@ -236,7 +285,7 @@ def _evelyn_customer_workspace(
                 rows=_EVELYN_ADDRESSES_ROWS,
             ),
             WorkspaceTableSeed(
-                name="my_order_history",
+                name="orders",
                 schema=_MY_ORDER_HISTORY_SCHEMA,
                 rows=order_history_rows,
             ),
@@ -312,7 +361,7 @@ STORE_REP_DYAD_T0 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7000770", "status": "delivered", "total": 85.98, "payment_method_id": "pm_evelyn_cc_01"},
+            _evelyn_order_row(order_id="#W7000770", status="delivered", total=85.98, payment_method_id="pm_evelyn_cc_01", committed_at="2026-04-22T10:30:00Z"),
         ),
         action_hint="Want to exchange water bottle for bigger one and desk lamp for brighter model",
     ),
@@ -369,7 +418,7 @@ STORE_REP_DYAD_T1 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7001100", "status": "delivered", "total": 214.97, "payment_method_id": "pm_evelyn_cc_01"},
+            _evelyn_order_row(order_id="#W7001100", status="delivered", total=214.97, payment_method_id="pm_evelyn_cc_01", committed_at="2026-04-18T09:15:00Z"),
         ),
         action_hint="Return all three items from last week's order",
     ),
@@ -422,7 +471,7 @@ STORE_REP_DYAD_T2 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7222200", "status": "pending", "total": 549.99, "payment_method_id": "pm_evelyn_cc_01"},
+            _evelyn_order_row(order_id="#W7222200", status="pending", total=549.99, payment_method_id="pm_evelyn_cc_01", committed_at="2026-05-15T22:10:00Z"),
         ),
         action_hint="Realized credit limit issue, need to cancel pending tablet order",
     ),
@@ -473,8 +522,8 @@ STORE_REP_DYAD_T3 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7333300", "status": "pending", "total": 85.98, "payment_method_id": "pm_evelyn_cc_01"},
-            {"order_id": "#W7333301", "status": "pending", "total": 45.99, "payment_method_id": "pm_evelyn_cc_01"},
+            _evelyn_order_row(order_id="#W7333300", status="pending", total=85.98, payment_method_id="pm_evelyn_cc_01", committed_at="2026-05-14T16:45:00Z"),
+            _evelyn_order_row(order_id="#W7333301", status="pending", total=45.99, payment_method_id="pm_evelyn_cc_01", committed_at="2026-05-14T16:50:00Z"),
         ),
         action_hint="Moved to new address, need to update all open orders",
     ),
@@ -543,7 +592,7 @@ STORE_REP_DYAD_T4 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7444400", "status": "pending", "total": 38.99, "payment_method_id": "pm_evelyn_gc_01"},
+            _evelyn_order_row(order_id="#W7444400", status="pending", total=38.99, payment_method_id="pm_evelyn_gc_01", committed_at="2026-05-16T11:00:00Z"),
         ),
         action_hint="Want to swap shoes to a different size, use gift card for diff",
     ),
@@ -597,7 +646,7 @@ STORE_REP_DYAD_T5 = StoreRepDyadTaskSeed(
     store_rep_id="retail_rep_07_assistant",
     customer_workspace=_evelyn_customer_workspace(
         order_history_rows=(
-            {"order_id": "#W7555500", "status": "pending", "total": 35.99, "payment_method_id": "pm_evelyn_cc_01"},
+            _evelyn_order_row(order_id="#W7555500", status="pending", total=35.99, payment_method_id="pm_evelyn_cc_01", committed_at="2026-05-16T08:30:00Z"),
         ),
         action_hint="Want to check gift card balance then switch payment to gift card",
     ),

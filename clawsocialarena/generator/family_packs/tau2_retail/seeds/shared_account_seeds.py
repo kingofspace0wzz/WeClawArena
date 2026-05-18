@@ -116,10 +116,17 @@ _PENDING_REQUESTS_SCHEMA = (
 )
 _SHARED_ACCOUNT_ORDERS_SCHEMA = (
     "CREATE TABLE orders ("
-    "order_id TEXT PRIMARY KEY, placed_by_owner_id TEXT NOT NULL, "
-    "payment_authorized_by TEXT, shipping_address_id TEXT, "
-    "status TEXT NOT NULL, total REAL NOT NULL, "
-    "committed_at TEXT, payment_history TEXT)"
+    "order_id TEXT PRIMARY KEY, "
+    "user_id TEXT, "
+    "placed_by_owner_id TEXT NOT NULL, "
+    "household_id TEXT, "
+    "status TEXT NOT NULL, "
+    "total REAL NOT NULL, "
+    "payment_method_id TEXT, "
+    "payment_authorized_by TEXT, "
+    "shipping_address TEXT, "
+    "committed_at TEXT, "
+    "payment_history TEXT)"
 )
 
 
@@ -256,11 +263,14 @@ SHARED_ACCOUNT_T0 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W2378156",
+                    "user_id": "alice",
                     "placed_by_owner_id": "alice",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_alice_home",
+                    "household_id": "HH-7",
                     "status": "delivered",
                     "total": 312.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-7", "household_id": "HH-7", "line1": "204 Maple St", "city": "Philadelphia", "state": "PA", "zip": "19122"}',
                     "committed_at": "2026-04-22T10:30:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 312.00}]',
                 },
@@ -377,11 +387,14 @@ SHARED_ACCOUNT_T1 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W7711200",
+                    "user_id": "alice",
                     "placed_by_owner_id": "alice",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_alice_home",
+                    "household_id": "HH-7",
                     "status": "delivered",
                     "total": 89.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-7", "household_id": "HH-7", "line1": "204 Maple St", "city": "Philadelphia", "state": "PA", "zip": "19122"}',
                     "committed_at": "2026-04-18T09:15:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 89.00}]',
                 },
@@ -500,11 +513,14 @@ SHARED_ACCOUNT_T2 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W5566880",
+                    "user_id": "alice",
                     "placed_by_owner_id": "alice",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_alice_home",
+                    "household_id": "HH-7",
                     "status": "pending",
                     "total": 165.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-7", "household_id": "HH-7", "line1": "204 Maple St", "city": "Philadelphia", "state": "PA", "zip": "19122"}',
                     "committed_at": "2026-05-15T22:10:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 165.00}]',
                 },
@@ -633,11 +649,14 @@ SHARED_ACCOUNT_T3 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W4422330",
+                    "user_id": "alice",
                     "placed_by_owner_id": "alice",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_alice_home",
+                    "household_id": "HH-7",
                     "status": "pending",
                     "total": 95.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-7", "household_id": "HH-7", "line1": "204 Maple St", "city": "Philadelphia", "state": "PA", "zip": "19122"}',
                     "committed_at": "2026-05-14T16:45:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 95.00}]',
                 },
@@ -762,11 +781,14 @@ SHARED_ACCOUNT_T4 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W6688550",
+                    "user_id": "bob",
                     "placed_by_owner_id": "bob",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_bob_dorm",
+                    "household_id": "HH-7",
                     "status": "pending",
                     "total": 85.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-7", "household_id": "HH-7", "line1": "204 Maple St", "city": "Philadelphia", "state": "PA", "zip": "19122"}',
                     "committed_at": "2026-05-16T11:00:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 85.00}]',
                 },
@@ -897,11 +919,14 @@ SHARED_ACCOUNT_T5 = SharedAccountTaskSeed(
             rows=(
                 {
                     "order_id": "#W4422331",
+                    "user_id": "alice",
                     "placed_by_owner_id": "alice",
-                    "payment_authorized_by": "alice",
-                    "shipping_address_id": "addr_alice_home",
+                    "household_id": "HH-99",
                     "status": "pending",
                     "total": 142.00,
+                    "payment_method_id": "pm_alice_cc_01",
+                    "payment_authorized_by": "alice",
+                    "shipping_address": '{"shared_account_id": "HH-99", "household_id": "HH-99", "line1": "512 Oakwood Dr", "city": "Boston", "state": "MA", "zip": "02115"}',
                     "committed_at": "2026-05-16T08:30:00Z",
                     "payment_history": '[{"type": "charge", "payment_method_id": "pm_alice_cc_01", "amount": 142.00}]',
                 },
