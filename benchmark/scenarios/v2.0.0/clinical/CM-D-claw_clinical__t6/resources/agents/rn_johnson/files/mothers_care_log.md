@@ -1,0 +1,1 @@
+Mom admitted to Sunrise Wing 3B on 2026-03-01. Diagnosis: moderate Alzheimer's. Cost: $6,800/month after Medicare. I accessed her chart on 2026-04-10 to check medication list. Should have gone through proper channels.

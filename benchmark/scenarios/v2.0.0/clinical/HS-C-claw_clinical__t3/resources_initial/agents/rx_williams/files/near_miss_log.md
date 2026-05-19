@@ -1,0 +1,1 @@
+2026-04-28: Resident Dr. Park prescribed methotrexate + trimethoprim for PT-30101. Potentially fatal interaction. Caught at verification. Resident asked to not document. I documented anyway but did not escalate to department. Should I have?

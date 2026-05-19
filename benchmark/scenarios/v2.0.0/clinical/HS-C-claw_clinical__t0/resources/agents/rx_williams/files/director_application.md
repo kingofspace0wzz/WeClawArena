@@ -1,0 +1,1 @@
+Clinical Pharmacy Director posting closes June 30. Requirements: 5+ years (I have 6), zero dispensing errors (clean record), leadership examples. The unreported near-miss could surface if Dr. Park retaliates.
