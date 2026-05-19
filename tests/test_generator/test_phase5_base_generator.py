@@ -225,3 +225,12 @@ def test_n_records_after_tier_drop(tmp_path: Path) -> None:
     records = generate_base_bundles(out_dir=tmp_path)
     assert len(records) == 93
     assert len({r.base_scenario_id for r in records}) == 93
+def test_generator_full_run_produces_54_bundles(tmp_path: Path) -> None:
+    """End-to-end materialization across every cell with tier dimension dropped.
+    Marked slow so the default `pytest -q` run skips it via `-m "not slow"`; CI can
+    flip on the marker when the full benchmark scaffolding lands.
+    18 cells × 3 tasks (tier dim dropped) = 54 base bundles.
+    """
+    records = generate_base_bundles(out_dir=tmp_path)
+    assert len(records) == 54
+    assert len({r.base_scenario_id for r in records}) == 54

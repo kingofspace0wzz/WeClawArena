@@ -54,6 +54,7 @@ def test_run_batch_writes_results_jsonl_and_report_json(
     )
     # Batch 1 is smoke_v2: one row per allocated family and attack mode.
     assert summary.n_run == 40 == len(results)
+    assert summary.n_run == 90 == len(results)
     assert summary.n_errors == 0
     # The two per-batch artifacts are written.
     results_path = tmp_path / PHASE5_BATCH_RESULTS_FILENAME_TEMPLATE.format(
@@ -67,6 +68,7 @@ def test_run_batch_writes_results_jsonl_and_report_json(
     with results_path.open(encoding="utf-8") as fh:
         lines = [line for line in fh if line.strip()]
     assert len(lines) == 40
+    assert len(lines) == 90
     # Every line is valid JSON.
     for line in lines:
         json.loads(line)
@@ -94,6 +96,8 @@ def test_summary_rate_fields_are_present_and_well_formed(
     }
     # The five per-mode rows sum to the current eight-family smoke total.
     assert sum(bucket["n"] for bucket in summary.per_mode.values()) == 40
+    # The five per-mode rows sum to the batch total.
+    assert sum(bucket["n"] for bucket in summary.per_mode.values()) == 90
     # Per-family breakdown spans every registered family that has a cell.
     assert summary.per_family, "per_family is empty"
 
@@ -102,7 +106,7 @@ def test_failing_executor_counts_errors_separately(
     shared_manifest, tmp_path: Path
 ) -> None:
     """Errored rows must drop out of every rate denominator (codex S4
-    blocker): if all 70 rows error, every rate must be ``None``, not
+    blocker): if all 90 rows error, every rate must be ``None``, not
     ``0.0``. The previous implementation divided by the raw row
     count and silently misreported readiness failures as measured
     outcomes.
@@ -119,6 +123,8 @@ def test_failing_executor_counts_errors_separately(
     # Batch 1 is smoke_v2: 40 rows in the current eight-family main grid.
     assert summary.n_run == 40
     assert summary.n_errors == 40
+    assert summary.n_run == 90
+    assert summary.n_errors == 90
     assert summary.task_success_count == 0
     assert summary.attack_success_count == 0
     # Every rate must be None because no row contributed a definite outcome.
@@ -164,6 +170,11 @@ def test_raising_executor_is_caught_per_row(
     assert summary.n_run == 40
     # Roughly a third of the rows errored.
     expected_errors = 40 // 3
+    # The batch ran to completion (all 90 rows accounted for) instead
+    # of aborting on the first raise.
+    assert summary.n_run == 90
+    # Roughly a third of the rows errored.
+    expected_errors = 90 // 3
     assert summary.n_errors == expected_errors
     # Errored rows carry the raised exception's repr.
     errored = [r for r in results if r.error is not None]
@@ -268,6 +279,8 @@ def test_aggregate_combines_all_five_batches(
     expected = total_expected_rows()
     assert payload["expected_total_rows"] == expected
     assert payload["total_rows_run"] == expected
+    assert payload["expected_total_rows"] == 868
+    assert payload["total_rows_run"] == 868
     assert payload["total_errors"] == 0
     json_path = tmp_path / PHASE5_PILOT_REPORT_JSON
     md_path = tmp_path / PHASE5_PILOT_REPORT_MD

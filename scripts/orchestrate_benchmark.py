@@ -21,18 +21,18 @@ from scripts import generate_benchmark_scaffold  # noqa: E402
 
 
 _PYTHON = Path(sys.executable)
-_EXPECTED_SCENARIO_COUNT = 680
+_EXPECTED_SCENARIO_COUNT = 868
 _EXPECTED_STRATA = {
-    "main": 630,
+    "main": 810,
     "hard": 25,
-    "episode_graph": 20,
+    "episode_graph": 28,
     "audit_challenges": 5,
 }
-_EXPECTED_RESOURCE_COUNT = 675
+_EXPECTED_RESOURCE_COUNT = 863
 _EXPECTED_RESOURCE_STRATA = {
-    "main": 630,
+    "main": 810,
     "hard": 25,
-    "episode_graph": 20,
+    "episode_graph": 28,
 }
 _EXPECTED_RESOURCE_CELLS = {
     ("main", "CU", "scheduling"): 45,

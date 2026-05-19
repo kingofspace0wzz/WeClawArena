@@ -418,7 +418,7 @@ def build_batch_report(
         project_full_benchmark_cost(
             batch_cost_usd=total_cost,
             accepted_count=accepted_count,
-            target_count=680,
+            target_count=868,
         )
         if accepted_count > 0
         else None

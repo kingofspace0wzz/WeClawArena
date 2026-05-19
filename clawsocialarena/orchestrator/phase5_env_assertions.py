@@ -46,6 +46,8 @@ from clawsocialarena.types import ActionRecord, ActionType
 
 
 _FAMILY_PREDICATE_MODULE: dict[str, str] = {
+    "claw_clinical": "clawsocialarena.eval.predicates.claw_clinical",
+    "claw_trading": "clawsocialarena.eval.predicates.claw_trading",
     "marble_research": "clawsocialarena.eval.predicates.marble_research",
     "marble_bargaining": "clawsocialarena.eval.predicates.marble_bargaining",
     "marble_bidding": "clawsocialarena.eval.predicates.marble_bidding",

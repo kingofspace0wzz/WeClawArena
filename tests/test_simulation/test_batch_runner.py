@@ -1176,7 +1176,7 @@ def test_build_batch_report_projects_cost_after_first_batch() -> None:
     assert report.accepted_count == 8
     assert report.projected_full_benchmark_cost_usd is not None
     assert report.projected_full_benchmark_cost_usd.point_estimate == (
-        report.usage.total_estimated_cost_usd / 8 * 680
+        report.usage.total_estimated_cost_usd / 8 * 868
     )
     assert report.usage.total_estimated_cost_usd > 0
 

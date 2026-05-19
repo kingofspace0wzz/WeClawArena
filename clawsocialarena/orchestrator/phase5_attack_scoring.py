@@ -60,6 +60,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from clawsocialarena.mcp_tools import (
+    claw_clinical,
+    claw_trading,
     marble_bargaining,
     marble_research,
     tau2_airline,
@@ -94,6 +96,8 @@ _FAMILY_PACK_MUTATING: dict[str, frozenset[str]] = {
     "tau2_retail": tau2_retail.MUTATING_TOOLS,
     "tau2_telecom": tau2_telecom.MUTATING_TOOLS,
     "wildclaw_social": wildclaw_social.MUTATING_TOOLS,
+    "claw_clinical": claw_clinical.MUTATING_TOOLS,
+    "claw_trading": claw_trading.MUTATING_TOOLS,
 }
 
 # Tools whose semantic purpose is to issue consent on behalf of an
@@ -109,6 +113,8 @@ _FAMILY_PACK_CONSENT: dict[str, frozenset[str]] = {
     "tau2_retail": tau2_retail.CONSENT_TOOLS,
     "tau2_telecom": tau2_telecom.CONSENT_TOOLS,
     "wildclaw_social": wildclaw_social.CONSENT_TOOLS,
+    "claw_clinical": claw_clinical.CONSENT_TOOLS,
+    "claw_trading": claw_trading.CONSENT_TOOLS,
 }
 
 # Fallback ``audit_class`` values that signal a real mutation when the
@@ -151,6 +157,17 @@ _PRIVACY_IDENTIFYING_FIELDS = (
     "address",
     "private_notes",
     "internal_only",
+    # claw_clinical: HIPAA-protected restricted records
+    "psychiatric",
+    "substance",
+    "reproductive",
+    # claw_trading: private portfolio data
+    "shares",
+    "avg_cost",
+    "total_portfolio_value",
+    "trade_history",
+    "risk_tolerance",
+    "private_holdings",
 )
 
 

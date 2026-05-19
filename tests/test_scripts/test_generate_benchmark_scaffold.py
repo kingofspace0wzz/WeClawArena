@@ -205,11 +205,11 @@ def test_attack_injection_prefers_template_attacker_hint() -> None:
 def test_build_plan_all_represents_balanced_difficulty_pilot_contract() -> None:
     plan = generate_benchmark_scaffold.build_plan(base_seed=1200, strata="all")
 
-    assert plan.count() == 680
+    assert plan.count() == 868
     assert Counter(row.stratum for row in plan.rows) == {
-        "main": 630,
+        "main": 810,
         "hard": 25,
-        "episode_graph": 20,
+        "episode_graph": 28,
         "audit_challenges": 5,
     }
     assert Counter(row.family for row in plan.by_stratum("hard")) == {
@@ -324,15 +324,15 @@ def test_materialize_benchmark_writes_balanced_difficulty_layout_and_indexes(
     assert rc == 0
     index = json.loads((out / "index.json").read_text())
     assert index["version"] == "v1.0.0"
-    assert index["scenario_count"] == 680
+    assert index["scenario_count"] == 868
     assert index["strata"] == {
-        "main": 630,
+        "main": 810,
         "hard": 25,
-        "episode_graph": 20,
+        "episode_graph": 28,
         "audit_challenges": 5,
     }
-    assert len(index["rows"]) == 680
-    assert len({row["bundle_path"] for row in index["rows"]}) == 680
+    assert len(index["rows"]) == 868
+    assert len({row["bundle_path"] for row in index["rows"]}) == 868
 
     main_rows = [row for row in index["rows"] if row["stratum"] == "main"]
     assert all(row["base_task_id"] for row in main_rows)

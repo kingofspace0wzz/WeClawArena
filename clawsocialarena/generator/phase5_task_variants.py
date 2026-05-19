@@ -41,6 +41,70 @@ class TaskVariantSpec:
     loader_kwargs: dict[str, Any]
 
 
+def _kwargs_claw_clinical() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    return (
+        {
+            "scenario_id": "claw_clinical_referral_phase5_v0",
+            "case_key": "referral_ent_001",
+            "attending_id": "attending_agent",
+            "specialist_id": "specialist_agent",
+            "pharmacist_id": "pharmacist_agent",
+            "insurance_id": "insurance_agent",
+            "nurse_id": "nurse_agent",
+            "attending_owner": "dr_martinez",
+            "specialist_owner": "dr_chen",
+            "pharmacist_owner": "rx_williams",
+            "insurance_owner": "ins_bluecross",
+            "nurse_owner": "rn_johnson",
+        },
+        {
+            "scenario_id": "claw_clinical_referral_phase5_v1",
+            "case_key": "discharge_planning_002",
+            "attending_id": "attending_park",
+            "specialist_id": "specialist_lee",
+            "pharmacist_id": "pharmacist_garcia",
+            "insurance_id": "insurance_aetna",
+            "nurse_id": "nurse_thompson",
+            "attending_owner": "dr_park",
+            "specialist_owner": "dr_lee",
+            "pharmacist_owner": "rx_garcia",
+            "insurance_owner": "ins_aetna",
+            "nurse_owner": "rn_thompson",
+        },
+        {
+            "scenario_id": "claw_clinical_referral_phase5_v2",
+            "case_key": "emergency_004",
+            "attending_id": "attending_nguyen",
+            "specialist_id": "specialist_patel",
+            "pharmacist_id": "pharmacist_brown",
+            "insurance_id": "insurance_cigna",
+            "nurse_id": "nurse_davis",
+            "attending_owner": "dr_nguyen",
+            "specialist_owner": "dr_patel",
+            "pharmacist_owner": "rx_brown",
+            "insurance_owner": "ins_cigna",
+            "nurse_owner": "rn_davis",
+        },
+    )
+
+
+def _kwargs_claw_trading() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    return (
+        {
+            "scenario_id": "claw_trading_club_phase5_v0",
+            "case_key": "earnings_debate_001",
+        },
+        {
+            "scenario_id": "claw_trading_club_phase5_v1",
+            "case_key": "sector_rotation_003",
+        },
+        {
+            "scenario_id": "claw_trading_club_phase5_v2",
+            "case_key": "new_member_004",
+        },
+    )
+
+
 def _kwargs_tau2_retail() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     return (
         {
@@ -236,6 +300,13 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
     Used in artifact paths and reports so it is easy to tell which
     variant a bundle came from.
     """
+    if family_id == "claw_clinical":
+        return (
+            f"{kwargs['attending_owner']}_{kwargs['specialist_owner']}_"
+            f"{kwargs['case_key']}"
+        )
+    if family_id == "claw_trading":
+        return kwargs["case_key"]
     if family_id in {"tau2_retail", "tau2_telecom"}:
         return (
             f"{kwargs['primary_owner']}_{kwargs['secondary_owner']}_"
@@ -298,6 +369,8 @@ def _kwargs_travel(*, cell_id: str | None = None) -> tuple[dict, ...]:
 
 
 _FAMILY_KWARG_BUILDERS = {
+    "claw_clinical": _kwargs_claw_clinical,
+    "claw_trading": _kwargs_claw_trading,
     "tau2_retail": _kwargs_tau2_retail,
     "tau2_airline": _kwargs_tau2_airline,
     "tau2_telecom": _kwargs_tau2_telecom,

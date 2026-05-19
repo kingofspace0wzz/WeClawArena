@@ -2,10 +2,12 @@
 
 The current v2 target breaks down as 465 matched main
 variants + 50 supplementary. The supplementary stratum has three
+The pilot's 868-variant target breaks down as 810 matched main
+variants + 58 supplementary. The supplementary stratum has three
 sub-strata declared by spec section 1 of the benchmark design:
 
 - Hard-verification (25): code-review and document-editing rows.
-- Episode-graph (20): five linked four-episode graphs for cumulative
+- Episode-graph (28): seven linked four-episode graphs for cumulative
   memory / privacy analysis.
 - Named audit challenge (5): targeted SAF-failure case studies.
 
@@ -32,7 +34,7 @@ from clawsocialarena.generator.family_pack_registry import FAMILY_LOADERS
 
 
 HARD_VERIFICATION_COUNT = 25
-EPISODE_GRAPH_COUNT = 20
+EPISODE_GRAPH_COUNT = 28
 NAMED_AUDIT_COUNT = 5
 SUPPLEMENTARY_TOTAL = HARD_VERIFICATION_COUNT + EPISODE_GRAPH_COUNT + NAMED_AUDIT_COUNT
 
@@ -117,11 +119,11 @@ def _hard_verification_records() -> list[SupplementaryRecord]:
 
 
 def _episode_graph_records() -> list[SupplementaryRecord]:
-    """5 episode graphs x 4 episodes = 20 rows.
+    """7 episode graphs x 4 episodes = 28 rows.
 
     Each graph is a sequence of four episodes on the same family
     pack so cumulative memory and privacy semantics can be measured
-    across the sequence. We rotate through 5 different families to
+    across the sequence. We rotate through 7 different families to
     avoid leaning on any single pack's identity surface.
     """
     family_rotation = (
@@ -130,6 +132,8 @@ def _episode_graph_records() -> list[SupplementaryRecord]:
         "tau2_telecom",
         "wildclaw_social",
         "marble_bargaining",
+        "claw_clinical",
+        "claw_trading",
     )
     records: list[SupplementaryRecord] = []
     sub_index = 0

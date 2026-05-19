@@ -1,6 +1,7 @@
 """Phase-5 manifest assembly (S3 step 7).
 
 Aggregates the 465 main attack-variants and the 50 supplementary
+Aggregates the 270 main attack-variants and the 58 supplementary
 descriptors into a single ``phase5_manifest.json`` index. The
 orchestrator's Run-Batch 1..5 selectors consult this file by stratum,
 attack_mode, and cell to determine which rows belong to a given
@@ -15,6 +16,9 @@ v2 math (difficulty-tier dim dropped, MARBLE bargaining expanded):
     Total main: 465 main variants
     + 50 supplementary descriptors
     = 515 total rows
+    18 cells × 3 tasks × 5 attack modes = 270 main variants
+    + 58 supplementary descriptors
+    = 328 total rows
 
 Manifest schema (top level):
 
@@ -23,6 +27,9 @@ Manifest schema (top level):
       "n_main": 465,
       "n_supplementary": 50,
       "n_total": 515,
+      "n_main": 270,
+      "n_supplementary": 58,
+      "n_total": 328,
       "main": [<MainManifestRow>...],
       "supplementary": [<SupplementaryManifestRow>...]
     }
@@ -65,6 +72,13 @@ PHASE5_MANIFEST_FILENAME = "phase5_manifest.json"
 EXPECTED_MAIN_VARIANTS = 465
 EXPECTED_SUPPLEMENTARY_VARIANTS = 50
 EXPECTED_TOTAL_VARIANTS = EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
+# v2 counts: 18 cells × 3 tasks × 5 attack modes = 270 main variants
+# (the difficulty-tier dimension was dropped).
+EXPECTED_MAIN_VARIANTS = 270
+EXPECTED_SUPPLEMENTARY_VARIANTS = 58
+EXPECTED_TOTAL_VARIANTS = (
+    EXPECTED_MAIN_VARIANTS + EXPECTED_SUPPLEMENTARY_VARIANTS
+)
 
 
 @dataclass(frozen=True)
@@ -181,6 +195,8 @@ def assemble_manifest(
     If ``base_records`` is ``None``, the function materializes the
         full 93-base x 5-mode = 465-variant main set into ``out_dir``
     from scratch.
+    full 54-base × 5-mode = 270-variant set into ``out_dir`` from
+    scratch.
 
     Writes ``phase5_manifest.json`` at ``out_dir`` and returns the
     same payload as a Python dict.
@@ -241,6 +257,13 @@ def select_rows(
     The orchestrator's canonical Run-Batch selectors live in
     :mod:`clawsocialarena.orchestrator.phase5_run_batches`; this helper
     is a lower-level field filter used by tests and reports.
+    The orchestrator's Run-Batch selectors consume this:
+    - Run-Batch 1 (smoke): stratum="main", tier_index=1, task_index=0  (90 rows)
+    - Run-Batch 2: stratum="main", tier_index=1, task_index in {1, 2}  (180 rows;
+      Run-Batch 1 already consumed task_index=0)
+    - Run-Batch 3: stratum="main", tier_index=2                         (270 rows)
+    - Run-Batch 4: stratum="main", tier_index=3                         (270 rows)
+    - Run-Batch 5: stratum="supplementary"                              (58 rows)
     """
     rows: list[dict[str, Any]] = []
     pools: list[list[dict[str, Any]]] = []

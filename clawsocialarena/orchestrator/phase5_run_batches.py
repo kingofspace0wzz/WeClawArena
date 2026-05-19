@@ -6,10 +6,10 @@ difficulty-tier dimension dropped in v2 (T1-T3), batches are now
 attack-regime-based rather than tier-based.
 
 Current v2 main-grid counts:
-    3 × 8 × 5 = 120  (marble_research)
-    2 × 12 × 5 = 120 (marble_bargaining)
-    2 × 6 × 5 = 60   (marble_bidding)
-    11 × 3 × 5 = 165 (other allocated cells)
+    3 x 8 x 5 = 120  (marble_research)
+    2 x 12 x 5 = 120 (marble_bargaining)
+    2 x 6 x 5 = 60   (marble_bidding)
+    11 x 3 x 5 = 165 (other allocated cells)
     Total: 465 main rows
 
     Batch 1 (smoke_v2):      1 row per (family, mode) = 8 families x 5 modes = 40
@@ -115,7 +115,7 @@ PHASE5_RUN_BATCHES: tuple[RunBatchSpec, ...] = (
             "8 allocated families x 5 modes = 40 rows."
         ),
         expected_rows=40,
-    expected_rows_alternatives=(25, 30, 35),
+        expected_rows_alternatives=(25, 30, 35),
         selector_fn=_select_smoke_v2,
     ),
     RunBatchSpec(

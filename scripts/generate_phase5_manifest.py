@@ -1,6 +1,6 @@
 """CLI driver for the Phase-5 manifest assembler (S3 step 7).
 
-Materializes the 630 main attack variants + 50 supplementary
+Materializes the 810 main attack variants + 58 supplementary
 descriptors into ``out_dir`` and writes ``phase5_manifest.json`` at
 the top of that directory. Run-Batch 1..5 orchestrators consume the
 manifest by stratum/tier/task to pick rows for each batch.

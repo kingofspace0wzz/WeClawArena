@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from clawsocialarena.generator.family_packs import (
+    claw_clinical as _claw_clinical_pack,
+    claw_trading as _claw_trading_pack,
     marble_bargaining as _marble_bargaining_pack,
     marble_bidding as _marble_bidding_pack,
     marble_research as _marble_research_pack,
@@ -31,6 +33,14 @@ from clawsocialarena.generator.family_packs import (
     tau2_telecom as _tau2_telecom_pack,
     travel as _travel_pack,
     wildclaw_social as _wildclaw_social_pack,
+)
+from clawsocialarena.generator.family_packs.claw_clinical import (
+    load_referral_scenario,
+    materialize_clinical_bundle,
+)
+from clawsocialarena.generator.family_packs.claw_trading import (
+    load_trading_club_scenario,
+    materialize_trading_bundle,
 )
 from clawsocialarena.generator.family_packs.marble_bargaining import (
     load_bargaining_scenario,
@@ -94,6 +104,31 @@ class FamilyPackEntry:
 
 
 FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
+    "claw_clinical": FamilyPackEntry(
+        family_id="claw_clinical",
+        load_fn=load_referral_scenario,
+        materialize_fn=materialize_clinical_bundle,
+        session_context_keys=(
+            "patient_id",
+            "attending_owner_id",
+            "specialist_owner_id",
+            "pharmacist_owner_id",
+            "insurance_owner_id",
+            "nurse_owner_id",
+        ),
+        naturalization_hints=_claw_clinical_pack.NATURALIZATION_HINTS,
+    ),
+    "claw_trading": FamilyPackEntry(
+        family_id="claw_trading",
+        load_fn=load_trading_club_scenario,
+        materialize_fn=materialize_trading_bundle,
+        session_context_keys=(
+            "club_id",
+            "admin_owner_id",
+            "member_owner_ids",
+        ),
+        naturalization_hints=_claw_trading_pack.NATURALIZATION_HINTS,
+    ),
     "tau2_retail": FamilyPackEntry(
         family_id="tau2_retail",
         load_fn=load_shared_account_scenario,

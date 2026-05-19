@@ -50,21 +50,21 @@ def test_prepare_writes_ready_report(
     assert report["naturalization_mode"] == "deterministic"
     assert report["realism_status"] == "worldpack_draft"
     assert report["release_ready"] is False
-    assert report["dataset"]["scenario_count"] == 680
+    assert report["dataset"]["scenario_count"] == 868
     assert report["dataset"]["strata"] == {
-        "main": 630,
+        "main": 810,
         "hard": 25,
-        "episode_graph": 20,
+        "episode_graph": 28,
         "audit_challenges": 5,
     }
-    assert report["dataset"]["resource_count"] == 675
-    assert report["dataset"]["task_schema_v0_count"] == 680
+    assert report["dataset"]["resource_count"] == 863
+    assert report["dataset"]["task_schema_v0_count"] == 868
     assert report["dataset"]["main_designed_difficulty_tiers"] == {
-        "easy": 210,
-        "realistic": 210,
-        "stress": 210,
+        "easy": 270,
+        "realistic": 270,
+        "stress": 270,
     }
-    assert report["validation"]["validated_count"] == 680
+    assert report["validation"]["validated_count"] == 868
     assert all(result["returncode"] == 0 for result in report["commands"])
 
 
@@ -114,9 +114,9 @@ def test_generate_with_yes_writes_build_report(
     assert report["generation_status"] == "SCAFFOLD_GENERATED"
     assert report["dataset_role"] == "scaffold"
     assert report["release_ready"] is False
-    assert report["dataset"]["scenario_count"] == 680
-    assert report["dataset"]["resource_count"] == 675
-    assert report["dataset"]["task_schema_v0_count"] == 680
+    assert report["dataset"]["scenario_count"] == 868
+    assert report["dataset"]["resource_count"] == 863
+    assert report["dataset"]["task_schema_v0_count"] == 868
     assert report["output_path"] == str(out)
 
 

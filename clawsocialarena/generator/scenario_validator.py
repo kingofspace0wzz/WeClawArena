@@ -115,7 +115,14 @@ def validate_scenario(
 
     # Node-level rules.
     errors.extend(_validate_unique_agent_ids(graph))
-    if not allow_shared_ownership:
+    # Multi-team and multi-department topologies legitimately share owner_ids
+    # (e.g., marcus owns marcus_analyst, marcus_researcher, marcus_trader).
+    # Auto-detect by checking task_family or initial_state topology flag.
+    _is_multi_topology = (
+        scenario.task_family in ("multi_team_consensus", "multi_department_coordination")
+        or (scenario.initial_state or {}).get("topology") in ("multi_team", "multi_department")
+    )
+    if not allow_shared_ownership and not _is_multi_topology:
         errors.extend(_validate_unique_owner_ids(graph))
     if bundle_root is not None:
         errors.extend(_validate_persona_sources(graph, Path(bundle_root)))

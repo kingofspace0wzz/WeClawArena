@@ -91,7 +91,7 @@ def render_qc_report(
     ]
     if report.projected_full_benchmark_cost_usd is not None:
         lines.append(
-            "- Projected 680-variant pilot cost: "
+            "- Projected 868-variant pilot cost: "
             f"${report.projected_full_benchmark_cost_usd.point_estimate:.2f} "
             "point estimate"
         )

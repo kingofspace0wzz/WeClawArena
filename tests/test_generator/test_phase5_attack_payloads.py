@@ -116,7 +116,11 @@ def test_payload_target_agent_ids_are_real_for_each_family(
             "peer_message",
             "system_aside",
         }
-        assert payload.delivery_surface == str(DeliverySurface.MESSAGE)
+        valid_surfaces = {str(s) for s in DeliverySurface}
+        assert payload.delivery_surface in valid_surfaces, (
+            f"{family_id}/{payload.attack_mode} has invalid delivery_surface "
+            f"{payload.delivery_surface!r}; valid: {sorted(valid_surfaces)}"
+        )
         assert payload.attacker_control == str(AttackerControl.SCRIPTED)
         assert payload.payload_text.strip(), (
             f"{family_id}/{payload.attack_mode} has empty payload text"

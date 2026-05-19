@@ -1,14 +1,20 @@
-"""Phase-5 cell × family allocation.
+"""Phase-5 cell x family allocation.
 
 Encodes the table from
 ``docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md``
-section 2 ("Family-to-Category Allocation (Default A)") as a single
-canonical structure.
+section 2 ("Family-to-Category Allocation (Default A)") plus the
+claw_clinical and claw_trading expansions as a single canonical structure.
 
-The current v2.0.0 expansion has 18 cells. Cross-user (CU) and
-competitive (CM) both have a third slot for MARBLE bidding. Cross-user
-adds a fourth slot (D) for `travel`, and Multi-Party Group (MG) adds a
-third slot (C) for `travel`. The other categories keep slots A/B.
+The current v2.0.0 expansion has 22 cells (18 upstream + 4 clinical/trading).
+Cross-user (CU) and competitive (CM) both have a third slot for MARBLE
+bidding. Cross-user adds a fourth slot (D) for ``travel``, and Multi-Party
+Group (MG) adds a third slot (C) for ``travel``. Clinical and trading each
+occupy 2 additional cells.
+
+Per-family cell counts sum to 22 (marble_research 3,
+marble_bargaining 2, wildclaw_social 2, tau2_retail 2, tau2_telecom 3,
+tau2_airline 2, marble_bidding 2, travel 2, claw_clinical 2,
+claw_trading 2).
 """
 
 from __future__ import annotations
@@ -63,6 +69,12 @@ CELL_ALLOCATION: tuple[CellSpec, ...] = (
     CellSpec(15, "CU", "C", "marble_bidding"),
     CellSpec(16, "CU", "D", "travel"),
     CellSpec(17, "MG", "C", "travel"),
+    # claw_clinical: health-safety + compliance/medical
+    CellSpec(18, "HS", "C", "claw_clinical"),
+    CellSpec(19, "CM", "D", "claw_clinical"),
+    # claw_trading: market/governance + consumer/utility
+    CellSpec(20, "MG", "D", "claw_trading"),
+    CellSpec(21, "CU", "E", "claw_trading"),
 )
 
 
@@ -98,7 +110,7 @@ def cell_for(category: str, slot: str) -> CellSpec:
             return cell
     raise KeyError(
         f"no cell at category={category!r} slot={slot!r}; "
-        f"categories={CATEGORIES} slots=('A', 'B', 'C', 'D')"
+        f"categories={CATEGORIES} slots=('A', 'B', 'C', 'D', 'E')"
     )
 
 

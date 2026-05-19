@@ -16,17 +16,17 @@ from clawsocialarena.generator.phase5_supplementary import (
 )
 
 
-def test_supplementary_total_is_fifty() -> None:
-    assert SUPPLEMENTARY_TOTAL == 50
+def test_supplementary_total_is_fifty_eight() -> None:
+    assert SUPPLEMENTARY_TOTAL == 58
     assert (
         HARD_VERIFICATION_COUNT + EPISODE_GRAPH_COUNT + NAMED_AUDIT_COUNT
         == SUPPLEMENTARY_TOTAL
     )
 
 
-def test_supplementary_records_returns_50_records() -> None:
+def test_supplementary_records_returns_58_records() -> None:
     records = supplementary_records()
-    assert len(records) == 50
+    assert len(records) == 58
     assert all(isinstance(r, SupplementaryRecord) for r in records)
 
 
@@ -44,7 +44,7 @@ def test_supplementary_variant_ids_are_unique() -> None:
     assert len(set(ids)) == len(ids)
 
 
-def test_episode_graph_records_form_five_graphs_of_four_episodes() -> None:
+def test_episode_graph_records_form_seven_graphs_of_four_episodes() -> None:
     records = supplementary_records()
     graph_to_episodes: dict[int, set[int]] = {}
     for record in records:
@@ -54,7 +54,7 @@ def test_episode_graph_records_form_five_graphs_of_four_episodes() -> None:
         graph_to_episodes.setdefault(params["graph_index"], set()).add(
             params["episode_index"]
         )
-    assert len(graph_to_episodes) == 5
+    assert len(graph_to_episodes) == 7
     for graph_idx, episodes in graph_to_episodes.items():
         assert episodes == {0, 1, 2, 3}, (
             f"graph {graph_idx} has episodes {episodes}"
