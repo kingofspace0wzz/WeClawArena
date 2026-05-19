@@ -747,7 +747,7 @@ def dispatch(
 
 
 def _emr_db_path(context: ClinicalContext) -> Path:
-    return context.resources_root / "emr" / context.patient_id / "emr.sqlite"
+    return context.resources_root / "shared" / "emr" / context.patient_id / "emr.sqlite"
 
 
 def _open(db_path: Path) -> sqlite3.Connection:
@@ -807,7 +807,7 @@ def _query_emr(
         # Attending can access; read the restricted file
         record_type = section.replace("restricted/", "")
         restricted_path = (
-            context.resources_root / "emr" / patient_id
+            context.resources_root / "shared" / "emr" / patient_id
             / "restricted" / f"{record_type}.json"
         )
         if not restricted_path.is_file():
@@ -1360,7 +1360,7 @@ def _read_department_notes(
             ),
         }
     notes_path = (
-        context.resources_root / "dept_notes" / dept / "notes.json"
+        context.resources_root / "shared" / "dept_notes" / dept / "notes.json"
     )
     if not notes_path.is_file():
         return {"ok": True, "department": dept, "notes": []}
@@ -1392,7 +1392,7 @@ def _write_department_notes(
                 f"may not write to {dept} department notes."
             ),
         }
-    notes_dir = context.resources_root / "dept_notes" / dept
+    notes_dir = context.resources_root / "shared" / "dept_notes" / dept
     notes_dir.mkdir(parents=True, exist_ok=True)
     notes_path = notes_dir / "notes.json"
     if notes_path.is_file():

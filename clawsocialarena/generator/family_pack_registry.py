@@ -110,6 +110,7 @@ FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
         materialize_fn=materialize_clinical_bundle,
         session_context_keys=(
             "patient_id",
+            "caller_role",
             "attending_owner_id",
             "specialist_owner_id",
             "pharmacist_owner_id",
@@ -126,6 +127,10 @@ FAMILY_LOADERS: dict[str, FamilyPackEntry] = {
             "club_id",
             "admin_owner_id",
             "member_owner_ids",
+            "caller_member_id",
+            "caller_role",
+            "vote_threshold",
+            "proposal_id",
         ),
         naturalization_hints=_claw_trading_pack.NATURALIZATION_HINTS,
     ),

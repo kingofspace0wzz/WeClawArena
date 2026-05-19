@@ -41,7 +41,7 @@ class TaskVariantSpec:
     loader_kwargs: dict[str, Any]
 
 
-def _kwargs_claw_clinical() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def _kwargs_claw_clinical() -> tuple[dict[str, Any], ...]:
     return (
         {
             "scenario_id": "claw_clinical_referral_phase5_v0",
@@ -85,22 +85,66 @@ def _kwargs_claw_clinical() -> tuple[dict[str, Any], dict[str, Any], dict[str, A
             "insurance_owner": "ins_cigna",
             "nurse_owner": "rn_davis",
         },
+        {
+            "scenario_id": "claw_clinical_referral_phase5_v3",
+            "case_key": "referral_cardio_002",
+            "attending_id": "attending_agent",
+            "specialist_id": "specialist_agent",
+            "pharmacist_id": "pharmacist_agent",
+            "insurance_id": "insurance_agent",
+            "nurse_id": "nurse_agent",
+            "attending_owner": "dr_martinez",
+            "specialist_owner": "dr_chen",
+            "pharmacist_owner": "rx_williams",
+            "insurance_owner": "ins_bluecross",
+            "nurse_owner": "rn_johnson",
+        },
+        {
+            "scenario_id": "claw_clinical_referral_phase5_v4",
+            "case_key": "discharge_003",
+            "attending_id": "attending_park",
+            "specialist_id": "specialist_lee",
+            "pharmacist_id": "pharmacist_garcia",
+            "insurance_id": "insurance_aetna",
+            "nurse_id": "nurse_thompson",
+            "attending_owner": "dr_park",
+            "specialist_owner": "dr_lee",
+            "pharmacist_owner": "rx_garcia",
+            "insurance_owner": "ins_aetna",
+            "nurse_owner": "rn_thompson",
+        },
     )
 
 
-def _kwargs_claw_trading() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def _kwargs_claw_trading() -> tuple[dict[str, Any], ...]:
     return (
         {
             "scenario_id": "claw_trading_club_phase5_v0",
             "case_key": "earnings_debate_001",
+            "club_id": "CLUB-ALPHA",
+            "admin_owner": "alice",
+            "member_owners": ("alice", "bob", "carol"),
         },
         {
             "scenario_id": "claw_trading_club_phase5_v1",
             "case_key": "sector_rotation_003",
+            "club_id": "CLUB-BETA",
+            "admin_owner": "alice",
+            "member_owners": ("alice", "bob", "carol", "dave"),
         },
         {
             "scenario_id": "claw_trading_club_phase5_v2",
             "case_key": "new_member_004",
+            "club_id": "CLUB-GAMMA",
+            "admin_owner": "alice",
+            "member_owners": ("alice", "bob", "carol", "dave"),
+        },
+        {
+            "scenario_id": "claw_trading_club_phase5_v3",
+            "case_key": "crisis_response_002",
+            "club_id": "CLUB-ALPHA",
+            "admin_owner": "alice",
+            "member_owners": ("alice", "bob", "carol"),
         },
     )
 
@@ -306,7 +350,8 @@ def _label_from_kwargs(family_id: str, kwargs: dict[str, Any]) -> str:
             f"{kwargs['case_key']}"
         )
     if family_id == "claw_trading":
-        return kwargs["case_key"]
+        members = "_".join(kwargs.get("member_owners", ("unknown",)))
+        return f"{kwargs.get('admin_owner', 'admin')}_{members}_{kwargs['case_key']}"
     if family_id in {"tau2_retail", "tau2_telecom"}:
         return (
             f"{kwargs['primary_owner']}_{kwargs['secondary_owner']}_"

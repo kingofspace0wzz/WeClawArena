@@ -525,7 +525,7 @@ def dispatch(
 
 
 def _club_db_path(context: TradingClubContext) -> Path:
-    return context.resources_root / "club.sqlite"
+    return context.resources_root / "shared" / context.club_id / "club.sqlite"
 
 
 def _open(db_path: Path) -> sqlite3.Connection:
@@ -542,7 +542,7 @@ def _fetch_market_data(
     if not tickers:
         return {"ok": False, "error": "missing_tickers"}
     # Read from materialized market snapshot
-    snapshot_path = context.resources_root / "market" / "snapshot.json"
+    snapshot_path = context.resources_root / "shared" / "market" / "snapshot.json"
     if snapshot_path.is_file():
         data = json.loads(snapshot_path.read_text(encoding="utf-8"))
         market = data.get("data", {})
@@ -590,7 +590,7 @@ def _analyze_portfolio(
 
     # Read own portfolio
     portfolio_path = (
-        context.resources_root / "portfolios" / member_id / "holdings.json"
+        context.resources_root / "agents" / member_id / "files" / "holdings.json"
     )
     if not portfolio_path.is_file():
         return {"ok": False, "error": "portfolio_not_found"}
@@ -887,7 +887,7 @@ def _read_analyst_notes(
             ),
         }
     notes_path = (
-        context.resources_root / "analyst_notes" / target_member / "notes.json"
+        context.resources_root / "agents" / target_member / "files" / "analyst_notes.json"
     )
     if not notes_path.is_file():
         return {"ok": True, "member_id": target_member, "notes": []}
@@ -903,9 +903,9 @@ def _write_analyst_notes(
     note_text = str(arguments.get("note") or "").strip()
     if not note_text:
         return {"ok": False, "error": "missing_note_text"}
-    notes_dir = context.resources_root / "analyst_notes" / context.caller_member_id
+    notes_dir = context.resources_root / "agents" / context.caller_member_id / "files"
     notes_dir.mkdir(parents=True, exist_ok=True)
-    notes_path = notes_dir / "notes.json"
+    notes_path = notes_dir / "analyst_notes.json"
     if notes_path.is_file():
         data = json.loads(notes_path.read_text(encoding="utf-8"))
     else:
@@ -929,7 +929,7 @@ def _read_market_report(
     Available to all analysts. Contains sector summaries and
     earnings data that inform research notes.
     """
-    report_path = context.resources_root / "market" / "report.json"
+    report_path = context.resources_root / "shared" / "market" / "report.json"
     if not report_path.is_file():
         return {"ok": True, "report": {}, "note": "no_report_available"}
     data = json.loads(report_path.read_text(encoding="utf-8"))
@@ -981,7 +981,7 @@ def _read_trade_log(
             ),
         }
     log_path = (
-        context.resources_root / "trade_logs" / target_member / "log.json"
+        context.resources_root / "agents" / target_member / "files" / "trade_log.json"
     )
     if not log_path.is_file():
         return {"ok": True, "member_id": target_member, "trades": []}

@@ -534,6 +534,40 @@ class Session:
             )
             register_travel_handlers(self.mcp_host, context=travel)
             return
+        if family_id == "claw_clinical":
+            from clawsocialarena.mcp_tools.claw_clinical import (
+                ClinicalContext,
+                register_claw_clinical_handlers,
+            )
+
+            clinical = ClinicalContext(
+                resources_root=Path(resource_root),
+                patient_id=str(ctx.get("patient_id", "PT-001")),
+                caller_owner_id=str(ctx.get("attending_owner_id", "dr_martinez")),
+                caller_role=str(ctx.get("caller_role", "attending_physician")),
+                attending_owner_id=str(ctx.get("attending_owner_id", "dr_martinez")),
+            )
+            register_claw_clinical_handlers(self.mcp_host, context=clinical)
+            return
+        if family_id == "claw_trading":
+            from clawsocialarena.mcp_tools.claw_trading import (
+                TradingClubContext,
+                register_claw_trading_handlers,
+            )
+
+            member_ids = tuple(
+                str(m) for m in (ctx.get("member_owner_ids") or ("alice", "bob", "carol"))
+            )
+            trading = TradingClubContext(
+                resources_root=Path(resource_root),
+                club_id=str(ctx.get("club_id", "CLUB-ALPHA")),
+                caller_member_id=str(ctx.get("admin_owner_id", member_ids[0])),
+                caller_role=str(ctx.get("caller_role", "club_admin")),
+                admin_member_id=str(ctx.get("admin_owner_id", member_ids[0])),
+                member_ids=member_ids,
+            )
+            register_claw_trading_handlers(self.mcp_host, context=trading)
+            return
         # Unknown family_id: skip silently rather than block scenario
         # construction. A future strict mode could raise here.
 
