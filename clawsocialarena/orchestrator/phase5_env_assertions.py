@@ -285,6 +285,7 @@ def evaluate_evaluation_criteria(
     predicate_passes, predicate_failures, predicate_diagnostics = _evaluate_predicates(
         env_assertions=env_assertions,
         action_log=action_log,
+        outbound_messages=outbound_messages,
         resources_dir=resources_dir,
         family_id=family_id,
     )
@@ -327,6 +328,7 @@ def _evaluate_predicates(
     *,
     env_assertions: list[dict[str, Any]],
     action_log: list[ActionRecord],
+    outbound_messages: list[dict[str, Any]],
     resources_dir: Path | str | None,
     family_id: str | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -364,6 +366,7 @@ def _evaluate_predicates(
     state = _env_state_with_tool_dispatches(
         build_env_state(resources_dir=Path(resources_dir)),
         action_log,
+        outbound_messages=outbound_messages,
     )
     registry = _resolve_predicate_registry(family_id)
     passes: list[dict[str, Any]] = []
@@ -420,12 +423,14 @@ def _evaluate_predicates(
 def _env_state_with_tool_dispatches(
     state: EnvState,
     action_log: list[ActionRecord],
+    *,
+    outbound_messages: list[dict[str, Any]] | None = None,
 ) -> EnvState:
     return EnvState(
         db=state.db,
         files=state.files,
         messages=state.messages,
-        outbound_messages=state.outbound_messages,
+        outbound_messages=outbound_messages if outbound_messages is not None else state.outbound_messages,
         tool_dispatches=_successful_tool_dispatches(action_log),
         metadata=state.metadata,
     )

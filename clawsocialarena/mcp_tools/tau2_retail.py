@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -471,7 +472,14 @@ def _find_user_id_by_name_zip(
     # archetypes; authenticatable_owners spans them so the lookup works
     # equally for shared_account / cross_account / store_rep_dyad /
     # hub_aggregator without an archetype branch.
-    if first_name in context.authenticatable_owners:
+    verified = first_name in context.authenticatable_owners
+    _record_auth_attempt(
+        context,
+        customer_id_claimed=first_name,
+        method="name_zip",
+        verified=verified,
+    )
+    if verified:
         return _auth_response(first_name, context)
     return {"ok": False, "error": "user_not_found"}
 
@@ -487,9 +495,132 @@ def _find_user_id_by_email(
     # directly to owner_id. No separate users-table lookup so any archetype
     # works without per-scenario seeding of email rows.
     local_part = email.split("@", 1)[0]
-    if local_part in context.authenticatable_owners:
+    verified = local_part in context.authenticatable_owners
+    _record_auth_attempt(
+        context,
+        customer_id_claimed=local_part,
+        method="email",
+        verified=verified,
+    )
+    if verified:
         return _auth_response(local_part, context)
     return {"ok": False, "error": "user_not_found"}
+
+
+def _record_auth_attempt(
+    context: RetailSessionContext,
+    *,
+    customer_id_claimed: str,
+    method: str,
+    verified: bool,
+) -> None:
+    """Append a row to the store rep's auth_attempts table.
+
+    Predicate ``customer_authenticated_via`` reads this. Silent no-op when
+    the archetype does not maintain the table (only store_rep_dyad seeds
+    it today).
+    """
+    rep_owner = context.store_rep_owner_id or context.primary_owner_id
+    if not rep_owner:
+        return
+    db_path = _db_path_for(context, rep_owner)
+    if not db_path.is_file():
+        return
+    conn = _open(db_path)
+    try:
+        try:
+            conn.execute(
+                "INSERT INTO auth_attempts (attempt_id, customer_id_claimed, verified, method, ts) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    f"att_{uuid.uuid4().hex[:12]}",
+                    customer_id_claimed,
+                    1 if verified else 0,
+                    method,
+                    _now_iso(),
+                ),
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            return
+    finally:
+        conn.close()
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _ensure_action_committed_at_column(conn: sqlite3.Connection, action: str) -> None:
+    """ALTER TABLE add a per-action commit-timestamp column if missing.
+
+    Called by mutating handlers so the `user_confirmation_recorded_before`
+    predicate can find the order's `<action>_committed_at` field without
+    requiring every seed to pre-populate every possible action column.
+    Silent on tables that don't exist (some personal DBs lack `orders`).
+    """
+    column = f"{action}_committed_at"
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(orders)").fetchall()]
+    except sqlite3.OperationalError:
+        return
+    if not cols or column in cols:
+        return
+    try:
+        conn.execute(f"ALTER TABLE orders ADD COLUMN {column} TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+
+def _append_refund_to_payment_history(conn: sqlite3.Connection, order_id: str) -> None:
+    """Append a refund entry to the order's payment_history JSON.
+
+    The refund routes back to the original payment method (the first
+    charge entry's pm_id). The `refund_routed_to_original_payment_method`
+    predicate validates this. Silent on schema errors so callers do not
+    need a separate guard.
+    """
+    try:
+        row = conn.execute(
+            "SELECT payment_history FROM orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return
+    if row is None:
+        return
+    raw = row[0]
+    try:
+        history = json.loads(raw) if isinstance(raw, str) and raw.strip() else []
+    except (ValueError, TypeError):
+        history = []
+    if not isinstance(history, list):
+        history = []
+    original_pm: str | None = None
+    refund_amount: float | None = None
+    for entry in history:
+        if isinstance(entry, Mapping) and entry.get("type") == "charge":
+            original_pm = entry.get("payment_method_id") or original_pm
+            try:
+                refund_amount = float(entry.get("amount") or 0) or refund_amount
+            except (TypeError, ValueError):
+                pass
+    if not original_pm:
+        return
+    history.append({
+        "type": "refund",
+        "payment_method_id": original_pm,
+        "amount": refund_amount or 0.0,
+        "at": _now_iso(),
+    })
+    try:
+        conn.execute(
+            "UPDATE orders SET payment_history = ? WHERE order_id = ?",
+            (json.dumps(history), order_id),
+        )
+    except sqlite3.OperationalError:
+        return
 
 
 def _auth_response(user_id: str, context: RetailSessionContext) -> dict[str, Any]:
@@ -655,6 +786,7 @@ def _exchange_item(
     for owner_id in context.authenticatable_owners:
         candidate_paths.append(_db_path_for(context, owner_id))
     seen: set[str] = set()
+    ts = _now_iso()
     for db_path in candidate_paths:
         key = str(db_path)
         if key in seen or not db_path.is_file():
@@ -662,15 +794,18 @@ def _exchange_item(
         seen.add(key)
         conn = _open(db_path)
         try:
+            _ensure_action_committed_at_column(conn, "exchange_item")
             try:
                 cursor = conn.execute(
-                    "UPDATE orders SET status = ?, payment_authorized_by = ? "
+                    "UPDATE orders SET status = ?, payment_authorized_by = ?, "
+                    "exchange_item_committed_at = ? "
                     "WHERE order_id = ?",
-                    ("finalized", authorizer, order_id),
+                    ("finalized", authorizer, ts, order_id),
                 )
             except sqlite3.OperationalError:
                 continue  # No orders table in this DB; that's expected for some archetypes.
             if cursor.rowcount > 0:
+                _append_refund_to_payment_history(conn, order_id)
                 updates_applied += cursor.rowcount
                 conn.commit()
         finally:
@@ -765,6 +900,7 @@ def _modify_address(
     candidate_paths.append(_db_path_for(context, caller))
     address_json = json.dumps(dict(new_address))
     seen: set[str] = set()
+    ts = _now_iso()
     for db_path in candidate_paths:
         key = str(db_path)
         if key in seen or not db_path.is_file():
@@ -772,10 +908,12 @@ def _modify_address(
         seen.add(key)
         conn = _open(db_path)
         try:
+            _ensure_action_committed_at_column(conn, "modify_address")
             try:
                 cursor = conn.execute(
-                    "UPDATE orders SET shipping_address = ? WHERE order_id = ?",
-                    (address_json, order_id),
+                    "UPDATE orders SET shipping_address = ?, modify_address_committed_at = ? "
+                    "WHERE order_id = ?",
+                    (address_json, ts, order_id),
                 )
             except sqlite3.OperationalError:
                 continue
@@ -813,6 +951,7 @@ def _cancel_pending_order(
     for owner_id in context.authenticatable_owners:
         candidate_paths.append(_db_path_for(context, owner_id))
     seen: set[str] = set()
+    ts = _now_iso()
     for db_path in candidate_paths:
         key = str(db_path)
         if key in seen or not db_path.is_file():
@@ -820,10 +959,12 @@ def _cancel_pending_order(
         seen.add(key)
         conn = _open(db_path)
         try:
+            _ensure_action_committed_at_column(conn, "cancel_pending_order")
             try:
                 cursor = conn.execute(
-                    "UPDATE orders SET status = ? WHERE order_id = ? AND status != ?",
-                    ("cancelled", order_id, "finalized"),
+                    "UPDATE orders SET status = ?, cancel_pending_order_committed_at = ? "
+                    "WHERE order_id = ? AND status != ?",
+                    ("cancelled", ts, order_id, "finalized"),
                 )
             except sqlite3.OperationalError:
                 continue
@@ -900,14 +1041,30 @@ def _grant_address_consent(
         return {"ok": False, "error": "recipient_db_missing"}
     conn = _open(db_path)
     try:
-        cursor = conn.execute(
-            "UPDATE incoming_gift_requests "
-            "SET consent_status = 'granted', requested_address_id = ? "
-            "WHERE request_id = ?",
-            (address_id, order_id),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE incoming_gift_requests "
+                "SET consent_status = 'granted', requested_address_id = ?, granted_at = ? "
+                "WHERE request_id = ?",
+                (address_id, _now_iso(), order_id),
+            )
+        except sqlite3.OperationalError:
+            return {"ok": False, "error": "incoming_gift_requests_table_missing"}
         if cursor.rowcount == 0:
-            return {"ok": False, "error": "request_not_found"}
+            # No pre-existing row -> create one so the consent predicate sees it.
+            conn.execute(
+                "INSERT INTO incoming_gift_requests "
+                "(request_id, from_owner_id, requested_address_id, consent_status, "
+                "payment_share_status, granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    order_id,
+                    context.sender_owner_id or "",
+                    address_id,
+                    "granted",
+                    "pending",
+                    _now_iso(),
+                ),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -937,14 +1094,29 @@ def _grant_payment_share_consent(
         return {"ok": False, "error": "recipient_db_missing"}
     conn = _open(db_path)
     try:
-        cursor = conn.execute(
-            "UPDATE incoming_gift_requests "
-            "SET payment_share_status = 'granted' "
-            "WHERE request_id = ?",
-            (order_id,),
-        )
+        try:
+            cursor = conn.execute(
+                "UPDATE incoming_gift_requests "
+                "SET payment_share_status = 'granted', consent_status = 'granted', granted_at = ? "
+                "WHERE request_id = ?",
+                (_now_iso(), order_id),
+            )
+        except sqlite3.OperationalError:
+            return {"ok": False, "error": "incoming_gift_requests_table_missing"}
         if cursor.rowcount == 0:
-            return {"ok": False, "error": "request_not_found"}
+            conn.execute(
+                "INSERT INTO incoming_gift_requests "
+                "(request_id, from_owner_id, requested_address_id, consent_status, "
+                "payment_share_status, granted_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    order_id,
+                    context.sender_owner_id or "",
+                    "",
+                    "granted",
+                    "granted",
+                    _now_iso(),
+                ),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -1100,30 +1272,57 @@ def _request_return(
     if context.archetype == "cross_account":
         if requesting_owner_id != context.recipient_owner_id:
             return {"ok": False, "error": "requester_not_recipient"}
+        # In cross_account, the sender owns the canonical orders table
+        # (matches refund-routing predicate's read site).
         target_owner_id = context.sender_owner_id
-        table = "orders"
     elif context.archetype == "store_rep_dyad":
         if requesting_owner_id != context.customer_owner_id:
             return {"ok": False, "error": "requester_not_customer"}
-        target_owner_id = context.store_rep_owner_id
-        table = "retail_orders"
+        # In store_rep_dyad, the customer owns the canonical orders table
+        # (the rep's retail_orders is a separate internal view).
+        target_owner_id = context.customer_owner_id
     else:
         return {"ok": False, "error": "archetype_not_supported_for_return"}
 
     db_path = _db_path_for(context, target_owner_id)
     if not db_path.is_file():
         return {"ok": False, "error": "target_db_missing"}
+    ts = _now_iso()
     conn = _open(db_path)
     try:
-        cursor = conn.execute(
-            f"UPDATE {table} SET status = 'return_requested' WHERE order_id = ?",
-            (order_id,),
-        )
+        _ensure_action_committed_at_column(conn, "request_return")
+        try:
+            cursor = conn.execute(
+                "UPDATE orders SET status = 'return_requested', "
+                "request_return_committed_at = ? WHERE order_id = ?",
+                (ts, order_id),
+            )
+        except sqlite3.OperationalError:
+            return {"ok": False, "error": "orders_table_missing"}
         if cursor.rowcount == 0:
             return {"ok": False, "error": "order_not_found"}
+        _append_refund_to_payment_history(conn, order_id)
         conn.commit()
     finally:
         conn.close()
+
+    # store_rep_dyad: also mark the rep's retail_orders view so the rep's
+    # workspace reflects the return state. Silent on schema mismatch.
+    if context.archetype == "store_rep_dyad" and context.store_rep_owner_id:
+        rep_path = _db_path_for(context, context.store_rep_owner_id)
+        if rep_path.is_file():
+            rep_conn = _open(rep_path)
+            try:
+                try:
+                    rep_conn.execute(
+                        "UPDATE retail_orders SET status = 'return_requested' WHERE order_id = ?",
+                        (order_id,),
+                    )
+                    rep_conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+            finally:
+                rep_conn.close()
     return {
         "ok": True,
         "order_id": order_id,

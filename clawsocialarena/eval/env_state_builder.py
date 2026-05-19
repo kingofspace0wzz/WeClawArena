@@ -54,9 +54,17 @@ def build_env_state(*, resources_dir: Path | str) -> EnvState:
 
 
 def _merge_db_file(sqlite_path: Path, accumulator: dict[str, dict[str, Any]]) -> None:
-    """Read one sqlite file and merge its tables into ``accumulator``."""
+    """Read one sqlite file and merge its tables into ``accumulator``.
+
+    Tables from a personal DB (path ``agents/<owner>/db/personal.sqlite``)
+    are ALSO published under ``<table_name>::<owner>`` so predicates that
+    need per-owner views (e.g., recipient-side consent rows) can query
+    them without ambiguity. The unsuffixed merged view is preserved for
+    predicates that operate on the canonical aggregated state.
+    """
     conn = sqlite3.connect(sqlite_path)
     conn.row_factory = sqlite3.Row
+    owner_id = _owner_id_from_path(sqlite_path)
     try:
         table_rows = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
@@ -68,18 +76,34 @@ def _merge_db_file(sqlite_path: Path, accumulator: dict[str, dict[str, Any]]) ->
             for row in conn.execute(sql).fetchall():
                 row_dict = _decode_row(dict(row))
                 if pk_col is None or pk_col not in row_dict:
-                    # Tables without a primary key (e.g., availability)
-                    # accumulate under a synthetic sequential index so
-                    # predicates that iterate get them all. We use a
-                    # negative-indexed bucket to keep them distinct from
-                    # keyed rows.
                     bucket = accumulator.setdefault(table_name, {})
                     bucket[f"__row_{len(bucket)}__"] = row_dict
+                    if owner_id:
+                        owner_bucket = accumulator.setdefault(f"{table_name}::{owner_id}", {})
+                        owner_bucket[f"__row_{len(owner_bucket)}__"] = row_dict
                     continue
                 pk_value = row_dict[pk_col]
                 accumulator.setdefault(table_name, {})[str(pk_value)] = row_dict
+                if owner_id:
+                    accumulator.setdefault(f"{table_name}::{owner_id}", {})[str(pk_value)] = row_dict
     finally:
         conn.close()
+
+
+def _owner_id_from_path(sqlite_path: Path) -> str:
+    """Return the owner_id when the sqlite lives under agents/<owner>/db/.
+
+    Returns empty string for shared / other layouts so non-personal DBs do
+    not pollute the namespaced view.
+    """
+    parts = sqlite_path.parts
+    try:
+        agents_idx = parts.index("agents")
+    except ValueError:
+        return ""
+    if agents_idx + 1 >= len(parts):
+        return ""
+    return parts[agents_idx + 1]
 
 
 def _primary_key_column(conn: sqlite3.Connection, table_name: str) -> str | None:
