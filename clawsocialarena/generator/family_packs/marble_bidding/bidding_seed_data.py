@@ -73,9 +73,11 @@ class BiddingTaskSeed:
     max_turns: int = 36
 
     def loader_kwargs(self) -> dict[str, Any]:
+        category = "CU" if self.source_task_id.startswith("owned-bidding-cu") else "CM"
         return {
             "scenario_id": self.scenario_id,
             "auction_id": self.auction_id,
+            "category": category,
             "resource_profile": self.resource_profile,
             "seller_id": self.seller_id,
             "seller_owner": self.seller_owner,

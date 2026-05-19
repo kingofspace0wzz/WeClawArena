@@ -45,6 +45,49 @@ def bidding_context(tmp_path: Path) -> BiddingContext:
     )
 
 
+def _seed_buyer_resource_evidence(
+    context: BiddingContext,
+    *,
+    agent_id: str,
+    owner_id: str,
+) -> None:
+    read_result = dispatch(
+        "read_owned_file",
+        {"_agent_id": agent_id, "owner_id": owner_id, "path": "purchase_request.md"},
+        context,
+    )
+    query_result = dispatch(
+        "query_owned_table",
+        {"_agent_id": agent_id, "owner_id": owner_id, "table": "budget_ledger"},
+        context,
+    )
+    assert read_result["ok"]
+    assert query_result["ok"]
+
+
+def _seed_seller_resource_evidence(context: BiddingContext) -> None:
+    read_result = dispatch(
+        "read_owned_file",
+        {
+            "_agent_id": "sable_seller",
+            "owner_id": "sable_supply_sales",
+            "path": "listing_sheet.md",
+        },
+        context,
+    )
+    query_result = dispatch(
+        "query_owned_table",
+        {
+            "_agent_id": "sable_seller",
+            "owner_id": "sable_supply_sales",
+            "table": "inventory",
+        },
+        context,
+    )
+    assert read_result["ok"]
+    assert query_result["ok"]
+
+
 def test_read_owned_file_and_query_owned_table(
     bidding_context: BiddingContext,
 ) -> None:
@@ -63,6 +106,62 @@ def test_read_owned_file_and_query_owned_table(
     )
     assert table_result["ok"]
     assert any(row["item_id"] == "BID-LOT-000" for row in table_result["rows"])
+
+
+def test_query_owned_table_accepts_table_name_alias(
+    bidding_context: BiddingContext,
+) -> None:
+    table_result = dispatch(
+        "query_owned_table",
+        {
+            "_agent_id": "sable_seller",
+            "owner_id": "sable_supply_sales",
+            "table_name": "inventory",
+        },
+        bidding_context,
+    )
+
+    assert table_result["ok"]
+    assert table_result["table"] == "inventory"
+
+
+def test_read_owned_file_accepts_file_name_alias(
+    bidding_context: BiddingContext,
+) -> None:
+    file_result = dispatch(
+        "read_owned_file",
+        {
+            "_agent_id": "anchor_buyer",
+            "file_name": "purchase_request.md",
+        },
+        bidding_context,
+    )
+
+    assert file_result["ok"]
+    assert file_result["owner_id"] == "anchor_procurement"
+    assert file_result["path"] == "purchase_request.md"
+
+
+def test_resource_tools_default_to_role_primary_resource_for_runtime_agent(
+    bidding_context: BiddingContext,
+) -> None:
+    file_result = dispatch(
+        "read_owned_file",
+        {"_agent_id": "anchor_buyer"},
+        bidding_context,
+    )
+    table_result = dispatch(
+        "query_owned_table",
+        {"_agent_id": "sable_seller"},
+        bidding_context,
+    )
+
+    assert file_result["ok"]
+    assert file_result["owner_id"] == "anchor_procurement"
+    assert file_result["path"] == "purchase_request.md"
+    assert table_result["ok"]
+    assert table_result["owner_id"] == "sable_supply_sales"
+    assert table_result["table"] == "inventory"
 
 
 def test_actor_bound_tools_reject_cross_owner_access(
@@ -95,6 +194,11 @@ def test_actor_bound_tools_reject_cross_owner_access(
 def test_submit_and_revise_bid_update_public_log_everywhere(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
     first = dispatch(
         "submit_bid",
         {
@@ -143,7 +247,33 @@ def test_submit_and_revise_bid_update_public_log_everywhere(
         assert row == (410.0, "revised")
 
 
-def test_submit_bid_recovers_caller_owner_and_common_aliases(
+def test_submit_bid_requires_buyer_resource_evidence(
+    bidding_context: BiddingContext,
+) -> None:
+    result = dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        bidding_context,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "missing_resource_evidence"
+    assert result["next_required_action"]["next_tool"] == "read_owned_file"
+    assert result["next_required_action"]["resource_steps"][0]["args"] == {
+        "owner_id": "anchor_procurement",
+        "path": "purchase_request.md",
+    }
+
+
+def test_submit_bid_requires_explicit_canonical_arguments(
     bidding_context: BiddingContext,
 ) -> None:
     result = dispatch(
@@ -155,20 +285,26 @@ def test_submit_bid_recovers_caller_owner_and_common_aliases(
         },
         bidding_context,
     )
-    assert result["ok"]
-    assert result["bid"]["buyer_owner_id"] == "beacon_procurement"
-    assert result["bid"]["item_id"] == "BID-LOT-000"
-    assert result["bid"]["quantity"] == 8
-    assert result["bid"]["unit_price"] == 415.0
-    assert result["bid"]["terms"] == [
-        "delivery_by_2026-06-30",
-        "warranty_12_months",
+    assert result["ok"] is False
+    assert result["error"] == "missing_required_arguments"
+    assert result["missing"] == [
+        "auction_id",
+        "item_id",
+        "buyer_owner_id",
+        "unit_price",
+        "quantity",
+        "terms",
     ]
 
 
 def test_submit_bid_term_error_returns_exact_required_terms(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
     result = dispatch(
         "submit_bid",
         {
@@ -184,13 +320,47 @@ def test_submit_bid_term_error_returns_exact_required_terms(
     )
 
     assert result["ok"] is False
-    assert result["error"] == "invalid_terms"
+    assert result["error"] == "required_terms_missing"
     assert result["required_terms"] == [
         "delivery_by_2026-06-30",
         "warranty_12_months",
     ]
     assert result["next_required_action"]["next_tool"] == "submit_bid"
-    assert result["next_required_action"]["recommended_args"]["terms"] == [
+    assert "recommended_args" not in result["next_required_action"]
+    assert result["next_required_action"]["required_args"] == [
+        "auction_id",
+        "item_id",
+        "buyer_owner_id",
+        "unit_price",
+        "quantity",
+        "terms",
+    ]
+
+
+def test_submit_bid_accepts_exact_terms_as_delimited_string(
+    bidding_context: BiddingContext,
+) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    result = dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": "delivery_by_2026-06-30;warranty_12_months",
+        },
+        bidding_context,
+    )
+
+    assert result["ok"]
+    assert result["bid"]["terms"] == [
         "delivery_by_2026-06-30",
         "warranty_12_months",
     ]
@@ -204,7 +374,11 @@ def test_submit_bid_item_mismatch_returns_canonical_ids(
         {
             "_agent_id": "anchor_buyer",
             "auction_id": "AUC-BID-000",
-            "lot_id": "BID-000",
+            "item_id": "BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
         },
         bidding_context,
     )
@@ -212,47 +386,143 @@ def test_submit_bid_item_mismatch_returns_canonical_ids(
     assert result["ok"] is False
     assert result["error"] == "auction_or_item_mismatch"
     assert result["expected_item_id"] == "BID-LOT-000"
-    assert result["next_required_action"]["recommended_args"]["item_id"] == (
-        "BID-LOT-000"
-    )
+    assert "recommended_args" not in result["next_required_action"]
 
 
-def test_zero_arg_authenticated_close_path_uses_auction_state_defaults(
+def test_authenticated_close_path_requires_explicit_canonical_ids(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
     anchor_bid = dispatch(
         "submit_bid",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
         bidding_context,
     )
     beacon_bid = dispatch(
         "submit_bid",
-        {"_agent_id": "beacon_buyer"},
+        {
+            "_agent_id": "beacon_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
         bidding_context,
     )
 
     assert anchor_bid["ok"]
     assert beacon_bid["ok"]
 
-    award = dispatch(
+    missing_award = dispatch(
         "seller_award_bid",
         {"_agent_id": "sable_seller"},
         bidding_context,
     )
+    assert missing_award["ok"] is False
+    assert missing_award["error"] == "missing_required_arguments"
+    assert missing_award["missing"] == ["auction_id", "seller_owner_id", "bid_id"]
+
+    award = dispatch(
+        "seller_award_bid",
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        bidding_context,
+    )
     winning_bid = award["award"]["bid_id"]
-    confirmation = dispatch(
+
+    missing_confirmation = dispatch(
         "buyer_confirm_award",
         {"_agent_id": "anchor_buyer"},
         bidding_context,
     )
-    po = dispatch(
+    assert missing_confirmation["ok"] is False
+    assert missing_confirmation["error"] == "missing_required_arguments"
+    assert missing_confirmation["missing"] == ["auction_id", "buyer_owner_id", "bid_id"]
+
+    confirmation = dispatch(
+        "buyer_confirm_award",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        bidding_context,
+    )
+
+    missing_po = dispatch(
         "record_purchase_order",
         {"_agent_id": "anchor_buyer"},
         bidding_context,
     )
-    seller_order = dispatch(
+    assert missing_po["ok"] is False
+    assert missing_po["error"] == "missing_required_arguments"
+    assert missing_po["missing"] == [
+        "auction_id",
+        "buyer_owner_id",
+        "seller_owner_id",
+        "bid_id",
+    ]
+
+    po = dispatch(
+        "record_purchase_order",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        bidding_context,
+    )
+
+    missing_seller_order = dispatch(
         "record_seller_order",
         {"_agent_id": "sable_seller"},
+        bidding_context,
+    )
+    assert missing_seller_order["ok"] is False
+    assert missing_seller_order["error"] == "missing_required_arguments"
+    assert missing_seller_order["missing"] == [
+        "auction_id",
+        "seller_owner_id",
+        "buyer_owner_id",
+        "bid_id",
+    ]
+
+    seller_order = dispatch(
+        "record_seller_order",
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
         bidding_context,
     )
 
@@ -267,9 +537,22 @@ def test_zero_arg_authenticated_close_path_uses_auction_state_defaults(
 def test_award_requires_two_distinct_public_bidders(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
     bid = dispatch(
         "submit_bid",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
         bidding_context,
     )
     status = dispatch(
@@ -281,6 +564,8 @@ def test_award_requires_two_distinct_public_bidders(
         "seller_award_bid",
         {
             "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
             "bid_id": bid["bid"]["bid_id"],
         },
         bidding_context,
@@ -295,25 +580,179 @@ def test_award_requires_two_distinct_public_bidders(
     assert award["ok"] is False
     assert award["error"] == "not_enough_distinct_bidders"
     assert award["distinct_bidder_count"] == 1
+    assert award["missing_buyer_agent_ids"] == ["beacon_buyer"]
+    assert award["missing_buyer_owner_ids"] == ["beacon_procurement"]
     assert award["next_required_action"]["next_tool"] == "submit_bid"
+    assert "recommended_args" not in award["next_required_action"]
+
+
+def test_seller_award_requires_seller_resource_evidence(
+    bidding_context: BiddingContext,
+) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    anchor_bid = dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        bidding_context,
+    )
+    dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "beacon_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        bidding_context,
+    )
+
+    result = dispatch(
+        "seller_award_bid",
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        bidding_context,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "missing_resource_evidence"
+    assert result["next_required_action"]["next_tool"] == "read_owned_file"
+    assert result["next_required_action"]["resource_steps"][0]["args"] == {
+        "owner_id": "sable_supply_sales",
+        "path": "listing_sheet.md",
+    }
+
+
+def test_bid_not_found_feedback_lists_public_bid_ids(
+    bidding_context: BiddingContext,
+) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
+    dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        bidding_context,
+    )
+    dispatch(
+        "submit_bid",
+        {
+            "_agent_id": "beacon_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        bidding_context,
+    )
+
+    result = dispatch(
+        "seller_award_bid",
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": "anchor_procurement_bid",
+        },
+        bidding_context,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "bid_not_found"
+    assert [bid["bid_id"] for bid in result["public_bids"]] == ["bid-1", "bid-2"]
+    assert result["next_required_action"]["next_tool"] == "seller_award_bid"
+    assert "recommended_args" not in result["next_required_action"]
 
 
 def test_close_handoff_feedback_names_next_required_tool(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
     anchor_bid = dispatch(
         "submit_bid",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
         bidding_context,
     )
     beacon_bid = dispatch(
         "submit_bid",
-        {"_agent_id": "beacon_buyer"},
+        {
+            "_agent_id": "beacon_buyer",
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
         bidding_context,
     )
     award = dispatch(
         "seller_award_bid",
-        {"_agent_id": "sable_seller"},
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
         bidding_context,
     )
 
@@ -323,26 +762,39 @@ def test_close_handoff_feedback_names_next_required_tool(
 
     premature_po = dispatch(
         "record_purchase_order",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": award["award"]["bid_id"],
+        },
         bidding_context,
     )
     assert premature_po["ok"] is False
     assert premature_po["error"] == "award_not_confirmed"
     assert premature_po["next_required_action"]["next_tool"] == "buyer_confirm_award"
-    assert premature_po["next_required_action"]["recommended_args"] == {
-        "auction_id": "AUC-BID-000",
-        "buyer_owner_id": "anchor_procurement",
-        "bid_id": award["award"]["bid_id"],
-    }
+    assert "recommended_args" not in premature_po["next_required_action"]
 
     confirmation = dispatch(
         "buyer_confirm_award",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": award["award"]["bid_id"],
+        },
         bidding_context,
     )
     premature_seller_order = dispatch(
         "record_seller_order",
-        {"_agent_id": "sable_seller"},
+        {
+            "_agent_id": "sable_seller",
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": award["award"]["bid_id"],
+        },
         bidding_context,
     )
     assert confirmation["ok"]
@@ -352,16 +804,17 @@ def test_close_handoff_feedback_names_next_required_tool(
         premature_seller_order["next_required_action"]["next_tool"]
         == "record_purchase_order"
     )
-    assert premature_seller_order["next_required_action"]["recommended_args"] == {
-        "auction_id": "AUC-BID-000",
-        "buyer_owner_id": "anchor_procurement",
-        "seller_owner_id": "sable_supply_sales",
-        "bid_id": award["award"]["bid_id"],
-    }
+    assert "recommended_args" not in premature_seller_order["next_required_action"]
 
     po = dispatch(
         "record_purchase_order",
-        {"_agent_id": "anchor_buyer"},
+        {
+            "_agent_id": "anchor_buyer",
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": award["award"]["bid_id"],
+        },
         bidding_context,
     )
     status = dispatch(
@@ -372,12 +825,7 @@ def test_close_handoff_feedback_names_next_required_tool(
 
     assert po["ok"]
     assert po["next_required_action"]["next_tool"] == "record_seller_order"
-    assert po["next_required_action"]["recommended_args"] == {
-        "auction_id": "AUC-BID-000",
-        "seller_owner_id": "sable_supply_sales",
-        "buyer_owner_id": "anchor_procurement",
-        "bid_id": award["award"]["bid_id"],
-    }
+    assert "recommended_args" not in po["next_required_action"]
     assert status["next_required_action"] == po["next_required_action"]
     assert status["close_state"] == "purchase_order_recorded"
 
@@ -385,6 +833,17 @@ def test_close_handoff_feedback_names_next_required_tool(
 def test_award_below_seller_minimum_is_denied(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
     bid = dispatch(
         "submit_bid",
         {
@@ -425,6 +884,17 @@ def test_award_below_seller_minimum_is_denied(
 def test_confirmation_above_buyer_budget_is_denied(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
     bid = dispatch(
         "submit_bid",
         {
@@ -474,6 +944,11 @@ def test_confirmation_above_buyer_budget_is_denied(
 def test_wrong_agent_cannot_confirm_for_winning_buyer(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
     bid = dispatch(
         "submit_bid",
         {
@@ -514,6 +989,17 @@ def test_wrong_agent_cannot_confirm_for_winning_buyer(
 def test_owned_bidding_close_records_artifacts_everywhere(
     bidding_context: BiddingContext,
 ) -> None:
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="anchor_buyer",
+        owner_id="anchor_procurement",
+    )
+    _seed_buyer_resource_evidence(
+        bidding_context,
+        agent_id="beacon_buyer",
+        owner_id="beacon_procurement",
+    )
+    _seed_seller_resource_evidence(bidding_context)
     bid1 = dispatch(
         "submit_bid",
         {

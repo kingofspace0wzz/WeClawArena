@@ -37,6 +37,8 @@ def test_bidding_cell_task_slices_do_not_overlap() -> None:
         )
         for variant in cu
     )
+    assert {variant.loader_kwargs["category"] for variant in cm} == {"CM"}
+    assert {variant.loader_kwargs["category"] for variant in cu} == {"CU"}
 
 
 def test_bidding_calibration_uses_nonperfect_turn_budget_mix() -> None:
@@ -58,6 +60,7 @@ def test_owned_bidding_loader_honors_variant_turn_budget() -> None:
 
     assert variant.loader_kwargs["max_turns"] == 20
     assert bundle.scenario.max_turns == 20
+    assert bundle.scenario.category == "CU"
 
 
 def test_owned_bidding_loader_builds_seller_centered_graph() -> None:
@@ -111,6 +114,21 @@ def test_owned_bidding_opening_names_buyer_agents_and_two_bid_gate() -> None:
     assert "at least two public bids" in content
 
 
+def test_owned_bidding_injects_buyer_auction_notices() -> None:
+    bundle = load_bidding_scenario()
+    notices = bundle.scenario.injected_messages
+
+    assert [notice["to"] for notice in notices] == [
+        "anchor_buyer",
+        "beacon_buyer",
+    ]
+    for notice in notices:
+        assert notice["from"] == "system"
+        assert "read_owned_file" in notice["content"]
+        assert "query_owned_table" in notice["content"]
+        assert "submit_bid" in notice["content"]
+
+
 def test_owned_bidding_evaluation_criteria_names_close_tools_and_predicates() -> None:
     bundle = load_bidding_scenario()
     tools = {item["tool_name"] for item in bundle.evaluation_criteria["actions"]}
@@ -136,7 +154,17 @@ def test_owned_bidding_evaluation_criteria_names_close_tools_and_predicates() ->
         "price_within_owned_bidding_constraints",
         "inventory_available_for_award",
         "required_terms_consistent",
+        "resource_backed_bidding_decision",
     }
+
+
+def test_owned_bidding_evaluation_criteria_resolves_through_registry() -> None:
+    from clawsocialarena.eval.predicates.marble_bidding import PREDICATE_REGISTRY
+
+    bundle = load_bidding_scenario()
+
+    for assertion in bundle.evaluation_criteria["env_assertions"]:
+        assert assertion["predicate"] in PREDICATE_REGISTRY
 
 
 @pytest.mark.parametrize("variant", task_variants_for("marble_bidding"))

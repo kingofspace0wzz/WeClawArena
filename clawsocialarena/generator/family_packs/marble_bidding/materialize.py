@@ -39,7 +39,7 @@ def materialize_bidding_bundle(
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    scenario = bundle.scenario
+    scenario = _runtime_augmented_scenario(bundle)
     _write_scenario_json(scenario, out_path)
     _write_scenario_gt_json(bundle, out_path)
     _write_family_pack_context(scenario, bundle, out_path)
@@ -49,6 +49,19 @@ def materialize_bidding_bundle(
     _write_governance(scenario, out_path)
     _write_resources(bundle, out_path)
     return out_path
+
+
+def _runtime_augmented_scenario(bundle: BiddingScenarioBundle) -> Scenario:
+    scenario = bundle.scenario.model_copy(deep=True)
+    for agent in scenario.agents:
+        if "## Runtime Interface" in agent.system_prompt_template:
+            continue
+        agent.system_prompt_template = (
+            f"{_runtime_interface_block(agent.agent_id, bundle)}\n\n"
+            f"## Persona prompt\n\n"
+            f"{agent.system_prompt_template}"
+        )
+    return scenario
 
 
 def _write_scenario_json(scenario: Scenario, out_dir: Path) -> None:
@@ -240,6 +253,9 @@ def _runtime_interface_block(
         )
     ]
     seller_flow = [
+        "- Seller resource flow: read `listing_sheet.md` and "
+        "`bid_evaluation_policy.md`, then query `inventory` and `price_book` "
+        "before awarding.",
         "- Seller close flow: invite every buyer agent directly and wait for "
         "at least two public bids before awarding.",
         "- Seller close flow: use `get_auction_status` or tool "
@@ -254,16 +270,19 @@ def _runtime_interface_block(
         "completion message first.",
         "- Seller close flow: Do not call the auction finalized until "
         "`record_seller_order` returns `ok=true`; if `next_required_action` "
-        "says `record_seller_order`, call it immediately with the "
-        "recommended arguments instead of sending another status message.",
-        "- Seller close flow: after `record_seller_order` succeeds, send a "
-        "final summary and set done=true.",
+        "says `record_seller_order`, call it with the confirmed purchase "
+        "order identifiers instead of sending another status message.",
+        "- Seller close flow: after `record_seller_order` succeeds, emit "
+        "`{\"done\": true}`; do not send another chat summary first.",
     ]
     buyer_flow = [
+        "- Buyer resource flow: read `purchase_request.md` and "
+        "`bidding_policy.md`, then query `bid_authorizations` or "
+        "`budget_ledger` before bidding.",
         "- Buyer close flow: call `submit_bid` with `auction_id`, `item_id`, "
         "`buyer_owner_id`, `unit_price`, `quantity`, and `terms`.",
         "- Buyer close flow: Do not paraphrase required terms. Use the exact "
-        "`terms` array from the tool feedback or purchase request.",
+        "`terms` array from your owned purchase request.",
         "- Buyer close flow: if your public bid is awarded, call "
         "`buyer_confirm_award` with `auction_id`, `buyer_owner_id`, and "
         "`bid_id`, then call `record_purchase_order` with `auction_id`, "
@@ -272,11 +291,10 @@ def _runtime_interface_block(
         "`award_not_confirmed`, call `buyer_confirm_award` and then retry "
         "`record_purchase_order`.",
         "- Buyer close flow: after `record_purchase_order` returns `ok=true`, "
-        "tell the seller to call `record_seller_order` using the returned "
-        "`next_required_action.recommended_args`.",
+        "tell the seller to call `record_seller_order` with the confirmed "
+        "purchase-order identifiers.",
         "- Buyer close flow: after your `record_purchase_order` succeeds and "
-        "the seller records the seller order, send a final summary and set "
-        "done=true.",
+        "the seller records the seller order, emit `{\"done\": true}`.",
     ]
     role_flow = seller_flow if role_label == "seller" else buyer_flow
     return "\n".join(

@@ -359,6 +359,95 @@ def required_terms_consistent(state: EnvState, auction_id: str) -> PredicateResu
     return PredicateResult(passed=True, reason="required_terms_consistent_ok")
 
 
+_RESOURCE_READ_TOOLS = frozenset({"read_owned_file", "query_owned_table"})
+
+
+def _successful_resource_access_owners(state: EnvState) -> set[str]:
+    owners: set[str] = set()
+    for dispatch in state.tool_dispatches:
+        if not isinstance(dispatch, Mapping):
+            continue
+        if dispatch.get("tool_name") not in _RESOURCE_READ_TOOLS:
+            continue
+        observation = dispatch.get("observation")
+        if isinstance(observation, Mapping) and (
+            observation.get("ok") is False or observation.get("error")
+        ):
+            continue
+        arguments = dispatch.get("arguments")
+        observation = dispatch.get("observation")
+        owner_id = ""
+        if isinstance(arguments, Mapping):
+            owner_id = str(arguments.get("owner_id") or "").strip()
+        if not owner_id and isinstance(observation, Mapping):
+            owner_id = str(observation.get("owner_id") or "").strip()
+        if owner_id:
+            owners.add(owner_id)
+    return owners
+
+
+def resource_backed_bidding_decision(
+    state: EnvState,
+    auction_id: str,
+    minimum_resource_backed_bidders: int = 2,
+) -> PredicateResult:
+    """Require resource reads for the seller and bidding-side decision makers."""
+    award = _award(state, auction_id)
+    if not isinstance(award, Mapping):
+        return PredicateResult(passed=False, reason="no_award_recorded")
+    seller = str(award.get("seller_owner_id") or "").strip()
+    winner = str(award.get("buyer_owner_id") or "").strip()
+    if not seller or not winner:
+        return PredicateResult(
+            passed=False,
+            reason="award_missing_owner_identity",
+            diagnostics={"seller_owner_id": seller, "buyer_owner_id": winner},
+        )
+    bidders = {
+        str(bid.get("buyer_owner_id") or "").strip()
+        for bid in _bids_for(state, auction_id)
+        if bid.get("buyer_owner_id")
+    }
+    resource_owners = _successful_resource_access_owners(state)
+    if seller not in resource_owners:
+        return PredicateResult(
+            passed=False,
+            reason="seller_resource_evidence_missing",
+            diagnostics={
+                "seller_owner_id": seller,
+                "resource_evidence_owners": sorted(resource_owners),
+            },
+        )
+    if winner not in resource_owners:
+        return PredicateResult(
+            passed=False,
+            reason="winner_resource_evidence_missing",
+            diagnostics={
+                "winner_owner_id": winner,
+                "resource_evidence_owners": sorted(resource_owners),
+            },
+        )
+    resource_backed_bidders = sorted(bidders & resource_owners)
+    if len(resource_backed_bidders) < minimum_resource_backed_bidders:
+        return PredicateResult(
+            passed=False,
+            reason="insufficient_buyer_resource_evidence",
+            diagnostics={
+                "resource_backed_bidders": resource_backed_bidders,
+                "required": minimum_resource_backed_bidders,
+            },
+        )
+    return PredicateResult(
+        passed=True,
+        reason="resource_backed_bidding_decision_ok",
+        diagnostics={
+            "seller_owner_id": seller,
+            "winner_owner_id": winner,
+            "resource_backed_bidders": resource_backed_bidders,
+        },
+    )
+
+
 PREDICATE_REGISTRY: dict[str, Any] = {
     "bids_from_at_least_two_buyers": bids_from_at_least_two_buyers,
     "winner_bid_was_public_bid": winner_bid_was_public_bid,
@@ -370,4 +459,5 @@ PREDICATE_REGISTRY: dict[str, Any] = {
     "price_within_owned_bidding_constraints": price_within_owned_bidding_constraints,
     "inventory_available_for_award": inventory_available_for_award,
     "required_terms_consistent": required_terms_consistent,
+    "resource_backed_bidding_decision": resource_backed_bidding_decision,
 }

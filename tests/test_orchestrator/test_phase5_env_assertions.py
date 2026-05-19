@@ -13,10 +13,16 @@ Covers:
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
+from clawsocialarena.generator.family_packs.marble_bidding import (
+    load_bidding_scenario,
+    materialize_bidding_bundle,
+)
+from clawsocialarena.mcp_tools.marble_bidding import BiddingContext, dispatch
 from clawsocialarena.orchestrator.phase5_env_assertions import (
     evaluate_evaluation_criteria,
 )
@@ -58,6 +64,7 @@ def _action_with_observation(
     idx_call: int = 1,
     idx_obs: int = 2,
     error: bool = False,
+    observation: dict[str, Any] | None = None,
 ) -> list[ActionRecord]:
     """Build the canonical pair: TOOL_CALL + matching TOOL_OBSERVATION_RETURN.
 
@@ -74,7 +81,7 @@ def _action_with_observation(
     observation_payload: dict[str, Any] = {
         "tool_name": tool_name,
         "tool_call_action_id": call.action_id,
-        "observation": "{}",
+        "observation": "{}" if observation is None else json.dumps(observation),
     }
     if error:
         observation_payload["error"] = "synthetic_failure"
@@ -411,6 +418,333 @@ def test_empty_evaluation_criteria_yields_false() -> None:
     )
     assert result.task_success is False
     assert result.diagnostics["has_any_check"] is False
+
+
+def test_env_predicates_receive_successful_tool_dispatch_evidence(tmp_path) -> None:
+    bundle = load_bidding_scenario()
+    bundle_dir = materialize_bidding_bundle(bundle, tmp_path / "scenario")
+    context = BiddingContext(
+        resources_root=bundle_dir / "resources",
+        auction_id="AUC-BID-000",
+        item_id="BID-LOT-000",
+        quantity=8,
+        seller_owner_id="sable_supply_sales",
+        buyer_owner_ids=("anchor_procurement", "beacon_procurement"),
+        seller_minimum_unit_price=360.0,
+        buyer_budget_ceiling_by_owner={
+            "anchor_procurement": 430.0,
+            "beacon_procurement": 420.0,
+        },
+        required_terms=("delivery_by_2026-06-30", "warranty_12_months"),
+    )
+    for owner in ("anchor_procurement", "beacon_procurement"):
+        assert dispatch(
+            "read_owned_file",
+            {"owner_id": owner, "path": "purchase_request.md"},
+            context,
+        )["ok"]
+        assert dispatch(
+            "query_owned_table",
+            {"owner_id": owner, "table": "budget_ledger"},
+            context,
+        )["ok"]
+    assert dispatch(
+        "read_owned_file",
+        {"owner_id": "sable_supply_sales", "path": "listing_sheet.md"},
+        context,
+    )["ok"]
+    assert dispatch(
+        "query_owned_table",
+        {"owner_id": "sable_supply_sales", "table": "inventory"},
+        context,
+    )["ok"]
+    anchor_bid = dispatch(
+        "submit_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        context,
+    )
+    beacon_bid = dispatch(
+        "submit_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        context,
+    )
+    award = dispatch(
+        "seller_award_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )
+    confirmation = dispatch(
+        "buyer_confirm_award",
+        {
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )
+    po = dispatch(
+        "record_purchase_order",
+        {
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )
+    seller_order = dispatch(
+        "record_seller_order",
+        {
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )
+    assert all(
+        result["ok"]
+        for result in (anchor_bid, beacon_bid, award, confirmation, po, seller_order)
+    )
+
+    gt, criteria = _gt_with_criteria(
+        actions=[],
+        communicate_info=[],
+        env_assertions=[
+            {
+                "predicate": "resource_backed_bidding_decision",
+                "args": {"auction_id": "AUC-BID-000"},
+            }
+        ],
+    )
+    action_log = [
+        *_action_with_observation(
+            agent_id="sable_seller",
+            tool_name="read_owned_file",
+            arguments={
+                "owner_id": "sable_supply_sales",
+                "path": "listing_sheet.md",
+            },
+            idx_call=1,
+            idx_obs=2,
+        ),
+        *_action_with_observation(
+            agent_id="anchor_buyer",
+            tool_name="query_owned_table",
+            arguments={
+                "owner_id": "anchor_procurement",
+                "table": "bid_authorizations",
+            },
+            idx_call=3,
+            idx_obs=4,
+        ),
+        *_action_with_observation(
+            agent_id="beacon_buyer",
+            tool_name="read_owned_file",
+            arguments={
+                "owner_id": "beacon_procurement",
+                "path": "purchase_request.md",
+            },
+            idx_call=5,
+            idx_obs=6,
+        ),
+    ]
+
+    result = evaluate_evaluation_criteria(
+        gt_bundle=gt,
+        evaluation_criteria_override=criteria,
+        action_log=action_log,
+        outbound_messages=[],
+        resources_dir=bundle_dir / "resources",
+        family_id="marble_bidding",
+    )
+
+    assert result.task_success is True
+    assert result.predicate_failures == []
+
+
+def test_bidding_resource_evidence_can_use_success_observation_owner(
+    tmp_path,
+) -> None:
+    bundle = load_bidding_scenario()
+    bundle_dir = materialize_bidding_bundle(bundle, tmp_path / "scenario")
+    context = BiddingContext(
+        resources_root=bundle_dir / "resources",
+        auction_id="AUC-BID-000",
+        item_id="BID-LOT-000",
+        quantity=8,
+        seller_owner_id="sable_supply_sales",
+        buyer_owner_ids=("anchor_procurement", "beacon_procurement"),
+        seller_minimum_unit_price=360.0,
+        buyer_budget_ceiling_by_owner={
+            "anchor_procurement": 430.0,
+            "beacon_procurement": 420.0,
+        },
+        required_terms=("delivery_by_2026-06-30", "warranty_12_months"),
+    )
+    for owner in ("anchor_procurement", "beacon_procurement"):
+        assert dispatch(
+            "read_owned_file",
+            {"owner_id": owner, "path": "purchase_request.md"},
+            context,
+        )["ok"]
+        assert dispatch(
+            "query_owned_table",
+            {"owner_id": owner, "table": "budget_ledger"},
+            context,
+        )["ok"]
+    assert dispatch(
+        "read_owned_file",
+        {"owner_id": "sable_supply_sales", "path": "listing_sheet.md"},
+        context,
+    )["ok"]
+    assert dispatch(
+        "query_owned_table",
+        {"owner_id": "sable_supply_sales", "table": "inventory"},
+        context,
+    )["ok"]
+    anchor_bid = dispatch(
+        "submit_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "anchor_procurement",
+            "unit_price": 410.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        context,
+    )
+    beacon_bid = dispatch(
+        "submit_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "item_id": "BID-LOT-000",
+            "buyer_owner_id": "beacon_procurement",
+            "unit_price": 405.0,
+            "quantity": 8,
+            "terms": ["delivery_by_2026-06-30", "warranty_12_months"],
+        },
+        context,
+    )
+    award = dispatch(
+        "seller_award_bid",
+        {
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )
+    assert dispatch(
+        "buyer_confirm_award",
+        {
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )["ok"]
+    assert dispatch(
+        "record_purchase_order",
+        {
+            "auction_id": "AUC-BID-000",
+            "buyer_owner_id": "anchor_procurement",
+            "seller_owner_id": "sable_supply_sales",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )["ok"]
+    assert dispatch(
+        "record_seller_order",
+        {
+            "auction_id": "AUC-BID-000",
+            "seller_owner_id": "sable_supply_sales",
+            "buyer_owner_id": "anchor_procurement",
+            "bid_id": anchor_bid["bid"]["bid_id"],
+        },
+        context,
+    )["ok"]
+    assert all(result["ok"] for result in (anchor_bid, beacon_bid, award))
+
+    gt, criteria = _gt_with_criteria(
+        actions=[],
+        communicate_info=[],
+        env_assertions=[
+            {
+                "predicate": "resource_backed_bidding_decision",
+                "args": {"auction_id": "AUC-BID-000"},
+            }
+        ],
+    )
+    action_log = [
+        *_action_with_observation(
+            agent_id="sable_seller",
+            tool_name="read_owned_file",
+            arguments={},
+            observation={
+                "ok": True,
+                "owner_id": "sable_supply_sales",
+                "path": "listing_sheet.md",
+            },
+            idx_call=1,
+            idx_obs=2,
+        ),
+        *_action_with_observation(
+            agent_id="anchor_buyer",
+            tool_name="query_owned_table",
+            arguments={},
+            observation={
+                "ok": True,
+                "owner_id": "anchor_procurement",
+                "table": "budget_ledger",
+            },
+            idx_call=3,
+            idx_obs=4,
+        ),
+        *_action_with_observation(
+            agent_id="beacon_buyer",
+            tool_name="read_owned_file",
+            arguments={},
+            observation={
+                "ok": True,
+                "owner_id": "beacon_procurement",
+                "path": "purchase_request.md",
+            },
+            idx_call=5,
+            idx_obs=6,
+        ),
+    ]
+
+    result = evaluate_evaluation_criteria(
+        gt_bundle=gt,
+        evaluation_criteria_override=criteria,
+        action_log=action_log,
+        outbound_messages=[],
+        resources_dir=bundle_dir / "resources",
+        family_id="marble_bidding",
+    )
+
+    assert result.task_success is True
+    assert result.predicate_failures == []
 
 
 def _seed_marble_research_sqlite(

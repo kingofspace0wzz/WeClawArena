@@ -11,6 +11,7 @@ from clawsocialarena.eval.predicates.marble_bidding import (
     price_within_owned_bidding_constraints,
     purchase_order_recorded,
     required_terms_consistent,
+    resource_backed_bidding_decision,
     seller_awarded_winning_bid,
     seller_order_recorded,
     winner_bid_was_public_bid,
@@ -97,7 +98,39 @@ def _state() -> EnvState:
                     "reserved_quantity": 0,
                 }
             },
-        }
+        },
+        tool_dispatches=[
+            {
+                "order": 1,
+                "agent_id": "sable_seller",
+                "tool_name": "read_owned_file",
+                "arguments": {
+                    "owner_id": "sable_supply_sales",
+                    "path": "listing_sheet.md",
+                },
+                "observation": {"ok": True},
+            },
+            {
+                "order": 2,
+                "agent_id": "anchor_buyer",
+                "tool_name": "query_owned_table",
+                "arguments": {
+                    "owner_id": "anchor_procurement",
+                    "table": "bid_authorizations",
+                },
+                "observation": {"ok": True},
+            },
+            {
+                "order": 3,
+                "agent_id": "beacon_buyer",
+                "tool_name": "read_owned_file",
+                "arguments": {
+                    "owner_id": "beacon_procurement",
+                    "path": "purchase_request.md",
+                },
+                "observation": {"ok": True},
+            },
+        ],
     )
 
 
@@ -117,6 +150,44 @@ def test_owned_bidding_predicates_pass_for_valid_close() -> None:
         "BID-LOT-000",
     ).passed
     assert required_terms_consistent(state, "AUC-BID-000").passed
+    assert resource_backed_bidding_decision(state, "AUC-BID-000").passed
+
+
+def test_resource_backed_bidding_decision_requires_seller_and_two_buyer_reads() -> None:
+    state = _state()
+    state = EnvState(db=state.db, tool_dispatches=state.tool_dispatches[:2])
+
+    result = resource_backed_bidding_decision(state, "AUC-BID-000")
+
+    assert not result.passed
+    assert result.reason == "insufficient_buyer_resource_evidence"
+    assert result.diagnostics["resource_backed_bidders"] == ["anchor_procurement"]
+
+
+def test_resource_backed_bidding_decision_requires_winning_buyer_read() -> None:
+    state = _state()
+    state = EnvState(
+        db=state.db,
+        tool_dispatches=[
+            state.tool_dispatches[0],
+            state.tool_dispatches[2],
+            {
+                "order": 4,
+                "agent_id": "other_buyer",
+                "tool_name": "query_owned_table",
+                "arguments": {
+                    "owner_id": "other_procurement",
+                    "table": "bid_authorizations",
+                },
+                "observation": {"ok": True},
+            },
+        ],
+    )
+
+    result = resource_backed_bidding_decision(state, "AUC-BID-000")
+
+    assert not result.passed
+    assert result.reason == "winner_resource_evidence_missing"
 
 
 def test_bids_from_two_buyers_rejects_single_bidder() -> None:
@@ -170,6 +241,27 @@ def test_price_constraint_matches_env_state_builder_budget_keys(
         },
         required_terms=("delivery_by_2026-06-30", "warranty_12_months"),
     )
+    for owner in ("anchor_procurement", "beacon_procurement"):
+        assert dispatch(
+            "read_owned_file",
+            {"owner_id": owner, "path": "purchase_request.md"},
+            context,
+        )["ok"]
+        assert dispatch(
+            "query_owned_table",
+            {"owner_id": owner, "table": "budget_ledger"},
+            context,
+        )["ok"]
+    assert dispatch(
+        "read_owned_file",
+        {"owner_id": "sable_supply_sales", "path": "listing_sheet.md"},
+        context,
+    )["ok"]
+    assert dispatch(
+        "query_owned_table",
+        {"owner_id": "sable_supply_sales", "table": "inventory"},
+        context,
+    )["ok"]
     bid = dispatch(
         "submit_bid",
         {

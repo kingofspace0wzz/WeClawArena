@@ -15,12 +15,13 @@
 - buyer_owner_id: `ember_clinic_procurement` for buyer agent `ember_buyer`.
 - If a tool returns an owner-ID validation error, correct the tool argument from this map; do not treat it as a social authorization problem.
 - Use canonical tool argument names even if chat messages use words like buyer, seller, lot, amount, or price.
+- Buyer resource flow: read `purchase_request.md` and `bidding_policy.md`, then query `bid_authorizations` or `budget_ledger` before bidding.
 - Buyer close flow: call `submit_bid` with `auction_id`, `item_id`, `buyer_owner_id`, `unit_price`, `quantity`, and `terms`.
-- Buyer close flow: Do not paraphrase required terms. Use the exact `terms` array from the tool feedback or purchase request.
+- Buyer close flow: Do not paraphrase required terms. Use the exact `terms` array from your owned purchase request.
 - Buyer close flow: if your public bid is awarded, call `buyer_confirm_award` with `auction_id`, `buyer_owner_id`, and `bid_id`, then call `record_purchase_order` with `auction_id`, `buyer_owner_id`, `seller_owner_id`, and `bid_id`.
 - Buyer close flow: if `record_purchase_order` returns `award_not_confirmed`, call `buyer_confirm_award` and then retry `record_purchase_order`.
-- Buyer close flow: after `record_purchase_order` returns `ok=true`, tell the seller to call `record_seller_order` using the returned `next_required_action.recommended_args`.
-- Buyer close flow: after your `record_purchase_order` succeeds and the seller records the seller order, send a final summary and set done=true.
+- Buyer close flow: after `record_purchase_order` returns `ok=true`, tell the seller to call `record_seller_order` with the confirmed purchase-order identifiers.
+- Buyer close flow: after your `record_purchase_order` succeeds and the seller records the seller order, emit `{"done": true}`.
 
 ## Persona prompt
 

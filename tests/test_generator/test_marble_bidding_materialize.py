@@ -76,6 +76,25 @@ def test_bidding_personas_name_minimal_close_sequence(bundle_dir: Path) -> None:
     assert "done" in buyer_prompt
 
 
+def test_bidding_runtime_prompts_include_resource_tool_flow(
+    bundle_dir: Path,
+) -> None:
+    scenario = json.loads((bundle_dir / "scenario.json").read_text())
+    prompts = {
+        agent["agent_id"]: agent["system_prompt_template"]
+        for agent in scenario["agents"]
+    }
+
+    assert "Seller resource flow" in prompts["sable_seller"]
+    assert "read `listing_sheet.md`" in prompts["sable_seller"]
+    assert "query `inventory` and `price_book`" in prompts["sable_seller"]
+    assert "Buyer resource flow" in prompts["anchor_buyer"]
+    assert "read `purchase_request.md`" in prompts["anchor_buyer"]
+    assert "query `bid_authorizations` or `budget_ledger`" in prompts[
+        "anchor_buyer"
+    ]
+
+
 def test_bidding_materializer_writes_owned_files(bundle_dir: Path) -> None:
     seller = bundle_dir / "resources" / "agents" / "sable_supply_sales"
     buyer = bundle_dir / "resources" / "agents" / "anchor_procurement"

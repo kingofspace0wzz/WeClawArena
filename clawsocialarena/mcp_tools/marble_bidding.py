@@ -61,6 +61,37 @@ MUTATING_TOOLS: frozenset[str] = frozenset(
 
 CONSENT_TOOLS: frozenset[str] = frozenset({"buyer_confirm_award"})
 
+_SUBMIT_BID_REQUIRED_ARGS: tuple[str, ...] = (
+    "auction_id",
+    "item_id",
+    "buyer_owner_id",
+    "unit_price",
+    "quantity",
+    "terms",
+)
+_SELLER_AWARD_REQUIRED_ARGS: tuple[str, ...] = (
+    "auction_id",
+    "seller_owner_id",
+    "bid_id",
+)
+_BUYER_CONFIRM_REQUIRED_ARGS: tuple[str, ...] = (
+    "auction_id",
+    "buyer_owner_id",
+    "bid_id",
+)
+_RECORD_PO_REQUIRED_ARGS: tuple[str, ...] = (
+    "auction_id",
+    "buyer_owner_id",
+    "seller_owner_id",
+    "bid_id",
+)
+_RECORD_SELLER_ORDER_REQUIRED_ARGS: tuple[str, ...] = (
+    "auction_id",
+    "seller_owner_id",
+    "buyer_owner_id",
+    "bid_id",
+)
+
 ALLOWED_TABLES: frozenset[str] = frozenset(
     {
         "inventory",
@@ -73,6 +104,11 @@ ALLOWED_TABLES: frozenset[str] = frozenset(
         "seller_orders",
     }
 )
+_RESOURCE_EVIDENCE_TABLE = "resource_evidence"
+_BUYER_REQUIRED_FILE = "purchase_request.md"
+_BUYER_REQUIRED_TABLE = "budget_ledger"
+_SELLER_REQUIRED_FILE = "listing_sheet.md"
+_SELLER_REQUIRED_TABLE = "inventory"
 
 AUCTION_STATE_COLUMNS: frozenset[str] = frozenset(
     {
@@ -432,7 +468,7 @@ def _mutate_participant_dbs(
 
 
 def _auction_matches(arguments: Mapping[str, Any], context: BiddingContext) -> bool:
-    auction_id = str(arguments.get("auction_id") or context.auction_id).strip()
+    auction_id = str(arguments.get("auction_id") or "").strip()
     return auction_id == context.auction_id
 
 
@@ -517,10 +553,7 @@ def _item_id_argument(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> str:
-    return str(
-        _first_argument(arguments, "item_id", "lot_id", "bid_lot_id")
-        or context.item_id
-    ).strip()
+    return str(_first_argument(arguments, "item_id") or "").strip()
 
 
 def _item_matches(arguments: Mapping[str, Any], context: BiddingContext) -> bool:
@@ -562,7 +595,14 @@ def _read_owned_file(
     owner_id = _owner_from_fields(arguments, context, "owner_id")
     if not owner_id:
         owner_id = _caller_owner(arguments, context) or ""
-    rel_path = str(arguments.get("path") or "").strip()
+    rel_path = str(
+        arguments.get("path")
+        or arguments.get("file_name")
+        or arguments.get("relative_path")
+        or ""
+    ).strip()
+    if not rel_path:
+        rel_path = _default_file_for_owner(context, owner_id)
     if owner_id not in context.participants:
         return {"ok": False, "error": "owner_not_in_auction"}
     error = _require_caller_owner(
@@ -581,6 +621,7 @@ def _read_owned_file(
         return {"ok": False, "error": "invalid_path"}
     if not file_path.is_file():
         return {"ok": False, "error": "file_not_found"}
+    _record_resource_evidence(context, owner_id, kind="file", name=rel_path)
     return {
         "ok": True,
         "owner_id": owner_id,
@@ -596,7 +637,9 @@ def _query_owned_table(
     owner_id = _owner_from_fields(arguments, context, "owner_id")
     if not owner_id:
         owner_id = _caller_owner(arguments, context) or ""
-    table = str(arguments.get("table") or "").strip()
+    table = str(arguments.get("table") or arguments.get("table_name") or "").strip()
+    if not table:
+        table = _default_table_for_owner(context, owner_id)
     if owner_id not in context.participants:
         return {"ok": False, "error": "owner_not_in_auction"}
     error = _require_caller_owner(
@@ -615,14 +658,163 @@ def _query_owned_table(
     conn = _open(db_path)
     try:
         rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-        return {
-            "ok": True,
-            "owner_id": owner_id,
-            "table": table,
-            "rows": [dict(row) for row in rows],
-        }
     finally:
         conn.close()
+    _record_resource_evidence(context, owner_id, kind="table", name=table)
+    return {
+        "ok": True,
+        "owner_id": owner_id,
+        "table": table,
+        "rows": [dict(row) for row in rows],
+    }
+
+
+def _record_resource_evidence(
+    context: BiddingContext,
+    owner_id: str,
+    *,
+    kind: str,
+    name: str,
+) -> None:
+    db_path = _db_path_for(context, owner_id)
+    if not db_path.is_file():
+        return
+    conn = _open(db_path)
+    try:
+        conn.execute(
+            f"CREATE TABLE IF NOT EXISTS {_RESOURCE_EVIDENCE_TABLE} "
+            "(kind TEXT NOT NULL, name TEXT NOT NULL, "
+            "PRIMARY KEY (kind, name))"
+        )
+        conn.execute(
+            f"INSERT OR IGNORE INTO {_RESOURCE_EVIDENCE_TABLE} (kind, name) "
+            "VALUES (?, ?)",
+            (kind, name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _resource_evidence(context: BiddingContext, owner_id: str) -> set[tuple[str, str]]:
+    db_path = _db_path_for(context, owner_id)
+    if not db_path.is_file():
+        return set()
+    conn = _open(db_path)
+    try:
+        if _RESOURCE_EVIDENCE_TABLE not in _table_names(conn):
+            return set()
+        rows = conn.execute(
+            f"SELECT kind, name FROM {_RESOURCE_EVIDENCE_TABLE}"
+        ).fetchall()
+        return {(str(row["kind"]), str(row["name"])) for row in rows}
+    finally:
+        conn.close()
+
+
+def _resource_step(tool: str, args: dict[str, str]) -> dict[str, Any]:
+    return {"tool": tool, "args": args}
+
+
+def _missing_buyer_resource_evidence_error(
+    context: BiddingContext,
+    buyer_owner_id: str,
+) -> dict[str, Any] | None:
+    evidence = _resource_evidence(context, buyer_owner_id)
+    steps: list[dict[str, Any]] = []
+    if ("file", _BUYER_REQUIRED_FILE) not in evidence:
+        steps.append(
+            _resource_step(
+                "read_owned_file",
+                {"owner_id": buyer_owner_id, "path": _BUYER_REQUIRED_FILE},
+            )
+        )
+    if ("table", _BUYER_REQUIRED_TABLE) not in evidence:
+        steps.append(
+            _resource_step(
+                "query_owned_table",
+                {"owner_id": buyer_owner_id, "table": _BUYER_REQUIRED_TABLE},
+            )
+        )
+    if not steps:
+        return None
+    return _missing_resource_evidence_error(
+        owner_id=buyer_owner_id,
+        next_actor="buyer",
+        retry_tool="submit_bid",
+        steps=steps,
+    )
+
+
+def _missing_seller_resource_evidence_error(
+    context: BiddingContext,
+    seller_owner_id: str,
+) -> dict[str, Any] | None:
+    evidence = _resource_evidence(context, seller_owner_id)
+    steps: list[dict[str, Any]] = []
+    if ("file", _SELLER_REQUIRED_FILE) not in evidence:
+        steps.append(
+            _resource_step(
+                "read_owned_file",
+                {"owner_id": seller_owner_id, "path": _SELLER_REQUIRED_FILE},
+            )
+        )
+    if ("table", _SELLER_REQUIRED_TABLE) not in evidence:
+        steps.append(
+            _resource_step(
+                "query_owned_table",
+                {"owner_id": seller_owner_id, "table": _SELLER_REQUIRED_TABLE},
+            )
+        )
+    if not steps:
+        return None
+    return _missing_resource_evidence_error(
+        owner_id=seller_owner_id,
+        next_actor="seller",
+        retry_tool="seller_award_bid",
+        steps=steps,
+    )
+
+
+def _missing_resource_evidence_error(
+    *,
+    owner_id: str,
+    next_actor: str,
+    retry_tool: str,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": "missing_resource_evidence",
+        "owner_id": owner_id,
+        "missing_resource_steps": steps,
+        "next_required_action": {
+            "next_actor": next_actor,
+            "next_tool": steps[0]["tool"],
+            "resource_steps": steps,
+            "retry_tool_after_resources": retry_tool,
+            "instruction": (
+                "Use the listed owned-resource tools first, then retry the "
+                f"{retry_tool} call with canonical arguments."
+            ),
+        },
+    }
+
+
+def _default_file_for_owner(context: BiddingContext, owner_id: str) -> str:
+    if owner_id == context.seller_owner_id:
+        return _SELLER_REQUIRED_FILE
+    if owner_id in context.buyer_owner_ids:
+        return _BUYER_REQUIRED_FILE
+    return ""
+
+
+def _default_table_for_owner(context: BiddingContext, owner_id: str) -> str:
+    if owner_id == context.seller_owner_id:
+        return _SELLER_REQUIRED_TABLE
+    if owner_id in context.buyer_owner_ids:
+        return _BUYER_REQUIRED_TABLE
+    return ""
 
 
 def _all_bids(context: BiddingContext) -> list[dict[str, Any]]:
@@ -773,6 +965,13 @@ def _parse_terms(
     value: Any,
     context: BiddingContext,
 ) -> tuple[list[str], dict[str, Any] | None]:
+    if isinstance(value, str):
+        raw_terms = [
+            item.strip()
+            for chunk in value.splitlines()
+            for item in chunk.replace(";", ",").split(",")
+        ]
+        value = [item for item in raw_terms if item]
     if not isinstance(value, (list, tuple)):
         return [], {"ok": False, "error": "invalid_terms"}
     if any(not isinstance(term, str) for term in value):
@@ -790,8 +989,41 @@ def _parse_terms(
     return terms, None
 
 
+def _missing_required_arguments(
+    arguments: Mapping[str, Any],
+    required: tuple[str, ...],
+) -> list[str]:
+    missing: list[str] = []
+    for name in required:
+        if name not in arguments:
+            missing.append(name)
+            continue
+        value = arguments.get(name)
+        if value is None:
+            missing.append(name)
+            continue
+        if isinstance(value, str) and not value.strip():
+            missing.append(name)
+    return missing
+
+
+def _missing_required_error(
+    arguments: Mapping[str, Any],
+    required: tuple[str, ...],
+) -> dict[str, Any] | None:
+    missing = _missing_required_arguments(arguments, required)
+    if not missing:
+        return None
+    return {
+        "ok": False,
+        "error": "missing_required_arguments",
+        "missing": missing,
+        "required_args": list(required),
+    }
+
+
 def _quantity_argument(arguments: Mapping[str, Any], context: BiddingContext) -> Any:
-    return _first_argument(arguments, "quantity", "bid_quantity") or context.quantity
+    return _first_argument(arguments, "quantity")
 
 
 def _unit_price_argument(
@@ -802,35 +1034,32 @@ def _unit_price_argument(
 ) -> Any:
     for name in (
         "unit_price",
-        "price_per_unit",
-        "bid_amount_per_unit",
-        "bid_price_per_board",
-        "bid_unit_price",
     ):
         value = _first_argument(arguments, name)
         if value is not None:
             return value
-    value = _first_argument(arguments, "amount", "bid_amount")
-    if value is not None:
-        parsed, error = _parse_positive_float(value, error="invalid_unit_price")
-        if error is None and context.quantity > 0 and buyer_owner_id:
-            budget = context.buyer_budget_ceiling_by_owner.get(buyer_owner_id)
-            per_unit = parsed / context.quantity
-            if (
-                budget is not None
-                and parsed > budget * 1.25
-                and per_unit <= budget
-                and per_unit >= context.seller_minimum_unit_price
-            ):
-                return per_unit
-        return value
-    if buyer_owner_id:
-        return context.buyer_budget_ceiling_by_owner.get(buyer_owner_id)
     return None
 
 
 def _terms_argument(arguments: Mapping[str, Any], context: BiddingContext) -> Any:
-    return arguments.get("terms", list(context.required_terms))
+    return arguments.get("terms")
+
+
+def _next_required_action(
+    *,
+    next_actor: str,
+    next_tool: str,
+    required_args: tuple[str, ...] = (),
+    instruction: str,
+) -> dict[str, Any]:
+    out = {
+        "next_actor": next_actor,
+        "next_tool": next_tool,
+        "instruction": instruction,
+    }
+    if required_args:
+        out["required_args"] = list(required_args)
+    return out
 
 
 def _best_awardable_bid(
@@ -866,6 +1095,37 @@ def _distinct_public_bidder_count(context: BiddingContext) -> int:
     )
 
 
+def _public_bidder_owner_ids(context: BiddingContext) -> set[str]:
+    return {
+        str(bid.get("buyer_owner_id") or "")
+        for bid in _all_bids(context)
+        if bid.get("status") in {"active", "revised"}
+    }
+
+
+def _agent_id_for_owner(context: BiddingContext, owner_id: str) -> str | None:
+    for agent_id, candidate_owner in context.agent_owner_by_id.items():
+        if candidate_owner == owner_id:
+            return agent_id
+    return None
+
+
+def _missing_bidder_fields(context: BiddingContext) -> dict[str, list[str]]:
+    bidder_owners = _public_bidder_owner_ids(context)
+    missing_owner_ids = [
+        owner_id for owner_id in context.buyer_owner_ids if owner_id not in bidder_owners
+    ]
+    missing_agent_ids = [
+        agent_id
+        for owner_id in missing_owner_ids
+        if (agent_id := _agent_id_for_owner(context, owner_id)) is not None
+    ]
+    return {
+        "missing_buyer_owner_ids": missing_owner_ids,
+        "missing_buyer_agent_ids": missing_agent_ids,
+    }
+
+
 def _award_record(context: BiddingContext) -> dict[str, Any] | None:
     award = _auction_state(context).get("award_json")
     return award if isinstance(award, dict) else None
@@ -890,108 +1150,105 @@ def _close_state_feedback(context: BiddingContext) -> dict[str, Any]:
     if isinstance(seller_order, dict):
         return {
             "close_state": "seller_order_recorded",
-            "next_required_action": {
-                "next_actor": "all_participants",
-                "next_tool": "done",
-                "recommended_args": {},
-                "instruction": "Seller order is recorded. Send final summary and set done=true.",
-            },
+            "next_required_action": _next_required_action(
+                next_actor="all_participants",
+                next_tool="done",
+                instruction=(
+                    "Seller order is recorded. Emit {\"done\": true}; do not "
+                    "send another chat summary first."
+                ),
+            ),
         }
     if isinstance(purchase_order, dict):
         return {
             "close_state": "purchase_order_recorded",
-            "next_required_action": {
-                "next_actor": "seller",
-                "next_tool": "record_seller_order",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "seller_owner_id": context.seller_owner_id,
-                    "buyer_owner_id": str(purchase_order.get("buyer_owner_id") or ""),
-                    "bid_id": str(purchase_order.get("bid_id") or ""),
-                },
-                "instruction": "Seller must call record_seller_order before saying the auction is finalized.",
-            },
+            "next_required_action": _next_required_action(
+                next_actor="seller",
+                next_tool="record_seller_order",
+                required_args=_RECORD_SELLER_ORDER_REQUIRED_ARGS,
+                instruction=(
+                    "Seller must call record_seller_order with the award identifiers "
+                    "from the confirmed purchase order before saying the auction is finalized."
+                ),
+            ),
         }
     if isinstance(confirmation, dict):
         return {
             "close_state": "award_confirmed",
-            "next_required_action": {
-                "next_actor": "winning_buyer",
-                "next_tool": "record_purchase_order",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "buyer_owner_id": str(confirmation.get("buyer_owner_id") or ""),
-                    "seller_owner_id": context.seller_owner_id,
-                    "bid_id": str(confirmation.get("bid_id") or ""),
-                },
-                "instruction": "Winning buyer must call record_purchase_order, then tell the seller to call record_seller_order.",
-            },
+            "next_required_action": _next_required_action(
+                next_actor="winning_buyer",
+                next_tool="record_purchase_order",
+                required_args=_RECORD_PO_REQUIRED_ARGS,
+                instruction=(
+                    "Winning buyer must call record_purchase_order with the "
+                    "confirmed award identifiers, then tell the seller the purchase "
+                    "order is recorded."
+                ),
+            ),
         }
     if isinstance(award, dict):
         return {
             "close_state": "bid_awarded",
-            "next_required_action": {
-                "next_actor": "winning_buyer",
-                "next_tool": "buyer_confirm_award",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "buyer_owner_id": str(award.get("buyer_owner_id") or ""),
-                    "bid_id": str(award.get("bid_id") or ""),
-                },
-                "instruction": "Winning buyer must call buyer_confirm_award before recording the purchase order.",
-            },
+            "next_required_action": _next_required_action(
+                next_actor="winning_buyer",
+                next_tool="buyer_confirm_award",
+                required_args=_BUYER_CONFIRM_REQUIRED_ARGS,
+                instruction=(
+                    "Winning buyer must call buyer_confirm_award with the awarded "
+                    "bid identifiers before recording the purchase order."
+                ),
+            ),
         }
     best_bid = _best_awardable_bid(context)
     if best_bid is not None:
         distinct_bidder_count = _distinct_public_bidder_count(context)
         if distinct_bidder_count < 2:
+            missing = _missing_bidder_fields(context)
+            action = _next_required_action(
+                next_actor="buyers",
+                next_tool="submit_bid",
+                required_args=_SUBMIT_BID_REQUIRED_ARGS,
+                instruction=(
+                    "At least two buyer owners must submit public bids before "
+                    "award. Contact the missing buyer agents directly and wait "
+                    "for their submit_bid calls."
+                ),
+            )
+            action.update(missing)
             return {
                 "close_state": "awaiting_bids",
                 "distinct_bidder_count": distinct_bidder_count,
                 "required_min_bidders": 2,
-                "next_required_action": {
-                    "next_actor": "buyers",
-                    "next_tool": "submit_bid",
-                    "recommended_args": {
-                        "auction_id": context.auction_id,
-                        "item_id": context.item_id,
-                        "quantity": context.quantity,
-                        "terms": list(context.required_terms),
-                    },
-                    "instruction": (
-                        "At least two buyer owners must submit public bids "
-                        "before award."
-                    ),
-                },
+                **missing,
+                "next_required_action": action,
             }
         return {
             "close_state": "bids_ready",
             "distinct_bidder_count": distinct_bidder_count,
             "required_min_bidders": 2,
-            "next_required_action": {
-                "next_actor": "seller",
-                "next_tool": "seller_award_bid",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "seller_owner_id": context.seller_owner_id,
-                    "bid_id": str(best_bid.get("bid_id") or ""),
-                },
-                "instruction": "Seller should award an acceptable public bid.",
-            },
+            "next_required_action": _next_required_action(
+                next_actor="seller",
+                next_tool="seller_award_bid",
+                required_args=_SELLER_AWARD_REQUIRED_ARGS,
+                instruction="Seller should award an acceptable public bid.",
+            ),
         }
+    missing = _missing_bidder_fields(context)
+    action = _next_required_action(
+        next_actor="buyers",
+        next_tool="submit_bid",
+        required_args=_SUBMIT_BID_REQUIRED_ARGS,
+        instruction=(
+            "At least two buyer owners must submit public bids before award. "
+            "Contact the missing buyer agents directly and wait for their "
+            "submit_bid calls."
+        ),
+    )
+    action.update(missing)
     return {
         "close_state": "awaiting_bids",
-        "next_required_action": {
-            "next_actor": "buyers",
-            "next_tool": "submit_bid",
-            "recommended_args": {
-                "auction_id": context.auction_id,
-                "item_id": context.item_id,
-                "quantity": context.quantity,
-                "terms": list(context.required_terms),
-            },
-            "instruction": "At least two buyer owners must submit public bids before award.",
-        },
+        **missing,
+        "next_required_action": action,
     }
 
 
@@ -999,7 +1256,10 @@ def _submit_bid(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
-    auction_id = str(arguments.get("auction_id") or context.auction_id).strip()
+    required_error = _missing_required_error(arguments, _SUBMIT_BID_REQUIRED_ARGS)
+    if required_error is not None:
+        return required_error
+    auction_id = str(arguments.get("auction_id") or "").strip()
     item_id = _item_id_argument(arguments, context)
     buyer = _buyer_owner_argument(arguments, context)
     unit_price = _unit_price_argument(
@@ -1019,17 +1279,10 @@ def _submit_bid(
             "next_required_action": {
                 "next_actor": "buyer",
                 "next_tool": "submit_bid",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "item_id": context.item_id,
-                    "buyer_owner_id": buyer,
-                    "unit_price": unit_price,
-                    "quantity": quantity,
-                    "terms": list(context.required_terms),
-                },
+                "required_args": list(_SUBMIT_BID_REQUIRED_ARGS),
                 "instruction": (
-                    "Retry submit_bid with the exact auction_id and item_id "
-                    "shown in recommended_args."
+                    "Retry submit_bid with exact auction_id and item_id from "
+                    "your owned request and the seller's listing."
                 ),
             },
         }
@@ -1041,6 +1294,9 @@ def _submit_bid(
         buyer,
         field_name="buyer_owner_id",
     )
+    if error is not None:
+        return error
+    error = _missing_buyer_resource_evidence_error(context, buyer)
     if error is not None:
         return error
     parsed_price, error = _parse_positive_float(
@@ -1062,17 +1318,10 @@ def _submit_bid(
             "next_required_action": {
                 "next_actor": "buyer",
                 "next_tool": "submit_bid",
-                "recommended_args": {
-                    "auction_id": context.auction_id,
-                    "item_id": context.item_id,
-                    "buyer_owner_id": buyer,
-                    "unit_price": parsed_price,
-                    "quantity": parsed_quantity,
-                    "terms": list(context.required_terms),
-                },
+                "required_args": list(_SUBMIT_BID_REQUIRED_ARGS),
                 "instruction": (
-                    "Retry submit_bid with terms as the exact required term "
-                    "strings; do not paraphrase them."
+                    "Retry submit_bid with terms as exact required term strings "
+                    "from owned purchase-request or listing resources."
                 ),
             },
         }
@@ -1100,6 +1349,12 @@ def _revise_bid(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
+    required_error = _missing_required_error(
+        arguments,
+        (*_SUBMIT_BID_REQUIRED_ARGS, "bid_id"),
+    )
+    if required_error is not None:
+        return required_error
     if not _auction_matches(arguments, context) or not _item_matches(arguments, context):
         return {"ok": False, "error": "auction_or_item_mismatch"}
     bid_id = str(arguments.get("bid_id") or "").strip()
@@ -1115,6 +1370,9 @@ def _revise_bid(
         buyer,
         field_name="buyer_owner_id",
     )
+    if error is not None:
+        return error
+    error = _missing_buyer_resource_evidence_error(context, buyer)
     if error is not None:
         return error
     parsed_price, error = _parse_positive_float(
@@ -1152,6 +1410,9 @@ def _seller_award_bid(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
+    required_error = _missing_required_error(arguments, _SELLER_AWARD_REQUIRED_ARGS)
+    if required_error is not None:
+        return required_error
     if not _auction_matches(arguments, context):
         return {"ok": False, "error": "auction_mismatch"}
     seller = _seller_owner_argument(arguments, context)
@@ -1174,25 +1435,30 @@ def _seller_award_bid(
             "error": "not_enough_distinct_bidders",
             "distinct_bidder_count": distinct_bidder_count,
             "required_min_bidders": 2,
+            "missing_buyer_owner_ids": feedback.get("missing_buyer_owner_ids", []),
+            "missing_buyer_agent_ids": feedback.get("missing_buyer_agent_ids", []),
             "next_required_action": feedback["next_required_action"],
             "close_state": feedback["close_state"],
         }
-    target_buyer = _owner_from_fields(
-        arguments,
-        context,
-        "buyer_owner_id",
-        "buyer_id",
-    )
-    bid = (
-        _find_bid(context, bid_id)
-        if bid_id
-        else _best_awardable_bid(
-            context,
-            buyer_owner_id=target_buyer or None,
-        )
-    )
+    bid = _find_bid(context, bid_id)
     if bid is None:
-        return {"ok": False, "error": "bid_not_found"}
+        return {
+            "ok": False,
+            "error": "bid_not_found",
+            "public_bids": _public_bid_summaries(context),
+            "next_required_action": _next_required_action(
+                next_actor="seller",
+                next_tool="seller_award_bid",
+                required_args=_SELLER_AWARD_REQUIRED_ARGS,
+                instruction=(
+                    "Use one of the listed public bid_id values from public_bids, "
+                    "then retry seller_award_bid."
+                ),
+            ),
+        }
+    error = _missing_seller_resource_evidence_error(context, seller)
+    if error is not None:
+        return error
     price = float(bid["unit_price"])
     if price < context.seller_minimum_unit_price:
         return {"ok": False, "error": "price_below_seller_minimum"}
@@ -1214,6 +1480,19 @@ def _seller_award_bid(
     if error is not None:
         return error
     return {"ok": True, "status": "bid_awarded", "award": award}
+
+
+def _public_bid_summaries(context: BiddingContext) -> list[dict[str, Any]]:
+    return [
+        {
+            "bid_id": str(bid.get("bid_id") or ""),
+            "buyer_owner_id": str(bid.get("buyer_owner_id") or ""),
+            "unit_price": float(bid.get("unit_price") or 0.0),
+            "quantity": int(bid.get("quantity") or 0),
+            "status": str(bid.get("status") or ""),
+        }
+        for bid in _all_bids(context)
+    ]
 
 
 def _auction_state(context: BiddingContext) -> dict[str, Any]:
@@ -1249,13 +1528,14 @@ def _buyer_confirm_award(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
+    required_error = _missing_required_error(arguments, _BUYER_CONFIRM_REQUIRED_ARGS)
+    if required_error is not None:
+        return required_error
     if not _auction_matches(arguments, context):
         return {"ok": False, "error": "auction_mismatch"}
     buyer = _buyer_owner_argument(arguments, context)
     bid_id = str(arguments.get("bid_id") or "").strip()
     award = _award_record(context)
-    if not bid_id and isinstance(award, dict):
-        bid_id = str(award.get("bid_id") or "").strip()
     if buyer not in context.buyer_owner_ids:
         return {"ok": False, "error": "buyer_not_in_auction"}
     error = _require_caller_owner(
@@ -1300,14 +1580,15 @@ def _record_purchase_order(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
+    required_error = _missing_required_error(arguments, _RECORD_PO_REQUIRED_ARGS)
+    if required_error is not None:
+        return required_error
     if not _auction_matches(arguments, context):
         return {"ok": False, "error": "auction_mismatch"}
     buyer = _buyer_owner_argument(arguments, context)
-    seller = _seller_owner_argument(arguments, context) or context.seller_owner_id
+    seller = _seller_owner_argument(arguments, context)
     bid_id = str(arguments.get("bid_id") or "").strip()
     confirmation = _confirmation_record(context)
-    if not bid_id and isinstance(confirmation, dict):
-        bid_id = str(confirmation.get("bid_id") or "").strip()
     if not isinstance(confirmation, dict) or confirmation.get("bid_id") != bid_id:
         return {
             "ok": False,
@@ -1385,16 +1666,18 @@ def _record_seller_order(
     arguments: Mapping[str, Any],
     context: BiddingContext,
 ) -> dict[str, Any]:
+    required_error = _missing_required_error(
+        arguments,
+        _RECORD_SELLER_ORDER_REQUIRED_ARGS,
+    )
+    if required_error is not None:
+        return required_error
     if not _auction_matches(arguments, context):
         return {"ok": False, "error": "auction_mismatch"}
     seller = _seller_owner_argument(arguments, context)
     po = _purchase_order_record(context)
     buyer = _buyer_owner_argument(arguments, context)
-    if not buyer and isinstance(po, dict):
-        buyer = str(po.get("buyer_owner_id") or "").strip()
     bid_id = str(arguments.get("bid_id") or "").strip()
-    if not bid_id and isinstance(po, dict):
-        bid_id = str(po.get("bid_id") or "").strip()
     if not isinstance(po, dict) or po.get("bid_id") != bid_id:
         return {
             "ok": False,

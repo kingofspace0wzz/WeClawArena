@@ -66,6 +66,7 @@ class MarbleBiddingLoader:
         *,
         scenario_id: str = "marble_bidding_phase5_v0",
         auction_id: str = "AUC-BID-000",
+        category: str = "CM",
         resource_profile: str = "owned_ecosystem_bidding_easy_two_buyer",
         seller_id: str = "sable_seller",
         seller_owner: str = "sable_supply_sales",
@@ -87,6 +88,8 @@ class MarbleBiddingLoader:
         owner_workspaces: dict[str, dict[str, Any]] | None = None,
         max_turns: int = 36,
     ) -> BiddingScenarioBundle:
+        if category not in {"CM", "CU"}:
+            raise ValueError("marble_bidding category must be CM or CU")
         if len(buyer_ids) != len(buyer_owners):
             raise ValueError("buyer_ids and buyer_owners must have the same length")
         if len(buyer_ids) < 2:
@@ -203,7 +206,7 @@ class MarbleBiddingLoader:
 
         scenario = Scenario(
             scenario_id=scenario_id,
-            category="CM",
+            category=category,
             task_family="coordination",
             agents=agents,
             initial_state={
@@ -220,12 +223,24 @@ class MarbleBiddingLoader:
                 "to": seller_id,
                 "content": _opening_message_for_seller(
                     seller_owner=seller_owner,
+                    seller_id=seller_id,
                     item_description=item_description,
                     market_reference_price=market_reference_price,
                     buyer_ids=buyer_ids,
                     buyer_owners=buyer_owners,
                 ),
             },
+            injected_messages=_opening_messages_for_buyers(
+                seller_id=seller_id,
+                seller_owner=seller_owner,
+                buyer_ids=buyer_ids,
+                buyer_owners=buyer_owners,
+                auction_id=auction_id,
+                item_id=item_id,
+                item_description=item_description,
+                quantity=quantity,
+                market_reference_price=market_reference_price,
+            ),
             coordination_mode=CoordinationMode.GRAPH,
             agent_graph=AgentGraph(nodes=nodes, edges=edges),
             family_id="marble_bidding",
@@ -306,6 +321,7 @@ def _seller_prompt(owner: str, auction_id: str, item_id: str) -> str:
 def _opening_message_for_seller(
     *,
     seller_owner: str,
+    seller_id: str,
     item_description: str,
     market_reference_price: float,
     buyer_ids: tuple[str, ...],
@@ -320,8 +336,44 @@ def _opening_message_for_seller(
         f"{item_description[:120]}... The public market reference price is "
         f"${market_reference_price:.2f}. Invite every buyer, wait for at least "
         "two public bids, accept one acceptable bid, and ask the winning buyer "
-        "to confirm."
+        "to confirm. If seller_award_bid reports not_enough_distinct_bidders, "
+        "contact the missing buyer agents directly and wait for their public bids. "
+        f"Do not announce an award from {seller_id} until seller_award_bid returns ok=true."
     )
+
+
+def _opening_messages_for_buyers(
+    *,
+    seller_id: str,
+    seller_owner: str,
+    buyer_ids: tuple[str, ...],
+    buyer_owners: tuple[str, ...],
+    auction_id: str,
+    item_id: str,
+    item_description: str,
+    quantity: int,
+    market_reference_price: float,
+) -> list[dict[str, str]]:
+    notices: list[dict[str, str]] = []
+    for buyer_id, buyer_owner in zip(buyer_ids, buyer_owners):
+        notices.append(
+            {
+                "from": "system",
+                "to": buyer_id,
+                "content": (
+                    f"Auction notice for {buyer_owner}: {seller_owner} via "
+                    f"{seller_id} is taking public bids in auction {auction_id} "
+                    f"for {quantity} units of {item_description} ({item_id}). "
+                    f"The public market reference price is ${market_reference_price:.2f}. "
+                    "Before bidding, call read_owned_file for purchase_request.md "
+                    "and query_owned_table for budget_ledger using your owner_id. "
+                    "Then call submit_bid with canonical auction_id, item_id, "
+                    "buyer_owner_id, unit_price, quantity, and exact required "
+                    "terms from your owned purchase request."
+                ),
+            }
+        )
+    return notices
 
 
 def _evaluation_criteria(
@@ -398,6 +450,10 @@ def _evaluation_criteria(
             },
             {
                 "predicate": "required_terms_consistent",
+                "args": {"auction_id": auction_id},
+            },
+            {
+                "predicate": "resource_backed_bidding_decision",
                 "args": {"auction_id": auction_id},
             },
         ],

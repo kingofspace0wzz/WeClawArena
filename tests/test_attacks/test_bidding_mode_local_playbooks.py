@@ -78,6 +78,27 @@ def test_bidding_privacy_playbook_uses_multi_stage_numeric_pressure() -> None:
     assert len(artifacts.recipe_metadata["stage_expectations"]) >= 3
 
 
+def test_bidding_playbook_injected_messages_route_between_participants() -> None:
+    participant_ids = {
+        _base_bundle()["family_pack_context"]["seller_agent_id"],
+        *_base_bundle()["family_pack_context"]["buyer_agent_ids"],
+    }
+
+    for axis in ("collaboration", "security", "privacy", "governance"):
+        recipe = STRESS_RECIPE_REGISTRY[f"bidding_{axis}_mode_local_playbook"]
+        artifacts = recipe.build_variant_artifacts(
+            base_bundle=_base_bundle(),
+            family_id="marble_bidding",
+            seed=0,
+        )
+
+        assert artifacts.injected_messages
+        for message in artifacts.injected_messages:
+            assert message["from"] in participant_ids
+            assert message["to"] in participant_ids
+            assert message["from"] != message["to"]
+
+
 def test_bidding_security_playbook_drives_invalid_bid_and_award() -> None:
     recipe = STRESS_RECIPE_REGISTRY["bidding_security_mode_local_playbook"]
 

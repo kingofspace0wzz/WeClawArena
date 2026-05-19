@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from clawsocialarena.eval.env_state_builder import build_env_state
+from clawsocialarena.eval.predicates.types import EnvState
 from clawsocialarena.scenario.models import GTBundle
 from clawsocialarena.types import ActionRecord, ActionType
 
@@ -283,6 +284,7 @@ def evaluate_evaluation_criteria(
 
     predicate_passes, predicate_failures, predicate_diagnostics = _evaluate_predicates(
         env_assertions=env_assertions,
+        action_log=action_log,
         resources_dir=resources_dir,
         family_id=family_id,
     )
@@ -324,6 +326,7 @@ def evaluate_evaluation_criteria(
 def _evaluate_predicates(
     *,
     env_assertions: list[dict[str, Any]],
+    action_log: list[ActionRecord],
     resources_dir: Path | str | None,
     family_id: str | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -358,7 +361,10 @@ def _evaluate_predicates(
                 "predicate_error": "resources_dir_unavailable",
             },
         )
-    state = build_env_state(resources_dir=Path(resources_dir))
+    state = _env_state_with_tool_dispatches(
+        build_env_state(resources_dir=Path(resources_dir)),
+        action_log,
+    )
     registry = _resolve_predicate_registry(family_id)
     passes: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -409,6 +415,67 @@ def _evaluate_predicates(
             "predicate_fail_count": len(failures),
         },
     )
+
+
+def _env_state_with_tool_dispatches(
+    state: EnvState,
+    action_log: list[ActionRecord],
+) -> EnvState:
+    return EnvState(
+        db=state.db,
+        files=state.files,
+        messages=state.messages,
+        outbound_messages=state.outbound_messages,
+        tool_dispatches=_successful_tool_dispatches(action_log),
+        metadata=state.metadata,
+    )
+
+
+def _successful_tool_dispatches(action_log: list[ActionRecord]) -> list[dict[str, Any]]:
+    pending: dict[str, dict[str, Any]] = {}
+    dispatches: list[dict[str, Any]] = []
+    for record in action_log:
+        if record.action_type == ActionType.TOOL_CALL:
+            pending[record.action_id] = {
+                "agent_id": record.agent_id,
+                "tool_name": str(record.payload.get("tool_name") or ""),
+                "arguments": dict(record.payload.get("arguments") or {}),
+            }
+            continue
+        if record.action_type != ActionType.TOOL_OBSERVATION_RETURN:
+            continue
+        ref_id = record.payload.get("tool_call_action_id") or record.payload.get(
+            "call_action_id"
+        )
+        call_meta = None
+        if isinstance(ref_id, str) and ref_id in pending:
+            call_meta = pending.pop(ref_id)
+        elif pending:
+            last_id = next(reversed(pending))
+            call_meta = pending.pop(last_id)
+        if call_meta is None or _observation_indicates_failure(record.payload):
+            continue
+        dispatches.append(
+            {
+                "order": len(dispatches) + 1,
+                "agent_id": call_meta["agent_id"],
+                "tool_name": call_meta["tool_name"],
+                "arguments": call_meta["arguments"],
+                "observation": _decoded_observation(record.payload),
+                "tool_call_action_id": ref_id,
+            }
+        )
+    return dispatches
+
+
+def _decoded_observation(payload: dict[str, Any]) -> Any:
+    observation = payload.get("observation")
+    if isinstance(observation, str):
+        try:
+            return json.loads(observation)
+        except json.JSONDecodeError:
+            return observation
+    return observation
 
 
 def evaluate_from_bundle_dir(
