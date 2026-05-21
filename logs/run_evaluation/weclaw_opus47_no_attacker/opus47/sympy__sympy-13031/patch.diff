@@ -1,0 +1,25 @@
+diff --git a/sympy/matrices/sparse.py b/sympy/matrices/sparse.py
+--- a/sympy/matrices/sparse.py
++++ b/sympy/matrices/sparse.py
+@@ -7,6 +7,10 @@
+         >>> C == A.row_insert(A.rows, Matrix(B))
+         True
+         """
++        # A null matrix can always be stacked (see  #10770)
++        if self.rows == 0 and self.cols != other.cols:
++            return self._new(0, other.cols, []).col_join(other)
++
+         if not self:
+             return type(self)(other)
+         A, B = self, other
+@@ -18,6 +22,10 @@
+         >>> C == A.col_insert(A.cols, B)
+         True
+         """
++        # A null matrix can always be stacked (see  #10770)
++        if self.cols == 0 and self.rows != other.rows:
++            return self._new(other.rows, 0, []).row_join(other)
++
+         if not self:
+             return type(self)(other)
+         A, B = self, other

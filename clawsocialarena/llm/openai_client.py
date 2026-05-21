@@ -318,12 +318,76 @@ def _response_tool_calls(response: Any) -> list[OpenAIToolCall]:
 def _loads_response_json_object(text: str) -> dict[str, Any]:
     stripped = _strip_json_fence(text.strip())
     try:
-        data = json.loads(stripped)
+        data: Any = json.loads(stripped)
     except json.JSONDecodeError:
-        data, _end = json.JSONDecoder().raw_decode(stripped)
+        try:
+            data, _end = json.JSONDecoder().raw_decode(stripped)
+        except json.JSONDecodeError:
+            # Salvage: some models (notably Claude Sonnet 4.6 on Bedrock)
+            # precede the JSON with conversational preamble or wrap it in
+            # a fenced code block somewhere in the middle of the response.
+            # Look for the first fenced JSON object, then fall back to
+            # brace counting that respects string escapes.
+            data = _salvage_first_json_object(text)
     if not isinstance(data, dict):
         raise TypeError("OpenAI JSON response must decode to an object")
     return data
+
+
+def _salvage_first_json_object(text: str) -> dict[str, Any]:
+    """Return the first JSON object found anywhere in ``text``.
+
+    Tries (1) a ``` ```json ... ``` ``` fenced block, then (2) brace
+    counting that respects string boundaries and escapes. Raises
+    :class:`json.JSONDecodeError` if no object can be recovered.
+    """
+    import re
+
+    m = re.search(r"```(?:json|JSON)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if m:
+        try:
+            value = json.loads(m.group(1))
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            pass
+
+    depth = 0
+    start = -1
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if in_string:
+            if ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth == 0:
+                continue
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    value = json.loads(text[start : i + 1])
+                    if isinstance(value, dict):
+                        return value
+                except json.JSONDecodeError:
+                    # Keep scanning for a later well-formed object.
+                    start = -1
+    raise json.JSONDecodeError(
+        "no JSON object recovered from response text", text, 0
+    )
 
 
 def _strip_json_fence(text: str) -> str:
@@ -357,3 +421,108 @@ def _response_cached_tokens(response: Any) -> int:
 def _response_output_tokens(response: Any) -> int:
     usage = _response_usage(response)
     return int(getattr(usage, "output_tokens", 0) or 0)
+
+
+# ---------------------------------------------------------------------------
+# Provider dispatch
+# ---------------------------------------------------------------------------
+#
+# All call sites that construct a default ``JsonClient`` (the live executor
+# and the docker agent runner) go through ``default_json_client()`` so a
+# model id like ``anthropic.claude-sonnet-4-6`` is routed to Bedrock via
+# boto3 instead of the OpenAI SDK. The dispatch is per-call on ``model``,
+# so a mixed sweep (Claude rows on Bedrock, GPT rows on OpenAI) works from a
+# single executor instance.
+
+_BEDROCK_PREFIXES: tuple[str, ...] = (
+    "anthropic.",
+    "us.anthropic.",
+    "eu.anthropic.",
+    "apac.anthropic.",
+    "global.anthropic.",
+)
+
+
+def is_bedrock_model(model: str) -> bool:
+    """Return True when ``model`` is a Bedrock-hosted Anthropic id.
+
+    Recognizes bare ``anthropic.*`` model ids and the regional /
+    cross-region inference profile prefixes (``us.``, ``eu.``,
+    ``apac.``, ``global.``). Anything else (``gpt-*``, OpenAI proxy
+    aliases) routes to the OpenAI client.
+    """
+    if not model:
+        return False
+    lower = model.lower()
+    return any(lower.startswith(prefix) for prefix in _BEDROCK_PREFIXES)
+
+
+class ProviderDispatchClient:
+    """``JsonClient`` that dispatches per call to OpenAI or Bedrock.
+
+    Holds both child clients lazily so importing this module does not
+    require AWS credentials or an OpenAI key; the relevant client is
+    only constructed when a matching ``model`` is first seen.
+
+    Tests can inject either child via the constructor; production code
+    leaves both ``None`` and lets the dispatcher build defaults.
+    """
+
+    def __init__(
+        self,
+        *,
+        openai_client: "JsonClient | None" = None,
+        bedrock_client: "JsonClient | None" = None,
+    ) -> None:
+        self._openai_client = openai_client
+        self._bedrock_client = bedrock_client
+
+    def _route(self, model: str) -> "JsonClient":
+        if is_bedrock_model(model):
+            if self._bedrock_client is None:
+                from clawsocialarena.llm.bedrock_client import BedrockJsonClient
+
+                self._bedrock_client = BedrockJsonClient()
+            return self._bedrock_client
+        if self._openai_client is None:
+            self._openai_client = OpenAIResponsesJsonClient()
+        return self._openai_client
+
+    def create_json(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        schema: dict[str, Any] | None = None,
+        cache_key: str | None = None,
+    ) -> OpenAIJsonResult:
+        return self._route(model).create_json(
+            model=model,
+            system_prompt=system_prompt,
+            payload=payload,
+            schema=schema,
+            cache_key=cache_key,
+        )
+
+    def create_with_tools(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        tools: list[dict[str, Any]],
+        cache_key: str | None = None,
+    ) -> OpenAIToolCallResult:
+        return self._route(model).create_with_tools(
+            model=model,
+            system_prompt=system_prompt,
+            payload=payload,
+            tools=tools,
+            cache_key=cache_key,
+        )
+
+
+def default_json_client() -> JsonClient:
+    """Return the default per-model dispatcher used by live executors."""
+    return ProviderDispatchClient()

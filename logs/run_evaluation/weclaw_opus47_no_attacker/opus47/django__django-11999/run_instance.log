@@ -1,0 +1,60 @@
+2026-05-21 10:33:32,331 - INFO - Creating container for django__django-11999...
+2026-05-21 10:33:32,856 - INFO - Container for django__django-11999 created: aea347e9b4e80c7ed5cae8e6da58387743660a2b8fd1be0e20fdd61edc6627b7
+2026-05-21 10:33:33,046 - INFO - Container for django__django-11999 started: aea347e9b4e80c7ed5cae8e6da58387743660a2b8fd1be0e20fdd61edc6627b7
+2026-05-21 10:33:33,046 - INFO - Intermediate patch for django__django-11999 written to logs/run_evaluation/weclaw_opus47_no_attacker/opus47/django__django-11999/patch.diff, now applying to container...
+2026-05-21 10:33:33,242 - INFO - >>>>> Applied Patch:
+Checking patch django/db/models/fields/__init__.py...
+Hunk #1 succeeded at 763 (offset 757 lines).
+Applied patch django/db/models/fields/__init__.py cleanly.
+
+2026-05-21 10:33:34,110 - INFO - Git diff before:
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index ee45bb941e..fe550169bd 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -763,8 +763,12 @@ class Field(RegisterLookupMixin):
+             if not getattr(cls, self.attname, None):
+                 setattr(cls, self.attname, self.descriptor_class(self))
+         if self.choices is not None:
+-            setattr(cls, 'get_%s_display' % self.name,
+-                    partialmethod(cls._get_FIELD_display, field=self))
++            if not hasattr(cls, 'get_%s_display' % self.name):
++                setattr(
++                    cls,
++                    'get_%s_display' % self.name,
++                    partialmethod(cls._get_FIELD_display, field=self),
++                )
+ 
+     def get_filter_kwargs_for_object(self, obj):
+         """
+2026-05-21 10:33:34,111 - INFO - Eval script for django__django-11999 written to logs/run_evaluation/weclaw_opus47_no_attacker/opus47/django__django-11999/eval.sh; copying to container...
+2026-05-21 10:33:43,105 - INFO - Test runtime: 8.93 seconds
+2026-05-21 10:33:43,106 - INFO - Test output for django__django-11999 written to logs/run_evaluation/weclaw_opus47_no_attacker/opus47/django__django-11999/test_output.txt
+2026-05-21 10:33:43,184 - INFO - Git diff after:
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index ee45bb941e..fe550169bd 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -763,8 +763,12 @@ class Field(RegisterLookupMixin):
+             if not getattr(cls, self.attname, None):
+                 setattr(cls, self.attname, self.descriptor_class(self))
+         if self.choices is not None:
+-            setattr(cls, 'get_%s_display' % self.name,
+-                    partialmethod(cls._get_FIELD_display, field=self))
++            if not hasattr(cls, 'get_%s_display' % self.name):
++                setattr(
++                    cls,
++                    'get_%s_display' % self.name,
++                    partialmethod(cls._get_FIELD_display, field=self),
++                )
+ 
+     def get_filter_kwargs_for_object(self, obj):
+         """
+2026-05-21 10:33:43,184 - INFO - Grading answer for django__django-11999...
+2026-05-21 10:33:43,185 - INFO - report: {'django__django-11999': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': True, 'tests_status': {'FAIL_TO_PASS': {'success': ['test_overriding_FIELD_display (model_fields.tests.GetFieldDisplayTests)'], 'failure': []}, 'PASS_TO_PASS': {'success': ['test_blank_in_choices (model_fields.tests.GetChoicesTests)', 'test_blank_in_grouped_choices (model_fields.tests.GetChoicesTests)', 'test_empty_choices (model_fields.tests.GetChoicesTests)', 'test_lazy_strings_not_evaluated (model_fields.tests.GetChoicesTests)', 'test_check (model_fields.tests.ChoicesTests)', 'test_choices (model_fields.tests.ChoicesTests)', 'test_flatchoices (model_fields.tests.ChoicesTests)', 'test_formfield (model_fields.tests.ChoicesTests)', 'test_invalid_choice (model_fields.tests.ChoicesTests)', 'Can supply a custom choices form class to Field.formfield()', 'deconstruct() uses __qualname__ for nested class support.', 'Field instances can be pickled.', 'test_field_name (model_fields.tests.BasicFieldTests)', 'Fields are ordered based on their creation.', 'test_field_repr (model_fields.tests.BasicFieldTests)', '__repr__() uses __qualname__ for nested class support.', 'test_field_str (model_fields.tests.BasicFieldTests)', 'test_field_verbose_name (model_fields.tests.BasicFieldTests)', 'Field.formfield() sets disabled for fields with choices.', 'test_show_hidden_initial (model_fields.tests.BasicFieldTests)', 'test_choices_and_field_display (model_fields.tests.GetFieldDisplayTests)', 'test_empty_iterator_choices (model_fields.tests.GetFieldDisplayTests)', 'A translated display value is coerced to str.', 'test_iterator_choices (model_fields.tests.GetFieldDisplayTests)', 'test_get_choices (model_fields.tests.GetChoicesLimitChoicesToTests)', 'test_get_choices_reverse_related_field (model_fields.tests.GetChoicesLimitChoicesToTests)', 'test_get_choices (model_fields.tests.GetChoicesOrderingTests)', 'test_get_choices_default_ordering (model_fields.tests.GetChoicesOrderingTests)', 'test_get_choices_reverse_related_field (model_fields.tests.GetChoicesOrderingTests)', 'test_get_choices_reverse_related_field_default_ordering (model_fields.tests.GetChoicesOrderingTests)'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-11999: resolved: True
+2026-05-21 10:33:43,185 - INFO - Attempting to stop container sweb.eval.django__django-11999.weclaw_opus47_no_attacker...
+2026-05-21 10:33:58,461 - INFO - Attempting to remove container sweb.eval.django__django-11999.weclaw_opus47_no_attacker...
+2026-05-21 10:33:59,066 - INFO - Container sweb.eval.django__django-11999.weclaw_opus47_no_attacker removed.
+2026-05-21 10:33:59,066 - INFO - Attempting to remove image swebench/sweb.eval.x86_64.django_1776_django-11999:latest...
+2026-05-21 10:34:00,247 - INFO - Image swebench/sweb.eval.x86_64.django_1776_django-11999:latest removed.

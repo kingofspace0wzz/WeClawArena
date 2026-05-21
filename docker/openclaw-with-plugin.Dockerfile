@@ -29,7 +29,7 @@ WORKDIR /src
 # Copy the manifest pair first so Docker can cache `pnpm install` across
 # source edits. `--frozen-lockfile` matches CI behavior and rejects any
 # drift between `package.json` and `pnpm-lock.yaml`.
-COPY gateway_plugin/package.json gateway_plugin/pnpm-lock.yaml ./
+COPY gateway_plugin/package.json gateway_plugin/pnpm-lock.yaml gateway_plugin/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Now bring in the rest of the plugin source and compile + pack.

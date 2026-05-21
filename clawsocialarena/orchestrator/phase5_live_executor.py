@@ -51,7 +51,7 @@ from clawsocialarena.generator.naturalization import (
 )
 from clawsocialarena.llm.openai_client import (
     JsonClient,
-    OpenAIResponsesJsonClient,
+    default_json_client,
 )
 from clawsocialarena.orchestrator.phase5_agent_loop import (
     AgentLoopResult,
@@ -131,12 +131,12 @@ class LiveScenarioExecutor:
 
     def _resolve_naturalization_client(self) -> JsonClient:
         if self.naturalization_client is None:
-            self.naturalization_client = OpenAIResponsesJsonClient()
+            self.naturalization_client = default_json_client()
         return self.naturalization_client
 
     def _resolve_agent_client(self) -> JsonClient:
         if self.agent_client is None:
-            self.agent_client = OpenAIResponsesJsonClient()
+            self.agent_client = default_json_client()
         return self.agent_client
 
     def execute(

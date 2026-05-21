@@ -7,6 +7,7 @@ Use this file to decide what to read first. Current execution should start from 
 | Need | Read |
 |---|---|
 | Current branch, store, and benchmark status | `docs/project_status.md` |
+| Bedrock multi-model v2.0.0 sweep launcher (4 scenarios x 2 Claude models in 8 screens) | `docs/phase_5/bedrock_sweep_runbook.md` |
 | Benchmark data layout and inspection guide | `docs/benchmark_dataset_guide.md` |
 | Runtime, policy hooks, MSWM, and SAF | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md` |
 | Benchmark construction | `docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md` |

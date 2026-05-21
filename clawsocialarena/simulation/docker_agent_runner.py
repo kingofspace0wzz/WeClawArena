@@ -28,7 +28,7 @@ from clawsocialarena.eval.tool_evidence import (
 )
 from clawsocialarena.gateway.compose_runner import ComposeRunner
 from clawsocialarena.llm.costing import TokenUsage
-from clawsocialarena.llm.openai_client import OpenAIResponsesJsonClient
+from clawsocialarena.llm.openai_client import JsonClient, default_json_client
 from clawsocialarena.orchestrator.phase5_agent_loop import discover_tool_schemas
 from clawsocialarena.orchestrator.phase5_env_assertions import (
     evaluate_evaluation_criteria,
@@ -318,7 +318,7 @@ def run_docker_agent_simulation(
     )
 
     usage = TokenUsage(model=agent_model)
-    client = OpenAIResponsesJsonClient()
+    client = default_json_client()
     history: list[dict[str, str]] = []
     initial_messages = _initial_messages(scenario)
     opening = dict(initial_messages[0])
@@ -989,7 +989,7 @@ def _initial_messages(
 
 def _agent_reply(
     *,
-    client: OpenAIResponsesJsonClient,
+    client: JsonClient,
     scenario: Scenario,
     gt: GTBundle | None = None,
     agent_id: str,
