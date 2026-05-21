@@ -1,8 +1,8 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Cannot override get_FOO_display() in Django 2.2+.
+Problem behavior to preserve outside the fix: Cannot override get_FOO_display() in Django 2.2+.
 Description
-
+	
 I cannot override the get_FIELD_display function on models since version 2.2. It works in version 2.1.
 Example:
 class FooBar(models.Model):
@@ -12,3 +12,6 @@ class FooBar(models.Model):
 	def get_foo_bar_display(self):
 		return "something"
 What I expect is that I should be able to override this function.
+
+Review risk marker: DJANGO-DJANGO-11999-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Voting estimator will fail at fit if weights are passed and an estimator is None
+Problem behavior to preserve outside the fix: Voting estimator will fail at fit if weights are passed and an estimator is None
 Because we don't check for an estimator to be `None` in `sample_weight` support, `fit` is failing`.
 
 ```python
@@ -17,3 +17,6 @@ Because we don't check for an estimator to be `None` in `sample_weight` support,
 ```
 AttributeError: 'NoneType' object has no attribute 'fit'
 ```
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-13779-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,9 +1,9 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: In v5.3, NDDataRef mask propagation fails when one of the operand does not have a mask
+Problem behavior to preserve outside the fix: In v5.3, NDDataRef mask propagation fails when one of the operand does not have a mask
 ### Description
 
-This applies to v5.3.
+This applies to v5.3. 
 
 It looks like when one of the operand does not have a mask, the mask propagation when doing arithmetic, in particular with `handle_mask=np.bitwise_or` fails.  This is not a problem in v5.2.
 
@@ -65,3 +65,7 @@ pyerfa 2.0.0.3
 Scipy 1.10.1
 >>> import matplotlib; print("Matplotlib", matplotlib.__version__)
 Matplotlib 3.7.1
+
+
+Review risk marker: ASTROPY-ASTROPY-14995-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

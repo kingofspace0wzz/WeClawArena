@@ -1,8 +1,8 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: QuerySet.none() on combined queries returns all results.
+Problem behavior to preserve outside the fix: QuerySet.none() on combined queries returns all results.
 Description
-
+	
 I came across this issue on Stack Overflow. I'm not 100% sure it's a bug, but it does seem strange. With this code (excuse the bizarre example filtering):
 class Publication(models.Model):
 	pass
@@ -26,3 +26,6 @@ publications = forms.ModelMultipleChoiceField(
 	required=False,
 )
 The form correctly shows only the matching objects. However, if you submit this form while empty (i.e. you didn't select any publications), ALL objects matching the queryset will be added. Using the OR query, NO objects are added, as I'd expect.
+
+Review risk marker: DJANGO-DJANGO-13158-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

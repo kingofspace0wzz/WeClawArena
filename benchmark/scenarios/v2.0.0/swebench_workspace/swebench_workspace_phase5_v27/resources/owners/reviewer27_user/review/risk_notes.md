@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: linear_model.RidgeClassifierCV's Parameter store_cv_values issue
+Problem behavior to preserve outside the fix: linear_model.RidgeClassifierCV's Parameter store_cv_values issue
 #### Description
 Parameter store_cv_values error on sklearn.linear_model.RidgeClassifierCV
 
@@ -13,7 +13,7 @@ n = 100
 x = np.random.randn(n, 30)
 y = np.random.normal(size = n)
 
-rr = lm.RidgeClassifierCV(alphas = np.arange(0.1, 1000, 0.1), normalize = True,
+rr = lm.RidgeClassifierCV(alphas = np.arange(0.1, 1000, 0.1), normalize = True, 
                                          store_cv_values = True).fit(x, y)
 
 #### Expected Results
@@ -38,6 +38,10 @@ Add store_cv_values support to RidgeClassifierCV - documentation claims that usa
 > cv_values_ : array, shape = [n_samples, n_alphas] or shape = [n_samples, n_responses, n_alphas], optional
 > Cross-validation values for each alpha (if **store_cv_values**=True and `cv=None`).
 
-While actually usage of this flag gives
+While actually usage of this flag gives 
 
 > TypeError: **init**() got an unexpected keyword argument 'store_cv_values'
+
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-10297-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

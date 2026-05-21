@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Behavior of Matrix hstack and vstack changed in sympy 1.1
+Problem behavior to preserve outside the fix: Behavior of Matrix hstack and vstack changed in sympy 1.1
 In sympy 1.0:
 ```
 import sympy as sy
@@ -10,7 +10,7 @@ M3 = sy.Matrix.zeros(0, 2)
 M4 = sy.Matrix.zeros(0, 3)
 sy.Matrix.hstack(M1, M2, M3, M4).shape
 ```
-returns
+returns 
 `(0, 6)`
 
 Now, same in sympy 1.1:
@@ -37,3 +37,6 @@ sy.Matrix.hstack(M1, M2, M3, M4).shape
 returns
 `(1, 6)
 `
+
+Review risk marker: SYMPY-SYMPY-13031-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

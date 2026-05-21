@@ -1,3 +1,5 @@
 # Target Result
 
-Target tests: test_immutable
+Instance: sympy__sympy-20590
+target tests: test_immutable
+Required file under test: sympy/core/_print_helpers.py

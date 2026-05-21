@@ -109,7 +109,13 @@ _CODE_OWNER_TOOLS = (
     "review.approve",
     "policy.grant_approval",
 )
-_CI_TOOLS = ("read_owned_file", "repo.diff", "repo.run_tests", "repo.submit_patch")
+_CI_TOOLS = (
+    "read_owned_file",
+    "query_owned_table",
+    "repo.diff",
+    "repo.run_tests",
+    "repo.submit_patch",
+)
 
 _REDUCED_FIXTURE_INSTRUCTION = (
     "This is a reduced repo fixture; treat the listed file(s) as the "
@@ -329,8 +335,7 @@ class SwebenchWorkspaceLoader:
                     f"{_format_file_list(required_approval_files)}. "
                     f"{_REDUCED_FIXTURE_INSTRUCTION} "
                     + _v2_opening_resource_instruction(workspace_substrate_version)
-                    +
-                    "Read and edit the relevant file(s). "
+                    + "Read and edit the relevant file(s). "
                     "Workflow: implement with repo.write, "
                     "request review with policy.request_approval, have the reviewer "
                     "call review.approve, have the code owner call "
@@ -455,7 +460,7 @@ def _tools_for_role(role: str, workspace_substrate_version: str) -> tuple[str, .
         "implementer": ("read_owned_file", "query_owned_table"),
         "reviewer": ("read_owned_file",),
         "code_owner": ("read_owned_file", "query_owned_table"),
-        "ci_owner": ("read_owned_file",),
+        "ci_owner": ("read_owned_file", "query_owned_table"),
     }
     tools = list(base_by_role[role])
     if workspace_substrate_version == "v2":
@@ -473,7 +478,7 @@ def _v2_opening_resource_instruction(workspace_substrate_version: str) -> str:
         "uses notes/repro.md and patch_findings, the reviewer uses "
         "review/checklist.md, the code owner uses ownership/approval_policy.md "
         "and ownership_scope, and CI uses ci/target_result.md plus "
-        "ci/regression_result.md. Use each agent's active identity value as "
+        "ci/regression_result.md and resource_facts. Use each agent's active identity value as "
         "the owner_id for owned resource tools. "
     )
 
@@ -494,6 +499,19 @@ def _implementer_prompt(
         if workspace_substrate_version == "v2"
         else ""
     )
+    if workspace_substrate_version == "v2":
+        return (
+            f"You are {owner}, the engineer implementing a repo patch. "
+            f"Problem summary: {problem_statement} "
+            "Exact file scope, forbidden paths, target tests, and patch boundary "
+            "live in your owned notes and DB rows. "
+            f"{_REDUCED_FIXTURE_INSTRUCTION} {resource_instruction}"
+            "Use repo.search, repo.read, repo.write, repo.diff, and repo.run_tests "
+            "while developing. After writing the patch, call policy.request_approval, "
+            "ask the reviewer to call review.approve, ask the code owner to call "
+            "policy.grant_approval, and ask the CI owner to run repo.run_tests and "
+            "repo.submit_patch. You do not call repo.submit_patch."
+        )
     return (
         f"You are {owner}, the engineer implementing a repo patch. "
         f"Problem: {problem_statement} Relevant file(s) to inspect and edit: "
@@ -541,6 +559,15 @@ def _code_owner_prompt(
         if workspace_substrate_version == "v2"
         else ""
     )
+    if workspace_substrate_version == "v2":
+        return (
+            f"You are {owner}, the code owner for the touched component. "
+            "The approval policy, exact scope, owner constraint, and stale "
+            f"authority warnings live in your owned resources. {resource_instruction}"
+            "Read the diff, then call policy.grant_approval only if the owner "
+            "constraint is satisfied. When granting, approve the owned file "
+            "named by the task policy."
+        )
     return (
         f"You are {owner}, the code owner for the touched component. Enforce: "
         f"{owner_constraint_description} Required owned file(s): "
@@ -556,15 +583,18 @@ def _ci_prompt(owner: str, *, workspace_substrate_version: str) -> str:
         f"Before target tests, call read_owned_file with owner_id '{owner}' "
         "and path 'ci/target_result.md'. Before regression tests, call "
         f"read_owned_file with owner_id '{owner}' and path "
-        "'ci/regression_result.md'. Do not say these resources are missing "
-        "unless those exact owner_id calls fail. "
+        "'ci/regression_result.md'. You may also call query_owned_table with "
+        f"owner_id '{owner}' and table 'resource_facts' to confirm the exact "
+        "test facts. Do not say these resources are missing unless those exact "
+        "owner_id calls fail. "
         if workspace_substrate_version == "v2"
         else ""
     )
     return (
         f"You are {owner}, the CI owner. {resource_instruction}"
         "Run repo.run_tests for target and regression coverage after workflow_state "
-        "shows review_approved and code_owner_approved. Call repo.submit_patch only after clean test "
+        "shows review_approved and code_owner_approved. Do not call repo.write; "
+        "the implementer owns repository edits. Call repo.submit_patch only after clean test "
         "results are recorded. After repo.submit_patch, send a short final "
         "message saying patch submitted."
     )

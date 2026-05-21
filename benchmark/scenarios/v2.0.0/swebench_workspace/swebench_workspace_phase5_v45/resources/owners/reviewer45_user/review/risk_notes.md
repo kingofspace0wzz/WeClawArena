@@ -1,10 +1,10 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Queryset raises NotSupportedError when RHS has filterable=False attribute.
+Problem behavior to preserve outside the fix: Queryset raises NotSupportedError when RHS has filterable=False attribute.
 Description
-
+	 
 		(last modified by Nicolas Baccelli)
-
+	 
 I'm migrating my app to django 3.0.7 and I hit a strange behavior using a model class with a field labeled filterable
 class ProductMetaDataType(models.Model):
 	label = models.CharField(max_length=255, unique=True, blank=False, null=False)
@@ -55,3 +55,6 @@ Traceback (most recent call last):
 django.db.utils.NotSupportedError: ProductMetaDataType is disallowed in the filter clause.
 I changed label to filterable_test and it fixed this issue
 This should be documented or fix.
+
+Review risk marker: DJANGO-DJANGO-13028-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: simplify(cos(x)**I): Invalid comparison of complex I (fu.py)
+Problem behavior to preserve outside the fix: simplify(cos(x)**I): Invalid comparison of complex I (fu.py)
 ```
 >>> from sympy import *
 >>> x = Symbol('x')
@@ -39,3 +39,6 @@ Traceback (most recent call last):
     raise TypeError("Invalid comparison of complex %s" % me)
 TypeError: Invalid comparison of complex I
 ```
+
+Review risk marker: SYMPY-SYMPY-17139-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

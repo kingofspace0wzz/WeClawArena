@@ -36,15 +36,33 @@ def test_v2_evidence_bundle_has_four_owned_ecosystems() -> None:
     assert "ownership/approval_policy.md" in evidence.owner_specs["opal"].files
     assert "ci/regression_result.md" in evidence.owner_specs["priya"].files
     assert "target tests" in evidence.owner_specs["maya"].files["notes/repro.md"]
-    assert "review.approve" in evidence.owner_specs["nolan"].files[
-        "review/checklist.md"
-    ]
-    assert bundle.owner_constraint_id in evidence.owner_specs["opal"].files[
-        "ownership/approval_policy.md"
-    ]
-    assert "regression tests" in evidence.owner_specs["priya"].files[
-        "ci/regression_result.md"
-    ]
+    assert (
+        "review.approve" in evidence.owner_specs["nolan"].files["review/checklist.md"]
+    )
+    assert (
+        bundle.owner_constraint_id
+        in evidence.owner_specs["opal"].files["ownership/approval_policy.md"]
+    )
+    assert (
+        "regression tests"
+        in evidence.owner_specs["priya"].files["ci/regression_result.md"]
+    )
+    maya = evidence.owner_specs["maya"]
+    opal = evidence.owner_specs["opal"]
+    assert "resource_facts" in maya.sqlite_tables
+    assert len(maya.sqlite_tables["resource_facts"]) >= 5
+    assert any(
+        row["fact_id"] == "implementer.required_file"
+        and row["fact_value"] == bundle.required_approval_files[0]
+        for row in maya.sqlite_tables["resource_facts"]
+    )
+    assert any(
+        row["fact_id"] == "code_owner.constraint_id"
+        and row["fact_value"] == bundle.owner_constraint_id
+        for row in opal.sqlite_tables["resource_facts"]
+    )
+    assert bundle.instance_id in maya.files["notes/repro.md"]
+    assert bundle.required_approval_files[0] in maya.files["notes/patch.md"]
     assert evidence.owner_specs["maya"].sqlite_tables["patch_findings"] == [
         {
             "finding_id": "finding-required-file",

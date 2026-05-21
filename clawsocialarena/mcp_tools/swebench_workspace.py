@@ -80,6 +80,7 @@ _READABLE_OWNER_TABLES: frozenset[str] = frozenset(
         "owner_approvals",
         "test_runs",
         "test_claims",
+        "resource_facts",
     }
 )
 

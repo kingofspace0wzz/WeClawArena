@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Using rst_prolog removes top level headings containing a domain directive
+Problem behavior to preserve outside the fix: Using rst_prolog removes top level headings containing a domain directive
 ### Describe the bug
 
 If `rst_prolog` is set, then any documents that contain a domain directive as the first heading (eg `:mod:`) do not render the heading correctly or include the heading in the toctree.
@@ -67,3 +67,6 @@ Pygments version:      2.15.1
 ### Additional context
 
 _No response_
+
+Review risk marker: SPHINX-DOC-SPHINX-11445-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,10 +1,10 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: ModelChoiceField does not provide value of invalid choice when raising ValidationError
+Problem behavior to preserve outside the fix: ModelChoiceField does not provide value of invalid choice when raising ValidationError
 Description
-
+	 
 		(last modified by Aaron Wiegel)
-
+	 
 Compared with ChoiceField and others, ModelChoiceField does not show the value of the invalid choice when raising a validation error. Passing in parameters with the invalid value and modifying the default error message for the code invalid_choice should fix this.
 From source code:
 class ModelMultipleChoiceField(ModelChoiceField):
@@ -27,3 +27,6 @@ class ModelChoiceField(ChoiceField):
 							' the available choices.'),
 	}
 	...
+
+Review risk marker: DJANGO-DJANGO-13933-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

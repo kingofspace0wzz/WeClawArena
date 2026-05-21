@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Sum of the elements of an identity matrix is zero
+Problem behavior to preserve outside the fix: Sum of the elements of an identity matrix is zero
 I think this is a bug.
 
 I created a matrix by M.T * M under an assumption that M is orthogonal.  SymPy successfully recognized that the result is an identity matrix.  I tested its identity-ness by element-wise, queries, and sum of the diagonal elements and received expected results.
@@ -32,3 +32,6 @@ print(Sum(e[i, i], (i, 0, n-1)).doit())
 # Total sum of the elements is expected to be 'n' but the answer is 0!
 print(Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit())
 ```
+
+Review risk marker: SYMPY-SYMPY-12419-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

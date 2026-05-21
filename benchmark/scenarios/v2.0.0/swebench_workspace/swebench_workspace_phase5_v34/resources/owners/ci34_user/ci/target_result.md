@@ -1,3 +1,5 @@
 # Target Result
 
-Target tests: test_Function
+Instance: sympy__sympy-15345
+target tests: test_Function
+Required file under test: sympy/printing/mathematica.py

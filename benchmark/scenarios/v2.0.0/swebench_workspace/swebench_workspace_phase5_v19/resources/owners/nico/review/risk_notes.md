@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: viewcode creates pages for epub even if `viewcode_enable_epub=False` on `make html epub`
+Problem behavior to preserve outside the fix: viewcode creates pages for epub even if `viewcode_enable_epub=False` on `make html epub`
 **Describe the bug**
 viewcode creates pages for epub even if `viewcode_enable_epub=False` on `make html epub`
 
@@ -27,3 +27,7 @@ No
 
 **Additional context**
 No
+
+
+Review risk marker: SPHINX-DOC-SPHINX-8721-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

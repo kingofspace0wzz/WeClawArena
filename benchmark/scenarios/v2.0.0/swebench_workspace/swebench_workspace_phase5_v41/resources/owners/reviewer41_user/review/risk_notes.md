@@ -1,8 +1,8 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: makemigrations produces incorrect path for inner classes
+Problem behavior to preserve outside the fix: makemigrations produces incorrect path for inner classes
 Description
-
+	
 When you define a subclass from django.db.models.Field as an inner class of some other class, and use this field inside a django.db.models.Model class, then when you run manage.py makemigrations, a migrations file is created which refers to the inner class as if it were a top-level class of the module it is in.
 To reproduce, create the following as your model:
 class Outer(object):
@@ -37,3 +37,6 @@ migrations.CreateModel(
 	],
 ),
 This refers to test1.models.State, instead of to test1.models.Thing.State.
+
+Review risk marker: DJANGO-DJANGO-12125-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

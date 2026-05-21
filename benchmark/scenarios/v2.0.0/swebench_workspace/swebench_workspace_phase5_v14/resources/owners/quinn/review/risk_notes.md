@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: method = builtin_str(method) problem
+Problem behavior to preserve outside the fix: method = builtin_str(method) problem
 In requests/sessions.py is a command:
 
 method = builtin_str(method)
@@ -16,3 +16,7 @@ I am using python3.4 and python-neutronclient (2.3.9) with requests (2.4.3).  ne
 I'm not sure if this is a bug with neutronclient or a bug with requests, but I'm starting here.  Seems if requests handled the method value being a binary string, we wouldn't have any problem.
 
 Also, I tried in python2.6 and this bug doesn't exist there. Some difference between 2.6 and 3.4 makes this not work right.
+
+
+Review risk marker: PSF-REQUESTS-2317-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

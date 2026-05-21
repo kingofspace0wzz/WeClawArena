@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Unexpected exception when multiplying geometry.Point and number
+Problem behavior to preserve outside the fix: Unexpected exception when multiplying geometry.Point and number
 ```python
 from sympy import geometry as ge
 import sympy
@@ -32,7 +32,7 @@ TypeError                                 Traceback (most recent call last)
 --> 129                                        .format(func_name(coords))))
     130         # A point where only `dim` is specified is initialized
 
-TypeError:
+TypeError: 
 Expecting sequence of coordinates, not `Mul`
 
 During handling of the above exception, another exception occurred:
@@ -45,10 +45,13 @@ GeometryError                             Traceback (most recent call last)
     220             s, o = Point._normalize_dimension(self, Point(other, evaluate=False))
     221         except TypeError:
 --> 222             raise GeometryError("Don't know how to add {} and a Point object".format(other))
-    223
+    223 
     224         coords = [simplify(a + b) for a, b in zip(s, o)]
 
 GeometryError: Don't know how to add 2.0*Point2D(1, 1) and a Point object
 ```
 
 The expected behaviour is, that both lines give the same result
+
+Review risk marker: SYMPY-SYMPY-17655-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

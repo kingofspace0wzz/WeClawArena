@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Exception when multiplying BlockMatrix containing ZeroMatrix blocks
+Problem behavior to preserve outside the fix: Exception when multiplying BlockMatrix containing ZeroMatrix blocks
 When a block matrix with zero blocks is defined
 
 ```
@@ -70,3 +70,6 @@ This seems to be caused by the fact that the zeros in `b._blockmul(b)` are not `
 ```
 
 However, I don't understand SymPy internals well enough to find out why this happens. I use Python 3.7.4 and sympy 1.4 (installed with pip).
+
+Review risk marker: SYMPY-SYMPY-17630-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

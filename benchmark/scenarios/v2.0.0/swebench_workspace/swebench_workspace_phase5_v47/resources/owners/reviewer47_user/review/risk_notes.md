@@ -1,8 +1,8 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Self referencing foreign key doesn't correctly order by a relation "_id" field.
+Problem behavior to preserve outside the fix: Self referencing foreign key doesn't correctly order by a relation "_id" field.
 Description
-
+	
 Initially discovered on 2.2.10 but verified still happens on 3.0.6. Given the following models:
 class OneModel(models.Model):
 	class Meta:
@@ -41,3 +41,6 @@ print(qs.query)
 SELECT "orion_twomodel"."id", "orion_twomodel"."record_id", "orion_twomodel"."twoval" FROM "orion_twomodel" INNER JOIN "orion_onemodel" ON ("orion_twomodel"."record_id" = "orion_onemodel"."id") LEFT OUTER JOIN "orion_onemodel" T3 ON ("orion_onemodel"."root_id" = T3."id") WHERE "orion_onemodel"."oneval" IN (1, 2, 3) ORDER BY T3."id" ASC
 One gets the query with the two JOINs but an ASCENDING sort order. I was not under the impression that sort orders are somehow relative to the class level sort order, eg: does specifing order_by("-record__root_id") invert the class sort order? Testing that on a simple case doesn't show that behavior at all.
 Thanks for any assistance and clarification.
+
+Review risk marker: DJANGO-DJANGO-13033-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

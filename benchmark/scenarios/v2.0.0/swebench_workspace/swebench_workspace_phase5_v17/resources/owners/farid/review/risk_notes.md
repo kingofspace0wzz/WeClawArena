@@ -1,9 +1,9 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Expose warm_start in Isolation forest
+Problem behavior to preserve outside the fix: Expose warm_start in Isolation forest
 It seems to me that `sklearn.ensemble.IsolationForest` supports incremental addition of new trees with the `warm_start` parameter of its parent class, `sklearn.ensemble.BaseBagging`.
 
-Even though this parameter is not exposed in `__init__()` , it gets inherited from `BaseBagging` and one can use it by changing it to `True` after initialization. To make it work, you have to also increment `n_estimators` on every iteration.
+Even though this parameter is not exposed in `__init__()` , it gets inherited from `BaseBagging` and one can use it by changing it to `True` after initialization. To make it work, you have to also increment `n_estimators` on every iteration. 
 
 It took me a while to notice that it actually works, and I had to inspect the source code of both `IsolationForest` and `BaseBagging`. Also, it looks to me that the behavior is in-line with `sklearn.ensemble.BaseForest` that is behind e.g. `sklearn.ensemble.RandomForestClassifier`.
 
@@ -18,3 +18,7 @@ To make it more easier to use, I'd suggest to:
 ```
 * add a test to make sure it works properly;
 * possibly also mention in the "IsolationForest example" documentation entry;
+
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-13496-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

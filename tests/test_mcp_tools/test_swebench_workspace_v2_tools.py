@@ -94,6 +94,11 @@ def test_v2_owned_resource_tools_accept_agent_ids(
         {"owner_id": "opal_owner", "table": "ownership_scope"},
         v2_context,
     )
+    facts = dispatch(
+        "query_owned_table",
+        {"owner_id": "maya_engineer", "table": "resource_facts"},
+        v2_context,
+    )
 
     assert checklist["ok"] is True
     assert checklist["owner_id"] == "nolan"
@@ -101,6 +106,8 @@ def test_v2_owned_resource_tools_accept_agent_ids(
     assert scope["ok"] is True
     assert scope["owner_id"] == "opal"
     assert scope["rows"][0]["file_glob"] == "astropy/modeling/separable.py"
+    assert facts["ok"] is True
+    assert any(row["fact_id"] == "implementer.required_file" for row in facts["rows"])
 
 
 def test_v2_owned_resource_tools_accept_short_agent_aliases(tmp_path: Path) -> None:

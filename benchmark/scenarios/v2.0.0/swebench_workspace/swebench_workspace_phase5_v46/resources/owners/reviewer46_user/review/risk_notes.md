@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: diophantine: incomplete results depending on syms order with permute=True
+Problem behavior to preserve outside the fix: diophantine: incomplete results depending on syms order with permute=True
 ```
 In [10]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(m,n), permute=True)
 Out[10]: {(-3, -2), (-3, 2), (-2, -3), (-2, 3), (2, -3), (2, 3), (3, -2), (3, 2)}
@@ -17,3 +17,7 @@ Out[10]: {(-3, -2), (-3, 2), (-2, -3), (-2, 3), (2, -3), (2, 3), (3, -2), (3, 2)
 In [11]: diophantine(n**4 + m**4 - 2**4 - 3**4, syms=(n,m), permute=True)
 Out[11]: {(3, 2)}
 ```
+
+
+Review risk marker: SYMPY-SYMPY-18189-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

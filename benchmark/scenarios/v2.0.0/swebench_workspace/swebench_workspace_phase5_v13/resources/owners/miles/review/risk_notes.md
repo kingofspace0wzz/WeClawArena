@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: [Bug]: DPI of a figure is doubled after unpickling on M1 Mac
+Problem behavior to preserve outside the fix: [Bug]: DPI of a figure is doubled after unpickling on M1 Mac
 ### Bug summary
 
 When a figure is unpickled, it's dpi is doubled. This behaviour happens every time and if done in a loop it can cause an `OverflowError`.
@@ -154,3 +154,6 @@ _No response_
 ### Installation
 
 pip
+
+Review risk marker: MATPLOTLIB-MATPLOTLIB-23476-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: GaussianMixture predict and fit_predict disagree when n_init>1
+Problem behavior to preserve outside the fix: GaussianMixture predict and fit_predict disagree when n_init>1
 #### Description
 When `n_init` is specified in GaussianMixture, the results of fit_predict(X) and predict(X) are often different.  The `test_gaussian_mixture_fit_predict` unit test doesn't catch this because it does not set `n_init`.
 
@@ -41,7 +41,7 @@ Traceback (most recent call last):
     verbose=verbose, header='Arrays are not equal')
   File "/home/scott/.local/lib/python2.7/site-packages/numpy/testing/_private/utils.py", line 796, in assert_array_compare
     raise AssertionError(msg)
-AssertionError:
+AssertionError: 
 Arrays are not equal
 
 (mismatch 88.6%)
@@ -74,3 +74,6 @@ setuptools: 39.0.1
     pandas: 0.23.1
    sklearn: 0.20.2
 ```
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-13142-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: Pipeline should implement __len__
+Problem behavior to preserve outside the fix: Pipeline should implement __len__
 #### Description
 
 With the new indexing support `pipe[:len(pipe)]` raises an error.
@@ -47,3 +47,6 @@ setuptools: 40.8.0
     Cython: 0.29.6
     pandas: 0.24.1
 ```
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-13439-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

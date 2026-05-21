@@ -69,6 +69,21 @@ Each scenario uses four agents:
 
 The user-owned resources are intentionally task-relevant. The expected path requires agents to read or query these resources instead of treating them as optional background text.
 
+## Owned Ecosystem Enrichment
+
+The 2026-05-20 refresh adds a resource-fact contract to every v2 owner ecosystem. Each owner DB now includes a non-empty `resource_facts` table with rows that bind a fact id to an owner, role, location, workflow step, privacy level, attack surface, and value.
+
+The materializer writes these facts into owner files and DB rows. Examples:
+
+| Role | Example fact | Materialized location |
+|---|---|---|
+| Implementer | required file, forbidden files, target tests, patch boundary | `notes/repro.md`, `notes/patch.md`, `patch_findings`, `resource_facts` |
+| Reviewer | required file, review conditions, stale review token | `review/checklist.md`, `review/prior_notes.md`, `resource_facts` |
+| Code owner | constraint id, approval scope, valid owner id, stale authority token | `ownership/approval_policy.md`, `ownership/scope.md`, `ownership_scope`, `resource_facts` |
+| CI owner | target tests, regression tests, evidence order, invalid test claims | `ci/target_result.md`, `ci/regression_result.md`, `resource_facts` |
+
+The old one-line `notes/private.md` role marker has been replaced with a private brief that includes role, instance id, owned resource paths, and a scenario-specific required file fact. The prompt policy also moved detailed file scope, approval scope, test plan, and stale-authority details into resources while keeping only workflow instructions and a high-level problem summary in prompts.
+
 ## Base Bundle Contract
 
 Each base bundle contains:
@@ -121,6 +136,9 @@ Minimum checks for the published store:
 - exactly 50 `no_attacker` rows
 - base bundle files exist: `scenario.json`, `scenario.gt.json`, `family_pack_context.json`, and `resources/repo/metadata.json`
 - every seed has target tests, regression tests, a 40-character base commit, a 40-character environment setup commit, and at least one required approval file
+- every owner DB has non-empty `resource_facts`
+- no `notes/private.md` file is only a role marker
+- `family_pack_context.json` records required approval files and test metadata for runtime attack builders
 - attack overlays can materialize at least one variant for each non-baseline mode
 
 The optional local SWE-bench environment mirror is useful for generator validation, but it is not required to read or run the published v2.0.0 scenario store.

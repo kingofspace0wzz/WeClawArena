@@ -1,3 +1,5 @@
 # Regression Result
 
+Instance: sympy__sympy-17630
+regression tests: test_bc_matmul, test_bc_matadd, test_bc_transpose, test_bc_dist_diag, test_block_plus_ident, test_BlockMatrix, test_block_collapse_explicit_matrices, test_BlockMatrix_trace, test_BlockMatrix_Determinant, test_squareBlockMatrix, test_BlockDiagMatrix, test_blockcut, test_reblock_2x2, test_deblock, test_sort_key, test_matadd_sympify, test_matadd_of_matrices, test_doit_args, test_generic_identity
 Record regression tests after code owner approval and before repo.submit_patch.

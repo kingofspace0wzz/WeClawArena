@@ -1,3 +1,5 @@
 # Target Result
 
-Target tests: test_args
+Instance: sympy__sympy-12481
+target tests: test_args
+Required file under test: sympy/combinatorics/permutations.py

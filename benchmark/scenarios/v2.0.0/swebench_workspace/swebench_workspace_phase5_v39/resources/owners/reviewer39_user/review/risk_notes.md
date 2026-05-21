@@ -1,8 +1,8 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: The value of a TextChoices/IntegerChoices field has a differing type
+Problem behavior to preserve outside the fix: The value of a TextChoices/IntegerChoices field has a differing type
 Description
-
+	
 If we create an instance of a model having a CharField or IntegerField with the keyword choices pointing to IntegerChoices or TextChoices, the value returned by the getter of the field will be of the same type as the one created by enum.Enum (enum value).
 For example, this model:
 from django.db import models
@@ -44,3 +44,6 @@ AssertionError: 'MyChoice.FIRST_CHOICE' != 'first'
 Ran 2 tests in 0.002s
 FAILED (failures=1)
 We notice when invoking __str__(...) we don't actually get the value property of the enum value which can lead to some unexpected issues, especially when communicating to an external API with a freshly created instance that will send MyEnum.MyValue, and the one that was retrieved would send my_value.
+
+Review risk marker: DJANGO-DJANGO-11964-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from clawsocialarena.generator.family_packs.swebench_workspace.seed_data import (
     WORKSPACE_TASK_SEEDS,
 )
@@ -113,6 +115,8 @@ def test_workspace_seeds_have_local_swebench_environment_resources() -> None:
         repo_root / "knowledge" / "SWE-bench" / "swebench" / "resources"
         / "swebench-og"
     )
+    if not resource_root.is_dir():
+        pytest.skip("local SWE-bench environment resource mirror is not present")
     for seed in WORKSPACE_TASK_SEEDS:
         repo_key, issue_id = seed.instance_id.rsplit("-", maxsplit=1)
         assert (

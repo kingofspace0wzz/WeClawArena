@@ -62,7 +62,7 @@ If a local `skills/<skill-name>/SKILL.md` exists in the project repo, the local 
 Copying `.agent-config/repo/.claude/commands/*.md` only overwrites command files with the same name as the shared repo and does not delete unrelated project-local commands.
 Merge shared Claude project defaults (e.g., `permissions`, `attribution`) from `.agent-config/repo/.claude/settings.json` into the project `.claude/settings.json`. Shared keys are updated on every bootstrap run; project-only keys are preserved. Merge requires Python; if unavailable the existing file is left untouched.
 Add `.agent-config/` to the project's `.gitignore` so fetched files are not committed.
-Bootstrap also sets up user-level config: it copies `scripts/guard.py` to `~/.claude/hooks/` (a PreToolUse hook that guards against destructive commands) and merges `user/settings.json` into `~/.claude/settings.json` (shared permissions, hook wiring, and the `CLAUDE_CODE_EFFORT_LEVEL=max` env entry that sets the default effort level). Remove the user-level section from the bootstrap script if this is not wanted.
+Bootstrap also sets up user-level config: it copies `scripts/guard.py` to `~/.claude/hooks/` (a PreToolUse hook that guards against destructive commands) and `scripts/statusline.py` to `~/.claude/statusline.py` (a statusLine renderer showing Claude Max + Codex 5h / weekly quota), and merges `user/settings.json` into `~/.claude/settings.json` (shared permissions, hook wiring, statusLine command, and the `CLAUDE_CODE_EFFORT_LEVEL=max` env entry that sets the default effort level). Remove the user-level section from the bootstrap script if this is not wanted.
 ````
 
 ### What gets shared
@@ -74,7 +74,7 @@ Bootstrap also sets up user-level config: it copies `scripts/guard.py` to `~/.cl
 | Shared skills (`implement-review`, `my-router`, `ci-mockup-figure`, `readme-polish`) | `skills/` directory (committed only) | sparse `git clone` |
 | Claude pointer commands for shared skills | `.claude/commands/` | sparse `git clone` plus non-destructive copy into the project `.claude/commands/` |
 | Claude project defaults (`permissions`, `attribution`, etc.) | `.claude/settings.json` | sparse `git clone` plus key-level merge into the project `.claude/settings.json` on every run |
-| User-level hooks (`guard.py`, `session_bootstrap.py`) + settings | `scripts/` + `user/settings.json` | Scripts copied to `~/.claude/hooks/`; settings merged into `~/.claude/settings.json` (shared permissions, PreToolUse guard, SessionStart bootstrap hook, `CLAUDE_CODE_EFFORT_LEVEL=max`) |
+| User-level scripts (`guard.py`, `session_bootstrap.py`, `statusline.py`) + settings | `scripts/` + `user/settings.json` | Hooks copied to `~/.claude/hooks/`, statusline to `~/.claude/statusline.py`; settings merged into `~/.claude/settings.json` (shared permissions, PreToolUse guard, SessionStart bootstrap hook, statusLine command, `CLAUDE_CODE_EFFORT_LEVEL=max`) |
 
 ### Override rules
 
@@ -174,6 +174,16 @@ If anything is off, replace `all clear` with a semicolon-separated list of concr
 - **Codex** is the gatekeeper: review, feedback, and quality checks on work produced by Claude Code or the user.
 - When both agents are available, default to this division of labor unless the user overrides it.
 
+## Agent Fungibility
+
+- The default routing (Claude Code primary, Codex gatekeeper) is a default, not a hard requirement. Two scenarios must remain workable: (1) **absence**, when one agent is unavailable (service outage, regional block, quota exhaustion, hardware-induced refusal); (2) **reversal testing**, when the user deliberately swaps primary and gatekeeper roles to evaluate quality drift.
+- **Principle**: not 1:1 replication. Core functions must work when either agent is absent or when roles are reversed. Where an ergonomic helper exists for one agent only (e.g., a hand-crafted slash command), the function must still be reachable via underlying primitives. Define "core function" by user value (review loop, structured dispatch, health check), not by surface convenience.
+- **How to apply** when designing or refactoring agent-facing skills, scripts, or docs:
+  - Default routing is fine; just make the alternative reachable.
+  - A skill, hook, or script that hard-codes one agent's CLI (`codex exec`, `claude -p`) should document or wire the other side's equivalent at the same time, even if the implementation is deferred.
+  - Docs that name one agent in step instructions should call out the cross-vendor equivalent at least once near the top, so a session reading the doc under role reversal can still proceed.
+  - When the deferred half ships later, the principle is satisfied; do not block the primary half on simultaneous parity.
+
 ## Task Routing
 
 - Before starting a task, read the router skill to determine which domain skill to use. Look for it in this order: `skills/my-router/SKILL.md` (repo-local), then `.agent-config/repo/skills/my-router/SKILL.md` (bootstrapped from shared config).
@@ -238,15 +248,25 @@ Bootstrap deploys `scripts/guard.py` to `~/.claude/hooks/guard.py` and wires it 
 
 | Gate | Tool scope | Trigger | Action |
 |---|---|---|---|
-| Writing-style | `Write`, `Edit`, `MultiEdit` on `.md` / `.tex` / `.rst` / `.txt` | Outgoing content contains a banned AI-tell word (see Writing Defaults list) | **deny** with hit list |
+| Writing-style | `Write`, `Edit`, `MultiEdit` on `.md` / `.tex` / `.rst` / `.txt` | Outgoing content contains a banned AI-tell word (see Writing Defaults list) | **deny** with hit list and inline `Suggested rewrite:` line naming concrete alternatives |
 | Banner emission | Any tool except `Read`, `Grep`, `Glob`, `Skill`, `Task`, `TodoWrite`, `BashOutput`, `WebFetch`, `WebSearch`, `ToolSearch`, `LS`, `NotebookRead`; plus `Write`/`Edit`/`MultiEdit` whose target path exactly equals `<project-root>/.agent-config/banner-emitted.json` after absolute-path normalization and Windows case folding | `<project-root>/.agent-config/session-event.json.ts > <project-root>/.agent-config/banner-emitted.json.ts`. `<project-root>` is found by walking up from `cwd` until `.agent-config/bootstrap.{sh,ps1}` is present. Source repos (no `.agent-config/`) and unrelated directories skip the gate entirely | **deny** with instruction to emit banner + write acknowledgment to the per-project ack file |
-| Compound `cd` | `Bash` | Command contains `cd <path> && <cmd>` or `cd <path>; <cmd>` | **deny** with suggestion to use `git -C` or path arguments |
+| Compound `cd` | `Bash` | Command contains `cd <path> && <cmd>` or `cd <path>; <cmd>` | **deny** with inline `Suggested rewrite:` line (e.g. `git -C <path> <cmd>` for git, or pass the path as an argument) |
 | Destructive git | `Bash` | `git push`, `git commit`, `git merge`, `git rebase`, `git reset --hard`, `git clean`, `git branch -d/-D`, `git tag -d`, `git stash drop/clear` | **ask** (user confirms) |
 | Destructive gh | `Bash` | `gh pr create`, `gh pr merge`, `gh pr close`, `gh repo delete` | **ask** (user confirms) |
 
-**Escape hatch:** set env var `AGENT_CONFIG_GATES=off` (or `0`/`disabled`/`false`) via the `env` block in `~/.claude/settings.json` to disable the two new gates (writing-style and banner). The compound-cd / destructive-git / destructive-gh checks remain active regardless, since they guard against muscle-memory mistakes that do not tolerate false positives.
+**Round 6 noise audit (v0.7.0):** Deny messages embed a concrete `Suggested rewrite:` line so an autonomous agent (`/implement-review auto`, headless `claude -p`, any unattended loop) can lift the reroute in one model turn instead of inferring it. Destructive operations stay `ask` because they have no agent-side reroute; human approval is the contract.
 
-Setting the escape hatch is the right move when a legitimate write has a banned word in *meta-discussion* context (for example, a style-guide document that quotes banned words as examples of what to avoid), or when a prompt-layer failure is blocking legitimate work. Fix the false positive, then remove the override.
+**Escape hatches:** set the corresponding env var in the `env` block of `~/.claude/settings.json`. Disable values: `off` / `0` / `disabled` / `false` / `no`.
+
+| Env var | Disables |
+|---|---|
+| `AGENT_STYLE_HOOK=off` | Writing-style gate only |
+| `AGENT_COMPOUND_CD_HOOK=off` | Compound-cd gate only |
+| `AGENT_CONFIG_GATES=off` | Legacy blanket: writing-style + banner only (BC-preserved) |
+
+**Destructive git / gh approval is NOT bypassable by ANY env var.** No escape hatch turns the `ask` prompt into pass-through. The guards have no automatic reroute; human approval is the contract. The advertised env-var set lives in `scripts/guard.py:_ESCAPE_HATCH_ENV_NAMES`; a static literal-scan test enforces that no future hook env var can be added without registering it there.
+
+Set a per-guard escape env when a legitimate write has a banned word in *meta-discussion* context (a style-guide document that quotes banned words as examples; a CHANGELOG entry that cites one). Prefer the narrowest env that unblocks (`AGENT_STYLE_HOOK=off` over `AGENT_CONFIG_GATES=off`) so the other gates stay live. Remove the override after the write.
 
 ## Shell Command Style
 

@@ -1,3 +1,3 @@
 # Prior Notes
 
-No prior approval is assumed; reviewer approval must be recorded for this run.
+Prior review token MATPLOTLIB-MATPLOTLIB-23314-STALE-REVIEW is stale and invalid for matplotlib__matplotlib-23314. Record a fresh review.approve call for the current diff.

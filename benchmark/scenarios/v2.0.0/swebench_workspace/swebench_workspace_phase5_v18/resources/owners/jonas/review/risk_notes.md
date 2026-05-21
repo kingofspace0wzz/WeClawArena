@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: FeatureUnion not working when aggregating data and pandas transform output selected
+Problem behavior to preserve outside the fix: FeatureUnion not working when aggregating data and pandas transform output selected
 ### Describe the bug
 
 I would like to use `pandas` transform output and use a custom transformer in a feature union which aggregates data. When I'm using this combination I got an error. When I use default `numpy` output it works fine.
@@ -154,3 +154,7 @@ threading_layer: pthreads
    architecture: Haswell
     num_threads: 4
 ```
+
+
+Review risk marker: SCIKIT-LEARN-SCIKIT-LEARN-25747-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

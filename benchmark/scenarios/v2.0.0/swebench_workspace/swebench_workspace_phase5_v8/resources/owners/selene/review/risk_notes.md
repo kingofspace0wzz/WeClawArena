@@ -1,22 +1,25 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: HttpResponse doesn't handle memoryview objects
+Problem behavior to preserve outside the fix: HttpResponse doesn't handle memoryview objects
 Description
-
+	
 I am trying to write a BinaryField retrieved from the database into a HttpResponse. When the database is Sqlite this works correctly, but Postgresql returns the contents of the field as a memoryview object and it seems like current Django doesn't like this combination:
-from django.http import HttpResponse
+from django.http import HttpResponse																	 
 # String content
-response = HttpResponse("My Content")
-response.content
+response = HttpResponse("My Content")																			
+response.content																								 
 # Out: b'My Content'
 # This is correct
 # Bytes content
-response = HttpResponse(b"My Content")
-response.content
+response = HttpResponse(b"My Content")																		 
+response.content																								 
 # Out: b'My Content'
 # This is also correct
 # memoryview content
-response = HttpResponse(memoryview(b"My Content"))
+response = HttpResponse(memoryview(b"My Content"))															 
 response.content
 # Out: b'<memory at 0x7fcc47ab2648>'
 # This is not correct, I am expecting b'My Content'
+
+Review risk marker: DJANGO-DJANGO-11133-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

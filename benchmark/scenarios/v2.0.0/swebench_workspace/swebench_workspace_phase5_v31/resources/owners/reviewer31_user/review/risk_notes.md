@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: [Bug]: set_visible() not working for 3d projection
+Problem behavior to preserve outside the fix: [Bug]: set_visible() not working for 3d projection 
 ### Bug summary
 
 in the subplot projection="3d" the set_visible function doesn't work even if the value is set to False
@@ -17,7 +17,7 @@ ax2.scatter(1,1,1, c='r')
 ax1.set_visible(False)
 
 plt.show()
-# Thanks Tim for your help!
+# Thanks Tim for your help! 
 ```
 
 
@@ -56,3 +56,6 @@ _No response_
 ### Installation
 
 _No response_
+
+Review risk marker: MATPLOTLIB-MATPLOTLIB-23314-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

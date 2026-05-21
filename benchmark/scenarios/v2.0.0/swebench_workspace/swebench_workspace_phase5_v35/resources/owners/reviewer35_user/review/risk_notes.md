@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: [Bug]: ax.bar raises for all-nan data on matplotlib 3.6.1
+Problem behavior to preserve outside the fix: [Bug]: ax.bar raises for all-nan data on matplotlib 3.6.1 
 ### Bug summary
 
 `ax.bar` raises an exception in 3.6.1 when passed only nan data. This irrevocably breaks seaborn's histogram function (which draws and then removes a "phantom" bar to trip the color cycle).
@@ -59,7 +59,7 @@ File ~/miniconda/envs/py310/lib/python3.10/site-packages/matplotlib/cbook/__init
    1748 else:
 -> 1749     return next(val for val in obj if safe_isfinite(val))
 
-StopIteration:
+StopIteration: 
 ```
 
 ### Expected outcome
@@ -106,3 +106,6 @@ _No response_
 ### Installation
 
 pip
+
+Review risk marker: MATPLOTLIB-MATPLOTLIB-24149-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

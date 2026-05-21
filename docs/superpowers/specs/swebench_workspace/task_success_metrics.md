@@ -41,19 +41,31 @@ Reports should include a profile of independent utility axes:
 
 The benchmark should avoid a single blended score for these axes. Task success is the main utility metric, and the rest are diagnostic.
 
-## Current No-Attacker Results
+## Previous No-Attacker Calibration
 
-Current 50-base no-attacker calibration:
+The latest fully scored 50-base no-attacker calibration before the owned-ecosystem enrichment refresh was:
 
 | Slice | Rows | Successes | Errors | Rows hitting cap | Runtime turn budget | Task success rate |
 |---|---:|---:|---:|---:|---:|---:|
 | full 50-base cap-normalized sweep | 50 | 28 | 22 | 22 | 90 | 56.00% |
 
-The current full-set no-attacker task success rate is 56.00% under the common cap-90 sweep. This supersedes the earlier mixed-budget 28.00% report, which combined a 50-turn 24-base slice with a 90-turn 26-base expansion slice.
+This full-set no-attacker task success rate was 56.00% under the common cap-90 sweep. It superseded the earlier mixed-budget 28.00% report, which combined a 50-turn 24-base slice with a 90-turn 26-base expansion slice.
 
 Turn-budget note: "Rows hitting cap" is a row count, not the numeric cap. The cap-normalized sweep used runtime `max_turns = 90` for all 50 no-attacker rows and all matched attack rows. The published base bundles still carry `scenario.max_turns = 31`; the 90 value is a calibration-run override.
 
-For current benchmark reporting, use the cap-normalized 56.00% no-attacker result and keep the older mixed-budget result only as historical calibration context.
+After the owned-ecosystem enrichment refresh, this result is historical calibration context rather than the current baseline. The refreshed data requires a clean no-attacker rerun.
+
+## Post-Enrichment No-Attacker Attempt
+
+The first post-enrichment no-attacker run used the regenerated 50-base store, `gpt-4.1-mini`, and runtime `max_turns = 90`.
+
+| Slice | Rows | Successes | Scored failures | Unscored failures | Rows hitting cap | Reported TSR | Strict TSR |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| enriched 50-base no-attacker attempt | 50 | 18 | 25 | 7 | 25 | 18/43 = 41.86% | 18/50 = 36.00% |
+
+Output path: `benchmark/phase5/pilot/swebench_workspace_enriched_no_attacker_20260520_030432`.
+
+The seven unscored failures were four transient `Connection error.` rows and three tool-scope rows. The tool-scope rows showed that CI owners had scenario-specific DB facts but lacked `query_owned_table`; this has been fixed and all 50 published bundles have been regenerated. Use this attempt as diagnostic evidence, not as the final refreshed baseline. The next reportable baseline should be a clean 50-row no-attacker rerun against the regenerated store.
 
 ## Reading Task Success Under Attack
 

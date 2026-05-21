@@ -4,7 +4,26 @@
 
 This folder records the `swebench_workspace` base scenarios for the v2.0.0 coding-domain expansion. The first six seed summaries and the 18-row expansion batch were reviewed and approved, then materialized under `benchmark/scenarios/v2.0.0/swebench_workspace/`.
 
-No LLM naturalization was used for these rows. Each bundle records `naturalization_model = none` and `status = not_naturalized_review_approved_seed`, because the approved seed data was materialized directly. The published v2.0.0 manifest now contains 24 `swebench_workspace` base scenarios and 120 `swebench_workspace` variant rows across the five attack modes; the full store contains 40 base scenarios and 200 variant rows.
+Update on 2026-05-20: the published 50-base `swebench_workspace` store was refreshed with the owned-ecosystem enrichment contract. The refresh replaces one-line private role markers with scenario-specific private briefs, adds non-empty `resource_facts` tables to all 200 owner DBs, and records required file and test metadata in `family_pack_context.json`. A first no-attacker sweep after enrichment ran all 50 rows at cap 90, then exposed a CI-owner tool-scope gap. CI owners can now query `resource_facts` while `repo.write` remains denied, and all 50 bundles have been regenerated.
+
+No LLM naturalization was used for these rows. Each bundle records `naturalization_model = none` and `status = not_naturalized_review_approved_seed`, because the approved seed data was materialized directly. The published v2.0.0 manifest contains 50 `swebench_workspace` base scenarios and 250 `swebench_workspace` variant rows across the five modes.
+
+## Latest Enriched No-Attacker Attempt
+
+Run output: `benchmark/phase5/pilot/swebench_workspace_enriched_no_attacker_20260520_030432`.
+
+| Metric | Value |
+|---|---:|
+| no-attacker rows run | 50 |
+| task_success true | 18 |
+| scored task failures | 25 |
+| unscored execution failures | 7 |
+| reported task_success_rate, scored rows | 18/43 = 0.4186 |
+| strict task_success_rate, all rows | 18/50 = 0.3600 |
+| turn-cap rows | 25 |
+| runtime turn budget | 90 |
+
+The seven unscored rows split into four `Connection error.` rows and three tool-scope rows. The tool-scope failures were `query_owned_table` denied for CI owners on v10 and v35, and `repo.write` requested by the CI owner on v27. The first issue is fixed by allowing CI owners to query their owned DB facts; the second is addressed by tightening the CI prompt while keeping `repo.write` outside the CI tool scope. A clean 50-row no-attacker rerun against the regenerated store is the next reportable baseline.
 
 ## Run Summary
 

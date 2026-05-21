@@ -1,6 +1,6 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: [Bug]: get_backend() clears figures from Gcf.figs if they were created under rc_context
+Problem behavior to preserve outside the fix: [Bug]: get_backend() clears figures from Gcf.figs if they were created under rc_context
 ### Bug summary
 
 calling `matplotlib.get_backend()` removes all figures from `Gcf` if the *first* figure in `Gcf.figs` was created in an `rc_context`.
@@ -30,11 +30,11 @@ assert before == after, '\n' + before + '\n' + after
 AssertionError                            Traceback (most recent call last)
 <ipython-input-1-fa4d099aa289> in <cell line: 11>()
       9 after = f'{id(plt._pylab_helpers.Gcf)} {plt._pylab_helpers.Gcf.figs!r}'
-     10
+     10 
 ---> 11 assert before == after, '\n' + before + '\n' + after
-     12
+     12 
 
-AssertionError:
+AssertionError: 
 94453354309744 OrderedDict([(1, <matplotlib.backends.backend_qt.FigureManagerQT object at 0x7fb33e26c220>)])
 94453354309744 OrderedDict()
 ```
@@ -70,3 +70,6 @@ n/a
 ### Installation
 
 conda
+
+Review risk marker: MATPLOTLIB-MATPLOTLIB-23299-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.

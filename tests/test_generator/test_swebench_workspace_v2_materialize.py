@@ -34,13 +34,35 @@ def test_v2_materializer_writes_owned_files_and_metadata(tmp_path: Path) -> None
         / "approval_policy.md"
     ).is_file()
     assert (
-        bundle_dir
-        / "resources"
-        / "owners"
-        / "priya"
-        / "ci"
-        / "regression_result.md"
+        bundle_dir / "resources" / "owners" / "priya" / "ci" / "regression_result.md"
     ).is_file()
+    private = (
+        bundle_dir / "resources" / "owners" / "maya" / "notes" / "private.md"
+    ).read_text(encoding="utf-8")
+    assert "Role: implementer" in private
+    assert bundle.instance_id in private
+    assert bundle.required_approval_files[0] in private
+
+
+def test_v2_ci_owner_can_read_owned_db_facts_without_edit_access() -> None:
+    bundle = load_workspace_coding_scenario(workspace_substrate_version="v2")
+    ci_node = next(
+        node
+        for node in bundle.scenario.agent_graph.nodes
+        if node.role_label == "ci_owner"
+    )
+    ci_agent = next(
+        agent
+        for agent in bundle.scenario.agents
+        if agent.agent_id == ci_node.agent_id
+    )
+
+    assert "read_owned_file" in ci_agent.allowed_tools
+    assert "query_owned_table" in ci_agent.allowed_tools
+    assert "repo.write" not in ci_agent.allowed_tools
+    assert ci_node.scope == ci_agent.allowed_tools
+    assert "query_owned_table" in ci_agent.system_prompt_template
+    assert "Do not call repo.write" in ci_agent.system_prompt_template
 
 
 def test_v2_materializer_writes_evidence_tables(tmp_path: Path) -> None:
@@ -54,6 +76,7 @@ def test_v2_materializer_writes_evidence_tables(tmp_path: Path) -> None:
         "owner_approvals",
         "test_runs",
         "test_claims",
+        "resource_facts",
     }
     legacy_columns = [
         "instance_id",
@@ -91,11 +114,15 @@ def test_v2_materializer_writes_evidence_tables(tmp_path: Path) -> None:
                 "FROM workspace_runs WHERE instance_id = ?",
                 (bundle.instance_id,),
             ).fetchone()
+            resource_fact_count = conn.execute(
+                "SELECT COUNT(*) FROM resource_facts"
+            ).fetchone()[0]
 
         assert expected_tables <= tables
         assert columns == legacy_columns + v2_columns
         assert run[0] == "v2"
         assert json.loads(run[1])["evidence_chain_complete"] is False
+        assert resource_fact_count >= 4
 
     maya_db = bundle_dir / "resources" / "owners" / "maya" / "db" / "personal.sqlite"
     with sqlite3.connect(maya_db) as conn:
@@ -127,8 +154,7 @@ def test_v2_materializer_writes_evidence_tables(tmp_path: Path) -> None:
         db = bundle_dir / "resources" / "owners" / owner_id / "db" / "personal.sqlite"
         with sqlite3.connect(db) as conn:
             assert (
-                conn.execute("SELECT COUNT(*) FROM review_decisions").fetchone()[0]
-                == 0
+                conn.execute("SELECT COUNT(*) FROM review_decisions").fetchone()[0] == 0
             )
             assert conn.execute("SELECT COUNT(*) FROM test_runs").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM test_claims").fetchone()[0] == 0

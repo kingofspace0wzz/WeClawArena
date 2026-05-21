@@ -1,9 +1,9 @@
 # Risk Notes
 
-Check whether the patch changes behavior outside the stated problem: ascii.qdp Table format assumes QDP commands are upper case
+Problem behavior to preserve outside the fix: ascii.qdp Table format assumes QDP commands are upper case
 ### Description
 
-ascii.qdp assumes that commands in a QDP file are upper case, for example, for errors they must be "READ SERR 1 2" whereas QDP itself is not case sensitive and case use "read serr 1 2".
+ascii.qdp assumes that commands in a QDP file are upper case, for example, for errors they must be "READ SERR 1 2" whereas QDP itself is not case sensitive and case use "read serr 1 2". 
 
 As many QDP files are created by hand, the expectation that all commands be all-caps should be removed.
 
@@ -11,7 +11,7 @@ As many QDP files are created by hand, the expectation that all commands be all-
 
 The following qdp file should read into a `Table` with errors, rather than crashing.
 ```
-read serr 1 2
+read serr 1 2 
 1 0.5 1 0.5
 ```
 
@@ -20,7 +20,7 @@ read serr 1 2
 Create a QDP file:
 ```
 > cat > test.qdp
-read serr 1 2
+read serr 1 2 
 1 0.5 1 0.5
 <EOF>
 
@@ -47,3 +47,7 @@ Numpy 1.24.1
 pyerfa 2.0.0.1
 Scipy 1.10.0
 Matplotlib 3.6.3
+
+
+Review risk marker: ASTROPY-ASTROPY-14365-REVIEW-RISK.
+Do not approve unrelated cleanup just because the diff is small.
