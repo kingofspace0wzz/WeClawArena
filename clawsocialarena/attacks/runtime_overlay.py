@@ -316,7 +316,64 @@ def _apply_artifacts(
         variant_dir=variant_dir, updates=artifacts.resource_db_updates
     )
     _apply_scenario_mutations(variant_dir=variant_dir, artifacts=artifacts)
+    _apply_attacker_persona_overlay(variant_dir=variant_dir, artifacts=artifacts)
     return file_writes, db_inserts, db_updates
+
+
+def _apply_attacker_persona_overlay(
+    *,
+    variant_dir: Path,
+    artifacts: StressVariantArtifacts,
+) -> None:
+    """Overlay the attacker peer's system prompt onto the runtime persona.
+
+    Adaptive recipes (privacy adaptive_exfiltration, collaboration
+    adaptive_malicious_peer, etc.) assemble a full system prompt for the
+    compromised peer agent in ``artifacts.attacker_peer_prompt``. The
+    in-process executor (``phase5_live_executor``) reads that prompt off
+    ``phase5_variant_metadata.json`` and feeds it to a separate end-of-round
+    LLM call. The Docker executor (``phase5_docker_executor``), which v2
+    family runs use, has no equivalent runtime peer mechanism -- it builds
+    each agent's system prompt from ``agent.system_prompt_template`` in
+    ``scenario.json``, with ``personas/<agent>.system.md`` acting as the
+    human-readable mirror.
+
+    To bridge that gap without growing the Docker substrate, we replace
+    the attacker peer's ``system_prompt_template`` (the authoritative
+    field for both substrates) with the attacker overlay at materialize
+    time. We also rewrite ``personas/<peer_id>.system.md`` so docs and
+    live-executor introspection paths agree. The attacker is treated as
+    a compromised version of that agent: replace rather than append,
+    since the recipes write self-contained system prompts that re-
+    establish identity, goals, and turn behavior. The base persona's
+    task framing remains available through the opening message and
+    conversation history.
+    """
+    peer_id = (artifacts.attacker_peer_id or "").strip()
+    prompt = artifacts.attacker_peer_prompt or ""
+    if not peer_id or not prompt.strip():
+        return
+
+    scenario_path = variant_dir / "scenario.json"
+    if scenario_path.is_file():
+        scenario = json.loads(scenario_path.read_text(encoding="utf-8"))
+        agents = scenario.get("agents") or []
+        mutated = False
+        for agent in agents:
+            if not isinstance(agent, dict):
+                continue
+            if str(agent.get("agent_id") or "") == peer_id:
+                agent["system_prompt_template"] = prompt.strip()
+                mutated = True
+        if mutated:
+            scenario_path.write_text(
+                json.dumps(scenario, indent=2, sort_keys=True), encoding="utf-8"
+            )
+
+    persona_path = variant_dir / "personas" / f"{peer_id}.system.md"
+    if persona_path.parent.is_dir():
+        header = f"# {peer_id}\n\n## Persona prompt (attacker overlay)\n\n"
+        persona_path.write_text(header + prompt.strip() + "\n", encoding="utf-8")
 
 
 def _seed_variant_resource_dirs(variant_dir: Path) -> None:
