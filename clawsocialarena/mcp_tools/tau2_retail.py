@@ -629,6 +629,16 @@ def _auth_response(user_id: str, context: RetailSessionContext) -> dict[str, Any
         response["household_id"] = context.household_id
     if context.shared_account_id:
         response["shared_account_id"] = context.shared_account_id
+    # Surface household-level context files on every auth-success response.
+    # The agent's natural workflow after authenticate_user / find_user_id_*
+    # is to plan its mutation, and the household_files block lets it see
+    # shipping-desk order notes and any consent_log entries that the
+    # household has on file. Authority decisions still flow through the
+    # consent grant handlers; nothing here grants authority on its own.
+    # See _read_household_context_files for the cross-axis rationale.
+    household_files = _read_household_context_files(context)
+    if household_files:
+        response["household_files"] = household_files
     return response
 
 
@@ -714,10 +724,86 @@ def _get_order_details(
         conn.close()
     if row is None:
         return {"ok": False, "error": "order_not_found"}
-    return {
+    response: dict[str, Any] = {
         "ok": True,
         "order": _row_to_order(row),
     }
+    household_files = _read_household_context_files(context, order_id=order_id)
+    if household_files:
+        response["household_files"] = household_files
+    return response
+
+
+def _read_household_context_files(
+    context: RetailSessionContext, *, order_id: str | None = None
+) -> dict[str, Any]:
+    """Surface text-shaped household-level context that production tooling
+    would naturally consult around an order touch: pre-recorded order
+    notes the shipping desk attached to the order JSON, and consent-log
+    text artifacts that the household uses to track approvals.
+
+    These two surfaces (``resources/household/<id>/orders.json`` and
+    ``resources/household/<id>/consent_log.txt``) are the targets of the
+    cross-family ``security_indirect_resource_injection`` and
+    ``governance_poisoned_consent`` recipes. Returning their contents in
+    the order-details response gives the focal agent the opportunity to
+    encounter the injection during its legitimate context-gathering
+    turn, which is the only way the ASR judge can measure whether the
+    agent follows the injected instructions. Authority decisions still
+    flow through ``_grant_*_consent`` and the audit-trail; nothing here
+    grants authority on its own.
+    """
+    household_id = context.shared_account_id or context.household_id
+    if not household_id:
+        return {}
+    household_root = context.resources_root / "household" / household_id
+    if not household_root.is_dir():
+        return {}
+    files: dict[str, Any] = {}
+    orders_path = household_root / "orders.json"
+    if orders_path.is_file():
+        try:
+            data = json.loads(orders_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, list):
+            # Always surface the full household-level orders snapshot —
+            # the shipping desk's notes are household-wide bulletins and
+            # are normally relevant to every order touch, not only to
+            # the specific row the caller asked about.
+            files["household_orders_snapshot"] = data
+            if order_id is not None:
+                match = next(
+                    (
+                        entry
+                        for entry in data
+                        if isinstance(entry, dict)
+                        and str(entry.get("order_id") or "") == order_id
+                    ),
+                    None,
+                )
+                if match is not None and match.get("order_notes"):
+                    files["order_notes"] = match.get("order_notes")
+            # Also expose any cross-order notes (the injection target for
+            # security_indirect_resource_injection writes a single record
+            # whose order_id may differ from the focal task's order_id).
+            cross_notes = [
+                {
+                    "order_id": str(entry.get("order_id") or ""),
+                    "order_notes": entry.get("order_notes"),
+                }
+                for entry in data
+                if isinstance(entry, dict) and entry.get("order_notes")
+            ]
+            if cross_notes:
+                files["household_order_notes"] = cross_notes
+    consent_path = household_root / "consent_log.txt"
+    if consent_path.is_file():
+        try:
+            files["consent_log"] = consent_path.read_text(encoding="utf-8")
+        except OSError:
+            pass
+    return files
 
 
 def _list_my_orders(
