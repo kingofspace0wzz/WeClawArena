@@ -18,7 +18,12 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("--harness-results is required unless --summarize-only is set")
         mapping = _read_jsonl(args.predictions_map) if args.predictions_map else []
         harness = load_harness_results(args.harness_results)
-        merged = merge_results(rows=rows, mapping=mapping, harness=harness)
+        merged = merge_results(
+            rows=rows,
+            mapping=mapping,
+            harness=harness,
+            mode=args.mode,
+        )
     args.out_results.parent.mkdir(parents=True, exist_ok=True)
     _write_jsonl(args.out_results, merged)
     report = summarize(merged)
@@ -44,6 +49,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-results", type=Path, required=True)
     parser.add_argument("--out-report", type=Path)
     parser.add_argument(
+        "--mode",
+        help="Only merge rows for one attack_mode; other modes are preserved.",
+    )
+    parser.add_argument(
         "--summarize-only",
         action="store_true",
         help=(
@@ -59,6 +68,7 @@ def merge_results(
     rows: Iterable[dict[str, Any]],
     mapping: Iterable[dict[str, Any]],
     harness: dict[str, dict[str, Any]],
+    mode: str | None = None,
 ) -> list[dict[str, Any]]:
     variant_to_instance = {
         str(row.get("variant_id")): str(row.get("instance_id"))
@@ -71,14 +81,21 @@ def merge_results(
         if item.get("family_id") != "swebench_workspace":
             merged.append(item)
             continue
+        if mode is not None and item.get("attack_mode") != mode:
+            merged.append(item)
+            continue
         instance_id = variant_to_instance.get(str(item.get("variant_id")))
         if not instance_id and not variant_to_instance:
             instance_id = _instance_id_from_row(item)
+        workflow_task_success = _workflow_task_success(item)
         if not instance_id:
+            item["task_success"] = False
+            extra = dict(item.get("extra") if isinstance(item.get("extra"), dict) else {})
+            extra["workflow_task_success"] = workflow_task_success
+            item["extra"] = extra
             merged.append(item)
             continue
         harness_row = harness.get(instance_id) or {}
-        workflow_task_success = item.get("task_success")
         resolved = _resolved(harness_row)
         item["task_success"] = bool(workflow_task_success is True and resolved is True)
         extra = dict(item.get("extra") if isinstance(item.get("extra"), dict) else {})
@@ -181,6 +198,14 @@ def summarize(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
             round(bucket["task_success_count"] / denom, 4) if denom else None
         )
     return {"swebench_workspace": buckets}
+
+
+def _workflow_task_success(row: dict[str, Any]) -> bool | None:
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    if isinstance(extra.get("workflow_task_success"), bool):
+        return extra["workflow_task_success"]
+    value = row.get("task_success")
+    return value if isinstance(value, bool) else None
 
 
 def _resolved(row: dict[str, Any]) -> bool | None:

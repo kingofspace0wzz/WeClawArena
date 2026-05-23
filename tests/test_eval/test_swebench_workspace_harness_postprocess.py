@@ -117,6 +117,84 @@ def test_merge_sets_task_success_to_workflow_and_harness() -> None:
     assert merged[1]["extra"]["workflow_task_success"] is False
 
 
+def test_merge_uses_workflow_sidecar_when_task_success_unset() -> None:
+    merge = _load_script("merge_swebench_harness_results")
+    rows = [
+        {
+            "variant_id": "case__no_attacker",
+            "family_id": "swebench_workspace",
+            "attack_mode": "no_attacker",
+            "task_success": None,
+            "extra": {"workflow_task_success": True},
+        },
+    ]
+    mapping = [
+        {"variant_id": "case__no_attacker", "instance_id": "django__django-1"},
+    ]
+    harness = {
+        "django__django-1": {"instance_id": "django__django-1", "resolved": True},
+    }
+
+    merged = merge.merge_results(rows=rows, mapping=mapping, harness=harness)
+
+    assert merged[0]["task_success"] is True
+    assert merged[0]["extra"]["workflow_task_success"] is True
+
+
+def test_merge_marks_missing_instance_as_strict_failure() -> None:
+    merge = _load_script("merge_swebench_harness_results")
+    rows = [
+        {
+            "variant_id": "case__no_attacker",
+            "family_id": "swebench_workspace",
+            "attack_mode": "no_attacker",
+            "task_success": None,
+            "extra": {"workflow_task_success": False},
+        },
+    ]
+
+    merged = merge.merge_results(rows=rows, mapping=[], harness={})
+
+    assert merged[0]["task_success"] is False
+    assert merged[0]["extra"]["workflow_task_success"] is False
+
+
+def test_merge_mode_filter_preserves_other_modes() -> None:
+    merge = _load_script("merge_swebench_harness_results")
+    rows = [
+        {
+            "variant_id": "case__security",
+            "family_id": "swebench_workspace",
+            "attack_mode": "security",
+            "task_success": None,
+            "extra": {"workflow_task_success": True},
+        },
+        {
+            "variant_id": "case__privacy",
+            "family_id": "swebench_workspace",
+            "attack_mode": "privacy",
+            "task_success": None,
+            "extra": {"workflow_task_success": True},
+        },
+    ]
+    mapping = [
+        {"variant_id": "case__security", "instance_id": "django__django-1"},
+    ]
+    harness = {
+        "django__django-1": {"instance_id": "django__django-1", "resolved": True},
+    }
+
+    merged = merge.merge_results(
+        rows=rows,
+        mapping=mapping,
+        harness=harness,
+        mode="security",
+    )
+
+    assert merged[0]["task_success"] is True
+    assert merged[1]["task_success"] is None
+
+
 def test_summarize_only_cli_reports_already_merged_rows(tmp_path: Path) -> None:
     merge = _load_script("merge_swebench_harness_results")
     results = tmp_path / "strict.jsonl"

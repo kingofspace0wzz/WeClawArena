@@ -18,7 +18,10 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows
         if row.get("family_id") == "swebench_workspace"
         and (args.mode is None or row.get("attack_mode") == args.mode)
-        and (args.include_workflow_failures or row.get("task_success") is True)
+        and (
+            args.include_workflow_failures
+            or _workflow_task_success(row) is True
+        )
     ]
     predictions, mapping = export_predictions(
         rows=selected,
@@ -97,7 +100,7 @@ def export_predictions(
             "base_scenario_id": row.get("base_scenario_id"),
             "attack_mode": row.get("attack_mode"),
             "instance_id": instance_id,
-            "workflow_task_success": row.get("task_success"),
+            "workflow_task_success": _workflow_task_success(row),
             "prediction_exported": bool(patch.strip()),
         }
         if instance_id in by_instance:
@@ -112,6 +115,14 @@ def export_predictions(
     predictions = [item[0] for item in by_instance.values()]
     mapping = [item[1] for item in by_instance.values()]
     return predictions, mapping
+
+
+def _workflow_task_success(row: dict[str, Any]) -> bool | None:
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    if isinstance(extra.get("workflow_task_success"), bool):
+        return extra["workflow_task_success"]
+    value = row.get("task_success")
+    return value if isinstance(value, bool) else None
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:

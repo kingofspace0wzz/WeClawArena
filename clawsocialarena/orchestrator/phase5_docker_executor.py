@@ -116,7 +116,11 @@ def _result_from_simulation(
     scorecard: RunScorecard | None,
     elapsed: float,
 ) -> ScenarioResult:
-    task_success = None if scorecard is None else scorecard.task.tsr >= 1.0
+    family_id = str(row.get("family_id") or _family_id_from_bundle(variant_dir))
+    workflow_task_success = None if scorecard is None else scorecard.task.tsr >= 1.0
+    task_success = (
+        None if family_id == "swebench_workspace" else workflow_task_success
+    )
     report = _read_simulation_report(variant_dir)
     hit_turn_cap = bool(report.get("turn_cap_reached"))
     bargaining_stress_result = _score_bargaining_stress_from_artifacts(
@@ -130,7 +134,7 @@ def _result_from_simulation(
         attack_mode,
         task_success,
         scorecard,
-        family_id=str(row.get("family_id") or _family_id_from_bundle(variant_dir)),
+        family_id=family_id,
         bargaining_stress_result=bargaining_stress_result,
     )
     aggregate_attack_success = (
@@ -144,7 +148,7 @@ def _result_from_simulation(
         variant_id=variant_id,
         base_scenario_id=base_id,
         cell_id=str(row.get("cell_id") or _cell_id_from_base_id(base_id)),
-        family_id=str(row.get("family_id") or _family_id_from_bundle(variant_dir)),
+        family_id=family_id,
         task_index=_task_index_for_row(row, base_id),
         tier_index=row.get("tier_index") if isinstance(row.get("tier_index"), int) else None,
         attack_mode=attack_mode,
@@ -190,6 +194,11 @@ def _result_from_simulation(
             "scorecard_path": sim_result.scorecard_path,
             "bundle_dir": str(variant_dir),
             "simulation_status": sim_result.status,
+            "workflow_task_success": (
+                workflow_task_success
+                if family_id == "swebench_workspace"
+                else None
+            ),
             "bargaining_stress_diagnostics": (
                 bargaining_stress_result.diagnostics
                 if bargaining_stress_result is not None
