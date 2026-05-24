@@ -45,6 +45,7 @@ from clawsocialarena.eval.llm_judge import (
 from clawsocialarena.llm.openai_client import (
     OpenAIJsonResult,
     OpenAIResponsesJsonClient,
+    default_json_client,
 )
 
 
@@ -603,7 +604,7 @@ def travel_asr_judge_score_row(
     client: _JudgeClient | None = None,
 ) -> TravelASRJudgeRowResult:
     if client is None:
-        client = OpenAIResponsesJsonClient()
+        client = default_json_client()
     payload = build_travel_asr_payload(
         row=row,
         trajectory=trajectory,

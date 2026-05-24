@@ -18,6 +18,14 @@ ATTACK_MODES = (
     "governance",
 )
 
+PAUSED_MODELS = {
+    "deepseek_r1",
+    "minimax_m2",
+    "minimax_m25",
+    "oss_120b",
+    "oss_20b",
+}
+
 
 def main() -> int:
     args = parse_args()
@@ -27,6 +35,7 @@ def main() -> int:
     completed = completed_result_files(root, models=args.models)
     update_live_results(root)
     print(f"completed_files={len(completed)}", flush=True)
+    modes = tuple(args.modes or ATTACK_MODES)
     for result_path in completed:
         model = result_path.parts[-3]
         print(f"model={model} result={result_path}", flush=True)
@@ -34,7 +43,7 @@ def main() -> int:
         strict_path.parent.mkdir(parents=True, exist_ok=True)
         if not strict_path.exists():
             shutil.copy2(result_path, strict_path)
-        for mode in ATTACK_MODES:
+        for mode in modes:
             run_mode(
                 root=root,
                 work=work,
@@ -43,6 +52,7 @@ def main() -> int:
                 strict_path=strict_path,
                 max_workers=args.max_workers,
                 timeout=args.timeout,
+                skip_existing=args.skip_existing,
             )
         shutil.copy2(strict_path, result_path)
         report_path = work / model / "strict_report.json"
@@ -78,6 +88,17 @@ def parse_args() -> argparse.Namespace:
         nargs="*",
         help="Optional model directory names to evaluate, in the order given.",
     )
+    parser.add_argument(
+        "--modes",
+        nargs="*",
+        choices=ATTACK_MODES,
+        help="Optional attack modes to evaluate, in the order given.",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip mode directories that already have a strict_report.json.",
+    )
     return parser.parse_args()
 
 
@@ -88,6 +109,8 @@ def completed_result_files(root: Path, models: list[str] | None = None) -> list[
     for path in sorted(root.glob("*/swebench_workspace/BATCH_02_standard_RESULTS.jsonl")):
         model = path.parts[-3]
         if allowed and model not in allowed:
+            continue
+        if not allowed and model in PAUSED_MODELS:
             continue
         rows = read_jsonl(path)
         swebench_rows = [row for row in rows if row.get("family_id") == "swebench_workspace"]
@@ -108,9 +131,14 @@ def run_mode(
     strict_path: Path,
     max_workers: int,
     timeout: int,
+    skip_existing: bool,
 ) -> None:
     mode_dir = work / model / mode
     mode_dir.mkdir(parents=True, exist_ok=True)
+    mode_report = mode_dir / "strict_report.json"
+    if skip_existing and mode_report.exists():
+        print(f"mode={model}/{mode} skip_existing={mode_report}", flush=True)
+        return
     predictions = mode_dir / "predictions.jsonl"
     mapping = mode_dir / "predictions.jsonl.map.jsonl"
     report_dir = mode_dir / "reports"
@@ -174,7 +202,6 @@ def run_mode(
         harness_input = mode_dir / "empty_instance_results.jsonl"
         harness_input.write_text("", encoding="utf-8")
     next_strict = mode_dir / "strict_merged.jsonl"
-    mode_report = mode_dir / "strict_report.json"
     run(
         [
             sys.executable,

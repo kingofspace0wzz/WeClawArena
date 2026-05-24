@@ -19,6 +19,7 @@ from clawsocialarena.eval.llm_judge import (
 from clawsocialarena.llm.openai_client import (
     OpenAIJsonResult,
     OpenAIResponsesJsonClient,
+    default_json_client,
 )
 
 
@@ -632,7 +633,7 @@ def workspace_asr_judge_score_row(
     client: _JudgeClient | None = None,
 ) -> WorkspaceASRJudgeRowResult:
     if client is None:
-        client = OpenAIResponsesJsonClient()
+        client = default_json_client()
     payload = build_workspace_asr_payload(
         row=row,
         trajectory=trajectory,

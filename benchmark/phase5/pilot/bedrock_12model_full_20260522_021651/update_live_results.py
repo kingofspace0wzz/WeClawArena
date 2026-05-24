@@ -42,6 +42,21 @@ ATTACK_MODES = (
     "governance",
 )
 
+PAUSED_MODELS = (
+    "deepseek_r1",
+    "minimax_m2",
+    "minimax_m25",
+    "oss_120b",
+    "oss_20b",
+)
+
+GPT41_MINI_RESULT_FILES = (
+    Path("benchmark/phase5/pilot/claw_no_attacker_gpt41mini_fix_20260524_103703/BATCH_02_standard_RESULTS.jsonl"),
+    Path("benchmark/phase5/pilot/claw_trading_no_attacker_gpt41mini_fix_20260524_121543/BATCH_02_standard_RESULTS.jsonl"),
+    Path("benchmark/phase5/pilot/claw_no_attacker_gpt41mini_rerun_20260523_1215/BATCH_02_standard_RESULTS.jsonl"),
+    Path("benchmark/phase5/pilot/claw_no_attacker_gpt41mini_20260522/NO_ATTACKER_RESULTS.jsonl"),
+)
+
 
 def main() -> int:
     args = parse_args()
@@ -74,6 +89,7 @@ def render(root: Path) -> str:
         "- Non-SWE TSR is `task_success is True / completed rows`.",
         "- SWE-bench TSR uses true harness results when available. Pending strict harness rows are not counted as true TSR yet.",
         "- `oss_20b` is intentionally stopped and excluded from future resume runs.",
+        f"- Paused models for new runs: `{', '.join(PAUSED_MODELS)}`.",
         "",
         "## Overall Progress",
         "",
@@ -88,6 +104,8 @@ def render(root: Path) -> str:
         lines.append("")
     lines.extend(["## SWE-bench True Harness Progress", ""])
     lines.extend(harness_progress_table(harness))
+    lines.extend(["", "## Supplemental gpt-4.1-mini Results", ""])
+    lines.extend(gpt41_mini_table(root))
     lines.append("")
     return "\n".join(lines)
 
@@ -266,6 +284,34 @@ def count_jsonl(path: Path) -> int:
     if not path.exists():
         return 0
     return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+
+
+def gpt41_mini_table(root: Path) -> list[str]:
+    repo_root = root.parents[3]
+    lines = [
+        "These prior rows are not part of the Bedrock 12-model totals. They are no-attacker CLAW clinical/trading runs found under `benchmark/phase5/pilot`.",
+        "",
+        "| source | families | rows | definite | TSR | errors |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    found = False
+    for rel_path in GPT41_MINI_RESULT_FILES:
+        path = repo_root / rel_path
+        rows = read_jsonl(path)
+        if not rows:
+            continue
+        found = True
+        families = ", ".join(sorted({str(row.get("family_id")) for row in rows}))
+        definite = rows_with_definite_task(rows)
+        errors = sum(1 for row in rows if row.get("error"))
+        source = rel_path.parent.name
+        lines.append(
+            f"| {source} | {families} | {len(rows)} | {len(definite)} | "
+            f"{format_tsr(definite)} | {errors} |"
+        )
+    if not found:
+        lines.append("| - | - | 0 | 0 | 0/0 (n/a) | 0 |")
+    return lines
 
 
 if __name__ == "__main__":

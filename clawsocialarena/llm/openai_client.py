@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from pydantic import BaseModel
@@ -245,11 +247,281 @@ class OpenAIChatJsonClient:
         )
 
 
+class OpenAICompatibleChatJsonClient:
+    """OpenAI-compatible Chat Completions client for local rollout servers.
+
+    This adapter is intended for SGLang/vLLM-style endpoints used during RL
+    rollout. It preserves the project ``JsonClient`` interface while routing
+    requests through ``chat.completions.create`` instead of the Responses API.
+    Set ``WECLAW_OPENAI_COMPAT_CHAT=1`` and ``OPENAI_BASE_URL`` to enable it.
+    """
+
+    def __init__(self, *, timeout_seconds: float | None = None) -> None:
+        self._timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else _openai_request_timeout_seconds()
+        )
+
+    def create_json(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        schema: dict[str, Any] | None = None,
+        cache_key: str | None = None,
+    ) -> OpenAIJsonResult:
+        del schema, cache_key
+        from openai import OpenAI
+
+        route = _openai_compatible_route(payload=payload, default_model=model)
+        client = OpenAI(
+            api_key=route["api_key"],
+            base_url=route["base_url"],
+            timeout=self._timeout_seconds,
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(payload, sort_keys=True)},
+        ]
+        response = client.chat.completions.create(
+            model=route["model"],
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+        choice = response.choices[0].message
+        content = choice.content or "{}"
+        _log_compatible_chat_turn(
+            kind="json",
+            agent_id=_agent_id_from_payload(payload),
+            model=route["model"],
+            base_url=route["base_url"],
+            messages=messages,
+            tools=[],
+            content=content,
+            tool_calls=[],
+            usage=_chat_usage_dict(response),
+        )
+        return OpenAIJsonResult(
+            data=_loads_response_json_object(content),
+            usage=_chat_token_usage(route["model"], response),
+        )
+
+    def create_with_tools(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+        tools: list[dict[str, Any]],
+        cache_key: str | None = None,
+    ) -> OpenAIToolCallResult:
+        del cache_key
+        from openai import OpenAI
+
+        route = _openai_compatible_route(payload=payload, default_model=model)
+        client = OpenAI(
+            api_key=route["api_key"],
+            base_url=route["base_url"],
+            timeout=self._timeout_seconds,
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(payload, sort_keys=True)},
+        ]
+        chat_tools = [_responses_tool_to_chat_tool(tool) for tool in tools]
+        kwargs: dict[str, Any] = {
+            "model": route["model"],
+            "messages": messages,
+        }
+        if chat_tools:
+            kwargs["tools"] = chat_tools
+            kwargs["tool_choice"] = "auto"
+        response = client.chat.completions.create(**kwargs)
+        choice = response.choices[0].message
+        tool_calls = _chat_tool_calls(choice)
+        content = choice.content or ""
+        _log_compatible_chat_turn(
+            kind="tools",
+            agent_id=_agent_id_from_payload(payload),
+            model=route["model"],
+            base_url=route["base_url"],
+            messages=messages,
+            tools=chat_tools,
+            content=content,
+            tool_calls=[call.model_dump() for call in tool_calls],
+            usage=_chat_usage_dict(response),
+        )
+        return OpenAIToolCallResult(
+            tool_calls=tool_calls,
+            content=content.strip(),
+            usage=_chat_token_usage(route["model"], response),
+        )
+
+
 def require_openai_key() -> str:
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("OPENAI_API_KEY is required for paid LLM batch runs")
     return key
+
+
+def _openai_compatible_base_url() -> str:
+    value = os.environ.get("OPENAI_BASE_URL") or os.environ.get("WECLAW_OPENAI_BASE_URL")
+    if not value:
+        raise RuntimeError(
+            "OPENAI_BASE_URL is required when WECLAW_OPENAI_COMPAT_CHAT=1"
+        )
+    return value
+
+
+def _openai_compatible_api_key() -> str:
+    return os.environ.get("OPENAI_API_KEY") or os.environ.get("WECLAW_OPENAI_API_KEY") or "EMPTY"
+
+
+def _openai_compatible_route(*, payload: dict[str, Any], default_model: str) -> dict[str, str]:
+    agent_id = _agent_id_from_payload(payload)
+    return {
+        "base_url": _mapped_agent_value(
+            env_name="WECLAW_AGENT_BASE_URLS",
+            agent_id=agent_id,
+            fallback=_openai_compatible_base_url(),
+        ),
+        "model": _mapped_agent_value(
+            env_name="WECLAW_AGENT_MODEL_MAP",
+            agent_id=agent_id,
+            fallback=default_model,
+        ),
+        "api_key": _mapped_agent_value(
+            env_name="WECLAW_AGENT_API_KEYS",
+            agent_id=agent_id,
+            fallback=_openai_compatible_api_key(),
+        ),
+    }
+
+
+def _agent_id_from_payload(payload: dict[str, Any]) -> str:
+    value = payload.get("agent_id") if isinstance(payload, dict) else None
+    return str(value or "")
+
+
+def _mapped_agent_value(*, env_name: str, agent_id: str, fallback: str) -> str:
+    mapping = _json_env_mapping(env_name)
+    if agent_id and agent_id in mapping:
+        return str(mapping[agent_id])
+    role = _agent_role(agent_id)
+    if role and role in mapping:
+        return str(mapping[role])
+    return fallback
+
+
+def _json_env_mapping(env_name: str) -> dict[str, Any]:
+    raw = os.environ.get(env_name)
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _agent_role(agent_id: str) -> str:
+    lowered = agent_id.lower()
+    for role in ("engineer", "reviewer", "owner", "ci"):
+        if role in lowered:
+            return role
+    return ""
+
+
+def _responses_tool_to_chat_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    if tool.get("type") == "function" and "function" in tool:
+        return tool
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.get("name", ""),
+            "description": tool.get("description", ""),
+            "parameters": tool.get("parameters") or {"type": "object", "properties": {}},
+        },
+    }
+
+
+def _chat_tool_calls(message: Any) -> list[OpenAIToolCall]:
+    out: list[OpenAIToolCall] = []
+    for item in getattr(message, "tool_calls", []) or []:
+        function = getattr(item, "function", None)
+        name = str(getattr(function, "name", "") or "")
+        raw_args = getattr(function, "arguments", "") or ""
+        try:
+            decoded = json.loads(raw_args) if raw_args else {}
+        except (TypeError, ValueError):
+            decoded = {}
+        out.append(
+            OpenAIToolCall(
+                call_id=str(getattr(item, "id", "") or ""),
+                name=name,
+                arguments=decoded if isinstance(decoded, dict) else {},
+            )
+        )
+    return out
+
+
+def _chat_token_usage(model: str, response: Any) -> TokenUsage:
+    usage = getattr(response, "usage", None)
+    return TokenUsage(
+        model=model,
+        input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+        cached_input_tokens=_cached_tokens(usage),
+        output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+    )
+
+
+def _chat_usage_dict(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    return {
+        "prompt_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+        "total_tokens": int(getattr(usage, "total_tokens", 0) or 0),
+        "cached_tokens": _cached_tokens(usage),
+    }
+
+
+def _log_compatible_chat_turn(
+    *,
+    kind: str,
+    agent_id: str,
+    model: str,
+    base_url: str,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    content: str,
+    tool_calls: list[dict[str, Any]],
+    usage: dict[str, int],
+) -> None:
+    path = os.environ.get("WECLAW_RL_INTERACTION_LOG")
+    if not path:
+        return
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": time.time(),
+        "kind": kind,
+        "agent_id": agent_id,
+        "model": model,
+        "base_url": base_url,
+        "messages": messages,
+        "tools": tools,
+        "assistant": {
+            "content": content,
+            "tool_calls": tool_calls,
+        },
+        "usage": usage,
+    }
+    with out.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, sort_keys=True))
+        fh.write("\n")
 
 
 def _openai_request_timeout_seconds() -> float:
@@ -323,15 +595,66 @@ def _loads_response_json_object(text: str) -> dict[str, Any]:
         try:
             data, _end = json.JSONDecoder().raw_decode(stripped)
         except json.JSONDecodeError:
-            # Salvage: some models (notably Claude Sonnet 4.6 on Bedrock)
-            # precede the JSON with conversational preamble or wrap it in
-            # a fenced code block somewhere in the middle of the response.
-            # Look for the first fenced JSON object, then fall back to
-            # brace counting that respects string escapes.
-            data = _salvage_first_json_object(text)
+            repaired = _repair_json_boolean_expressions(stripped)
+            if repaired != stripped:
+                try:
+                    data = json.loads(repaired)
+                except json.JSONDecodeError:
+                    data = _salvage_first_json_object(text)
+            else:
+                data = _salvage_first_json_object(text)
     if not isinstance(data, dict):
         raise TypeError("OpenAI JSON response must decode to an object")
     return data
+
+
+def _repair_json_boolean_expressions(text: str) -> str:
+    """Repair unquoted JSON boolean expressions such as ``false && false``."""
+    import re
+
+    def replace_expr(match: re.Match[str]) -> str:
+        values = [part == "true" for part in re.findall(r"\btrue\b|\bfalse\b", match.group(0))]
+        if "&&" in match.group(0):
+            return "true" if all(values) else "false"
+        return "true" if any(values) else "false"
+
+    out: list[str] = []
+    segment: list[str] = []
+    in_string = False
+    escape = False
+
+    def flush_segment() -> None:
+        if not segment:
+            return
+        raw = "".join(segment)
+        fixed = re.sub(
+            r"\b(?:true|false)\b(?:\s*(?:&&|\|\|)\s*\b(?:true|false)\b)+",
+            replace_expr,
+            raw,
+        )
+        out.append(fixed)
+        segment.clear()
+
+    for ch in text:
+        if escape:
+            out.append(ch)
+            escape = False
+            continue
+        if in_string:
+            out.append(ch)
+            if ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            flush_segment()
+            out.append(ch)
+            in_string = True
+            continue
+        segment.append(ch)
+    flush_segment()
+    return "".join(out)
 
 
 def _salvage_first_json_object(text: str) -> dict[str, Any]:
@@ -440,16 +763,27 @@ _BEDROCK_PREFIXES: tuple[str, ...] = (
     "eu.anthropic.",
     "apac.anthropic.",
     "global.anthropic.",
+    "deepseek.",
+    "us.deepseek.",
+    "minimax.",
+    "us.minimax.",
+    "moonshot.",
+    "moonshotai.",
+    "us.moonshot.",
+    "us.moonshotai.",
+    "openai.",
+    "us.openai.",
+    "qwen.",
+    "us.qwen.",
 )
 
 
 def is_bedrock_model(model: str) -> bool:
-    """Return True when ``model`` is a Bedrock-hosted Anthropic id.
+    """Return True when ``model`` is a Bedrock-hosted model id.
 
-    Recognizes bare ``anthropic.*`` model ids and the regional /
-    cross-region inference profile prefixes (``us.``, ``eu.``,
-    ``apac.``, ``global.``). Anything else (``gpt-*``, OpenAI proxy
-    aliases) routes to the OpenAI client.
+    Recognizes bare provider model ids and regional / cross-region
+    inference profile prefixes. Plain OpenAI ids such as ``gpt-*`` still
+    route to the OpenAI client.
     """
     if not model:
         return False
@@ -478,6 +812,10 @@ class ProviderDispatchClient:
         self._bedrock_client = bedrock_client
 
     def _route(self, model: str) -> "JsonClient":
+        if _use_openai_compatible_chat():
+            if self._openai_client is None:
+                self._openai_client = OpenAICompatibleChatJsonClient()
+            return self._openai_client
         if is_bedrock_model(model):
             if self._bedrock_client is None:
                 from clawsocialarena.llm.bedrock_client import BedrockJsonClient
@@ -526,3 +864,8 @@ class ProviderDispatchClient:
 def default_json_client() -> JsonClient:
     """Return the default per-model dispatcher used by live executors."""
     return ProviderDispatchClient()
+
+
+def _use_openai_compatible_chat() -> bool:
+    raw = os.environ.get("WECLAW_OPENAI_COMPAT_CHAT", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}

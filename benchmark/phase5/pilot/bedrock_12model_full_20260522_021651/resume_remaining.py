@@ -21,13 +21,9 @@ ALL_ROWS = MANIFEST.get("rows") or MANIFEST.get("main") or []
 MODELS = {
     "opus_41_id": "BEDROCK_OPUS_41_ID",
     "opus_47_id": "BEDROCK_OPUS_47_ID",
-    "deepseek_r1": "BEDROCK_deepseek_r1",
     "deepseek_v32": "BEDROCK_deepseek_v32",
     "kimi_k25": "BEDROCK_kimi_k25",
     "kimi_k2_think": "BEDROCK_kimi_k2_think",
-    "minimax_m2": "BEDROCK_minimax_m2",
-    "minimax_m25": "BEDROCK_minimax_m25",
-    "oss_120b": "BEDROCK_oss_120b",
     "qwen3_235b": "BEDROCK_qwen3_235b",
     "qwen3_32b": "BEDROCK_qwen3_32b",
 }
