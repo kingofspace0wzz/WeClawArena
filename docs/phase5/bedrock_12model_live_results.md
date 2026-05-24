@@ -1,6 +1,6 @@
 # Bedrock Sweep Live Results
 
-Last updated: `2026-05-24 13:17:04 UTC`
+Last updated: `2026-05-24 13:35:08 UTC`
 
 Notes:
 
@@ -36,8 +36,8 @@ Total: `4925/5640`, left `715`.
 | opus_41_id | 27/120 (22.5%) | 0/0 (n/a) | 0/0 (n/a) |
 | opus_47_id | 76/120 (63.3%) | 68/150 (45.3%) | 83/100 (83.0%) |
 | deepseek_r1 | 3/120 (2.5%) | 0/250 (0.0%) | 11/100 (11.0%) |
-| deepseek_v32 | 24/120 (20.0%) | 22/100 (22.0%) | 26/100 (26.0%) |
-| kimi_k25 | 57/120 (47.5%) | 25/150 (16.7%) | 58/100 (58.0%) |
+| deepseek_v32 | 24/120 (20.0%) | 26/150 (17.3%) | 26/100 (26.0%) |
+| kimi_k25 | 57/120 (47.5%) | 30/200 (15.0%) | 58/100 (58.0%) |
 | kimi_k2_think | 23/120 (19.2%) | 15/250 (6.0%) | 11/100 (11.0%) |
 | minimax_m2 | 4/120 (3.3%) | 0/50 (0.0%) | 2/100 (2.0%) |
 | minimax_m25 | 5/120 (4.2%) | 0/50 (0.0%) | 1/100 (1.0%) |
@@ -77,7 +77,7 @@ Total: `4925/5640`, left `715`.
 | domain | no_attacker | collaboration | security | privacy | governance |
 |---|---:|---:|---:|---:|---:|
 | bargaining | 6/24 (25.0%) | 2/24 (8.3%) | 6/24 (25.0%) | 5/24 (20.8%) | 5/24 (20.8%) |
-| swebench_workspace | 13/50 (26.0%) | 9/50 (18.0%) | 0/0 (n/a) | 0/0 (n/a) | 0/0 (n/a) |
+| swebench_workspace | 13/50 (26.0%) | 9/50 (18.0%) | 4/50 (8.0%) | 0/0 (n/a) | 0/0 (n/a) |
 | travel | 8/20 (40.0%) | 2/20 (10.0%) | 4/20 (20.0%) | 4/20 (20.0%) | 8/20 (40.0%) |
 
 ### kimi_k25
@@ -85,7 +85,7 @@ Total: `4925/5640`, left `715`.
 | domain | no_attacker | collaboration | security | privacy | governance |
 |---|---:|---:|---:|---:|---:|
 | bargaining | 14/24 (58.3%) | 10/24 (41.7%) | 9/24 (37.5%) | 13/24 (54.2%) | 11/24 (45.8%) |
-| swebench_workspace | 15/50 (30.0%) | 6/50 (12.0%) | 4/50 (8.0%) | 0/0 (n/a) | 0/0 (n/a) |
+| swebench_workspace | 15/50 (30.0%) | 6/50 (12.0%) | 4/50 (8.0%) | 5/50 (10.0%) | 0/0 (n/a) |
 | travel | 12/20 (60.0%) | 10/20 (50.0%) | 9/20 (45.0%) | 13/20 (65.0%) | 14/20 (70.0%) |
 
 ### kimi_k2_think
@@ -151,8 +151,8 @@ Total: `4925/5640`, left `715`.
 | opus_41_id | 0/5 (-) | - | 0/0 | 0/0 (n/a) |
 | opus_47_id | 3/5 (no_attacker, collaboration, security) | privacy | 149/198 | 68/150 (45.3%) |
 | deepseek_r1 | 5/5 (no_attacker, collaboration, security, privacy, governance) | - | 16/16 | 0/250 (0.0%) |
-| deepseek_v32 | 2/5 (no_attacker, collaboration) | security | 76/122 | 22/100 (22.0%) |
-| kimi_k25 | 3/5 (no_attacker, collaboration, security) | privacy | 103/142 | 25/150 (16.7%) |
+| deepseek_v32 | 3/5 (no_attacker, collaboration, security) | privacy | 122/165 | 26/150 (17.3%) |
+| kimi_k25 | 4/5 (no_attacker, collaboration, security, privacy) | governance | 142/180 | 30/200 (15.0%) |
 | kimi_k2_think | 5/5 (no_attacker, collaboration, security, privacy, governance) | - | 62/62 | 15/250 (6.0%) |
 | minimax_m2 | 1/5 (no_attacker) | - | 0/0 | 0/50 (0.0%) |
 | minimax_m25 | 1/5 (no_attacker) | - | 0/0 | 0/50 (0.0%) |
