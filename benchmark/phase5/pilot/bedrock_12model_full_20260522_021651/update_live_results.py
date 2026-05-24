@@ -77,6 +77,7 @@ def parse_args() -> argparse.Namespace:
 def render(root: Path) -> str:
     rows_by_model_domain = load_all_rows(root)
     harness = load_harness_progress(root)
+    asr = load_llm_asr(root)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines = [
         "# Bedrock Sweep Live Results",
@@ -88,6 +89,7 @@ def render(root: Path) -> str:
         "- Progress counts use main rows plus `_patch_results`, keyed by `variant_id`.",
         "- Non-SWE TSR is `task_success is True / completed rows`.",
         "- SWE-bench TSR uses true harness results when available. Pending strict harness rows are not counted as true TSR yet.",
+        "- LLM-ASR is `llm_judge_*_asr.attack_success_aggregate is True / judged attacker-mode rows`.",
         "- `oss_20b` is intentionally stopped and excluded from future resume runs.",
         f"- Paused models for new runs: `{', '.join(PAUSED_MODELS)}`.",
         "",
@@ -101,6 +103,13 @@ def render(root: Path) -> str:
     for model in MODELS:
         lines.extend([f"### {model}", ""])
         lines.extend(model_attack_mode_table(model, rows_by_model_domain, harness))
+        lines.append("")
+    lines.extend(["## LLM-ASR Progress", ""])
+    lines.extend(llm_asr_progress_table(asr))
+    lines.extend(["", "## LLM-ASR By Model, Domain, And Attack Mode", ""])
+    for model in MODELS:
+        lines.extend([f"### {model}", ""])
+        lines.extend(model_llm_asr_table(model, asr))
         lines.append("")
     lines.extend(["## SWE-bench True Harness Progress", ""])
     lines.extend(harness_progress_table(harness))
@@ -122,6 +131,16 @@ def load_all_rows(root: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
                     if variant_id:
                         by_id[str(variant_id)] = row
             out[(model, domain)] = list(by_id.values())
+    return out
+
+
+def load_llm_asr(root: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    out: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    asr_root = root / "_llm_asr"
+    for model in MODELS:
+        for domain in DOMAINS:
+            path = asr_root / model / f"{domain}_attack_modes_ASR.jsonl"
+            out[(model, domain)] = read_jsonl(path)
     return out
 
 
@@ -240,6 +259,43 @@ def harness_progress_table(harness: dict[str, dict[str, Any]]) -> list[str]:
     return lines
 
 
+def llm_asr_progress_table(asr: dict[tuple[str, str], list[dict[str, Any]]]) -> list[str]:
+    lines = [
+        "| model | bargaining | swebench_workspace | travel | total judged |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for model in MODELS:
+        cells: list[str] = []
+        total = 0
+        for domain in DOMAINS:
+            rows = asr[(model, domain)]
+            expected = expected_asr_rows(domain)
+            total += len(rows)
+            cells.append(f"{len(rows)}/{expected}")
+        lines.append(f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {total} |")
+    return lines
+
+
+def model_llm_asr_table(
+    model: str,
+    asr: dict[tuple[str, str], list[dict[str, Any]]],
+) -> list[str]:
+    lines = [
+        "| domain | collaboration | security | privacy | governance | total |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for domain in DOMAINS:
+        rows = asr[(model, domain)]
+        cells: list[str] = []
+        for mode in ATTACK_MODES[1:]:
+            mode_rows = [row for row in rows if row.get("attack_mode") == mode]
+            cells.append(format_asr(mode_rows))
+        lines.append(
+            f"| {domain} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {format_asr(rows)} |"
+        )
+    return lines
+
+
 def rows_for_metric(
     model: str,
     domain: str,
@@ -256,6 +312,31 @@ def rows_for_metric(
 
 def rows_with_definite_task(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [row for row in rows if isinstance(row.get("task_success"), bool)]
+
+
+def expected_asr_rows(domain: str) -> int:
+    _filename, expected_total = DOMAINS[domain]
+    return expected_total - (expected_total // len(ATTACK_MODES))
+
+
+def format_asr(rows: list[dict[str, Any]]) -> str:
+    n = len(rows)
+    if not n:
+        return "0/0 (n/a)"
+    ok = sum(1 for row in rows if llm_asr_success(row))
+    return f"{ok}/{n} ({ok / n:.1%})"
+
+
+def llm_asr_success(row: dict[str, Any]) -> bool:
+    for key in (
+        "llm_judge_bargaining_asr",
+        "llm_judge_workspace_asr",
+        "llm_judge_travel_asr",
+    ):
+        value = row.get(key)
+        if isinstance(value, dict):
+            return value.get("attack_success_aggregate") is True
+    return False
 
 
 def format_tsr(rows: list[dict[str, Any]]) -> str:
