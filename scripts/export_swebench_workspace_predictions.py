@@ -226,6 +226,10 @@ def _changed_files(variant_dir: Path) -> list[str]:
 def _changed_files_by_tree_diff(*, variant_dir: Path, base_dir: Path) -> list[str]:
     before_root = base_dir / "resources" / "repo" / "worktree"
     after_root = variant_dir / "resources" / "repo" / "worktree"
+    if not before_root.is_dir():
+        raise FileNotFoundError(f"missing base worktree: {before_root}")
+    if not after_root.is_dir():
+        raise FileNotFoundError(f"missing variant worktree: {after_root}")
     before = {
         path.relative_to(before_root).as_posix()
         for path in before_root.rglob("*")
