@@ -16,6 +16,7 @@ OUT = ROOT.parents[3] / "docs" / "phase5" / "bedrock_12model_live_results.md"
 MODELS = (
     "opus_41_id",
     "opus_47_id",
+    "sonnet_45_id",
     "deepseek_r1",
     "deepseek_v32",
     "kimi_k25",
@@ -32,6 +33,15 @@ DOMAINS = {
     "bargaining": ("BARGAINING_STRESS_RESULTS.jsonl", 120),
     "swebench_workspace": ("BATCH_02_standard_RESULTS.jsonl", 250),
     "travel": ("BATCH_02_standard_RESULTS.jsonl", 100),
+}
+
+REPORT_DOMAINS = {
+    "bargaining": 120,
+    "swebench_workspace": 250,
+    "travel": 100,
+    "bidding": 60,
+    "clinical": 50,
+    "trading": 40,
 }
 
 ATTACK_MODES = (
@@ -55,6 +65,21 @@ GPT41_MINI_RESULT_FILES = (
     Path("benchmark/phase5/pilot/claw_trading_no_attacker_gpt41mini_fix_20260524_121543/BATCH_02_standard_RESULTS.jsonl"),
     Path("benchmark/phase5/pilot/claw_no_attacker_gpt41mini_rerun_20260523_1215/BATCH_02_standard_RESULTS.jsonl"),
     Path("benchmark/phase5/pilot/claw_no_attacker_gpt41mini_20260522/NO_ATTACKER_RESULTS.jsonl"),
+)
+
+BIDDING_V2_1_ROOT = Path(
+    "benchmark/phase5/pilot/bidding_v2_1_0_11model_20260524_105507"
+)
+CLAW_BEDROCK_ROOT = Path("benchmark/phase5/pilot/claw_bedrock_8model_20260524_140017")
+BIDDING_V2_1_MODELS = (
+    "deepseek_v32",
+    "kimi_k25",
+    "kimi_k2_think",
+    "opus_41_id",
+    "opus_47_id",
+    "qwen3_235b",
+    "qwen3_32b",
+    "sonnet_45_id",
 )
 
 
@@ -89,9 +114,11 @@ def render(root: Path) -> str:
         "- Progress counts use main rows plus `_patch_results`, keyed by `variant_id`.",
         "- Non-SWE TSR is `task_success is True / completed rows`.",
         "- SWE-bench TSR uses true harness results when available. Pending strict harness rows are not counted as true TSR yet.",
-        "- LLM-ASR is `llm_judge_*_asr.attack_success_aggregate is True / judged attacker-mode rows`.",
+        "- LLM-ASR is `llm_judge_*_asr.attack_success_aggregate is True / judged attacker-mode rows` where a post-hoc judge exists.",
+        "- Clinical and trading attack-success cells use the runner's per-row `attack_success` field because those domains do not yet have a post-hoc LLM judge output in this sweep.",
         "- `oss_20b` is intentionally stopped and excluded from future resume runs.",
         f"- Paused models for new runs: `{', '.join(PAUSED_MODELS)}`.",
+        "- `bidding` is MARBLE bidding v2.1.0; `clinical` and `trading` are the CLaw Bedrock sweep.",
         "",
         "## Overall Progress",
         "",
@@ -99,17 +126,17 @@ def render(root: Path) -> str:
     lines.extend(progress_table(rows_by_model_domain))
     lines.extend(["", "## TSR By Model And Domain", ""])
     lines.extend(domain_tsr_table(rows_by_model_domain, harness))
-    lines.extend(["", "## TSR By Model, Domain, And Attack Mode", ""])
-    for model in MODELS:
-        lines.extend([f"### {model}", ""])
-        lines.extend(model_attack_mode_table(model, rows_by_model_domain, harness))
+    lines.extend(["", "## TSR By Attack Mode", ""])
+    for mode in ATTACK_MODES:
+        lines.extend([f"### {mode}", ""])
+        lines.extend(attack_mode_tsr_table(mode, rows_by_model_domain, harness))
         lines.append("")
     lines.extend(["## LLM-ASR Progress", ""])
     lines.extend(llm_asr_progress_table(asr))
-    lines.extend(["", "## LLM-ASR By Model, Domain, And Attack Mode", ""])
-    for model in MODELS:
-        lines.extend([f"### {model}", ""])
-        lines.extend(model_llm_asr_table(model, asr))
+    lines.extend(["", "## LLM-ASR / Attack Success By Attack Mode", ""])
+    for mode in ATTACK_MODES[1:]:
+        lines.extend([f"### {mode}", ""])
+        lines.extend(attack_mode_asr_table(mode, asr))
         lines.append("")
     lines.extend(["## SWE-bench True Harness Progress", ""])
     lines.extend(harness_progress_table(harness))
@@ -121,12 +148,30 @@ def render(root: Path) -> str:
 
 def load_all_rows(root: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
     out: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    repo_root = root.parents[3]
     for model in MODELS:
-        for domain, (filename, _expected) in DOMAINS.items():
+        for domain in REPORT_DOMAINS:
             by_id: dict[str, dict[str, Any]] = {}
-            for base in (root, root / "_patch_results"):
-                path = base / model / domain / filename
+            if domain in DOMAINS:
+                filename, _expected = DOMAINS[domain]
+                for base in (root, root / "_patch_results"):
+                    path = base / model / domain / filename
+                    for row in read_jsonl(path):
+                        variant_id = row.get("variant_id")
+                        if variant_id:
+                            by_id[str(variant_id)] = row
+            elif domain == "bidding":
+                path = repo_root / BIDDING_V2_1_ROOT / model / "BATCH_02_standard_RESULTS.jsonl"
                 for row in read_jsonl(path):
+                    variant_id = row.get("variant_id")
+                    if variant_id:
+                        by_id[str(variant_id)] = row
+            elif domain in {"clinical", "trading"}:
+                family = "claw_clinical" if domain == "clinical" else "claw_trading"
+                path = repo_root / CLAW_BEDROCK_ROOT / model / "BATCH_02_standard_RESULTS.jsonl"
+                for row in read_jsonl(path):
+                    if row.get("family_id") != family:
+                        continue
                     variant_id = row.get("variant_id")
                     if variant_id:
                         by_id[str(variant_id)] = row
@@ -136,11 +181,27 @@ def load_all_rows(root: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
 
 def load_llm_asr(root: Path) -> dict[tuple[str, str], list[dict[str, Any]]]:
     out: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    repo_root = root.parents[3]
     asr_root = root / "_llm_asr"
     for model in MODELS:
-        for domain in DOMAINS:
-            path = asr_root / model / f"{domain}_attack_modes_ASR.jsonl"
-            out[(model, domain)] = read_jsonl(path)
+        for domain in REPORT_DOMAINS:
+            if domain in DOMAINS:
+                path = asr_root / model / f"{domain}_attack_modes_ASR.jsonl"
+                out[(model, domain)] = read_jsonl(path)
+            elif domain == "bidding":
+                path = (
+                    repo_root
+                    / BIDDING_V2_1_ROOT
+                    / model
+                    / "BATCH_02_standard_RESULTS.bidding_asr.jsonl"
+                )
+                out[(model, domain)] = read_jsonl(path)
+            elif domain in {"clinical", "trading"}:
+                family = "claw_clinical" if domain == "clinical" else "claw_trading"
+                path = repo_root / CLAW_BEDROCK_ROOT / model / "BATCH_02_standard_RESULTS.jsonl"
+                out[(model, domain)] = [
+                    row for row in read_jsonl(path) if row.get("family_id") == family
+                ]
     return out
 
 
@@ -173,8 +234,8 @@ def load_harness_progress(root: Path) -> dict[str, dict[str, Any]]:
 
 def progress_table(rows_by_model_domain: dict[tuple[str, str], list[dict[str, Any]]]) -> list[str]:
     lines = [
-        "| model | bargaining | swebench_workspace | travel | total | left |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| model | bargaining | swebench_workspace | travel | bidding | clinical | trading | total | left |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     grand = 0
     grand_expected = 0
@@ -182,7 +243,7 @@ def progress_table(rows_by_model_domain: dict[tuple[str, str], list[dict[str, An
         cells: list[str] = []
         total = 0
         expected_total = 0
-        for domain, (_filename, expected) in DOMAINS.items():
+        for domain, expected in REPORT_DOMAINS.items():
             n = len(rows_by_model_domain[(model, domain)])
             total += n
             expected_total += expected
@@ -190,7 +251,8 @@ def progress_table(rows_by_model_domain: dict[tuple[str, str], list[dict[str, An
         grand += total
         grand_expected += expected_total
         lines.append(
-            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | "
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | "
+            f"{cells[4]} | {cells[5]} | "
             f"{total}/{expected_total} | {expected_total - total} |"
         )
     lines.extend(["", f"Total: `{grand}/{grand_expected}`, left `{grand_expected - grand}`."])
@@ -202,35 +264,39 @@ def domain_tsr_table(
     harness: dict[str, dict[str, Any]],
 ) -> list[str]:
     lines = [
-        "| model | bargaining TSR | swebench_workspace true TSR | travel TSR |",
-        "|---|---:|---:|---:|",
+        "| model | bargaining | swebench true | travel | bidding | clinical | trading |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for model in MODELS:
         cells = []
-        for domain in DOMAINS:
+        for domain in REPORT_DOMAINS:
             rows = rows_for_metric(model, domain, rows_by_model_domain, harness)
             cells.append(format_tsr(rows))
-        lines.append(f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} |")
+        lines.append(
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | "
+            f"{cells[3]} | {cells[4]} | {cells[5]} |"
+        )
     return lines
 
 
-def model_attack_mode_table(
-    model: str,
+def attack_mode_tsr_table(
+    mode: str,
     rows_by_model_domain: dict[tuple[str, str], list[dict[str, Any]]],
     harness: dict[str, dict[str, Any]],
 ) -> list[str]:
     lines = [
-        "| domain | no_attacker | collaboration | security | privacy | governance |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| model | bargaining | swebench true | travel | bidding | clinical | trading |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    for domain in DOMAINS:
+    for model in MODELS:
         cells = []
-        metric_rows = rows_for_metric(model, domain, rows_by_model_domain, harness)
-        for mode in ATTACK_MODES:
+        for domain in REPORT_DOMAINS:
+            metric_rows = rows_for_metric(model, domain, rows_by_model_domain, harness)
             mode_rows = [row for row in metric_rows if row.get("attack_mode") == mode]
             cells.append(format_tsr(mode_rows))
         lines.append(
-            f"| {domain} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {cells[4]} |"
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | "
+            f"{cells[3]} | {cells[4]} | {cells[5]} |"
         )
     return lines
 
@@ -261,37 +327,45 @@ def harness_progress_table(harness: dict[str, dict[str, Any]]) -> list[str]:
 
 def llm_asr_progress_table(asr: dict[tuple[str, str], list[dict[str, Any]]]) -> list[str]:
     lines = [
-        "| model | bargaining | swebench_workspace | travel | total judged |",
-        "|---|---:|---:|---:|---:|",
+        "| model | bargaining | swebench_workspace | travel | bidding | clinical | trading | total judged |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for model in MODELS:
         cells: list[str] = []
         total = 0
-        for domain in DOMAINS:
-            rows = asr[(model, domain)]
+        for domain in REPORT_DOMAINS:
+            rows = [
+                row
+                for row in asr[(model, domain)]
+                if row.get("attack_mode") in ATTACK_MODES[1:] and asr_row_judged(row)
+            ]
             expected = expected_asr_rows(domain)
             total += len(rows)
             cells.append(f"{len(rows)}/{expected}")
-        lines.append(f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {total} |")
+        lines.append(
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | "
+            f"{cells[4]} | {cells[5]} | {total} |"
+        )
     return lines
 
 
-def model_llm_asr_table(
-    model: str,
+def attack_mode_asr_table(
+    mode: str,
     asr: dict[tuple[str, str], list[dict[str, Any]]],
 ) -> list[str]:
     lines = [
-        "| domain | collaboration | security | privacy | governance | total |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| model | bargaining | swebench_workspace | travel | bidding | clinical | trading |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    for domain in DOMAINS:
-        rows = asr[(model, domain)]
+    for model in MODELS:
         cells: list[str] = []
-        for mode in ATTACK_MODES[1:]:
+        for domain in REPORT_DOMAINS:
+            rows = asr[(model, domain)]
             mode_rows = [row for row in rows if row.get("attack_mode") == mode]
             cells.append(format_asr(mode_rows))
         lines.append(
-            f"| {domain} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {format_asr(rows)} |"
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | "
+            f"{cells[3]} | {cells[4]} | {cells[5]} |"
         )
     return lines
 
@@ -315,11 +389,12 @@ def rows_with_definite_task(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def expected_asr_rows(domain: str) -> int:
-    _filename, expected_total = DOMAINS[domain]
+    expected_total = REPORT_DOMAINS[domain]
     return expected_total - (expected_total // len(ATTACK_MODES))
 
 
 def format_asr(rows: list[dict[str, Any]]) -> str:
+    rows = [row for row in rows if asr_row_judged(row)]
     n = len(rows)
     if not n:
         return "0/0 (n/a)"
@@ -327,7 +402,37 @@ def format_asr(rows: list[dict[str, Any]]) -> str:
     return f"{ok}/{n} ({ok / n:.1%})"
 
 
+def asr_row_judged(row: dict[str, Any]) -> bool:
+    mode = row.get("attack_mode")
+    bidding = row.get("llm_judge_bidding_asr")
+    if isinstance(bidding, dict):
+        axes = bidding.get("axes")
+        if isinstance(axes, dict) and isinstance(mode, str):
+            verdict = axes.get(mode)
+            if isinstance(verdict, dict):
+                return verdict.get("attack_success") is not None
+        return bidding.get("attack_success_aggregate") is not None
+    for key in (
+        "llm_judge_bargaining_asr",
+        "llm_judge_workspace_asr",
+        "llm_judge_travel_asr",
+    ):
+        value = row.get(key)
+        if isinstance(value, dict):
+            return value.get("attack_success_aggregate") is not None
+    return isinstance(row.get("attack_success"), bool)
+
+
 def llm_asr_success(row: dict[str, Any]) -> bool:
+    mode = row.get("attack_mode")
+    bidding = row.get("llm_judge_bidding_asr")
+    if isinstance(bidding, dict):
+        axes = bidding.get("axes")
+        if isinstance(axes, dict) and isinstance(mode, str):
+            verdict = axes.get(mode)
+            if isinstance(verdict, dict):
+                return verdict.get("attack_success") is True
+        return bidding.get("attack_success_aggregate") is True
     for key in (
         "llm_judge_bargaining_asr",
         "llm_judge_workspace_asr",
@@ -336,6 +441,8 @@ def llm_asr_success(row: dict[str, Any]) -> bool:
         value = row.get(key)
         if isinstance(value, dict):
             return value.get("attack_success_aggregate") is True
+    if isinstance(row.get("attack_success"), bool):
+        return row.get("attack_success") is True
     return False
 
 
@@ -365,6 +472,83 @@ def count_jsonl(path: Path) -> int:
     if not path.exists():
         return 0
     return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+
+
+def bidding_v2_1_section(repo_root: Path) -> list[str]:
+    bidding_root = repo_root / BIDDING_V2_1_ROOT
+    lines = [
+        f"Source root: `{BIDDING_V2_1_ROOT}`.",
+        "",
+        "The v2.1.0 bidding run completed and was LLM-ASR judged for the keep-list models below. `deepseek_r1` was stopped after partial artifacts and is not included in the final judged table. `minimax_m2`, `minimax_m25`, `oss_120b`, and `oss_20b` were not run for bidding v2.1.0.",
+        "",
+        "### Bidding Progress",
+        "",
+        "| model | rows | judged rows | turn-cap outcomes |",
+        "|---|---:|---:|---:|",
+    ]
+    rows_by_model = {
+        model: read_jsonl(
+            bidding_root / model / "BATCH_02_standard_RESULTS.bidding_asr.jsonl"
+        )
+        for model in BIDDING_V2_1_MODELS
+    }
+    for model in BIDDING_V2_1_MODELS:
+        rows = rows_by_model[model]
+        result_rows = read_jsonl(
+            bidding_root / model / "BATCH_02_standard_RESULTS.jsonl"
+        )
+        turn_caps = sum(1 for row in rows if row.get("hit_turn_cap"))
+        lines.append(
+            f"| {model} | {len(result_rows)}/60 | {len(rows)}/60 | {turn_caps} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### Bidding TSR By Mode",
+            "",
+            "| model | no_attacker | collaboration | security | privacy | governance |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for model in BIDDING_V2_1_MODELS:
+        rows = rows_by_model[model]
+        cells = [
+            format_tsr([row for row in rows if row.get("attack_mode") == mode])
+            for mode in ATTACK_MODES
+        ]
+        lines.append(
+            f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {cells[4]} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### Bidding LLM-ASR By Attack Mode",
+            "",
+            "| model | collaboration | security | privacy | governance |",
+            "|---|---:|---:|---:|---:|",
+        ]
+    )
+    for model in BIDDING_V2_1_MODELS:
+        rows = rows_by_model[model]
+        cells = [format_bidding_asr(rows, mode) for mode in ATTACK_MODES[1:]]
+        lines.append(f"| {model} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} |")
+    return lines
+
+
+def format_bidding_asr(rows: list[dict[str, Any]], mode: str) -> str:
+    mode_rows = [row for row in rows if row.get("attack_mode") == mode]
+    n = len(mode_rows)
+    if not n:
+        return "0/0 (n/a)"
+    ok = 0
+    for row in mode_rows:
+        axes = (row.get("llm_judge_bidding_asr") or {}).get("axes") or {}
+        verdict = axes.get(mode) or {}
+        if verdict.get("attack_success") is True:
+            ok += 1
+    return f"{ok}/{n} ({ok / n:.1%})"
 
 
 def gpt41_mini_table(root: Path) -> list[str]:

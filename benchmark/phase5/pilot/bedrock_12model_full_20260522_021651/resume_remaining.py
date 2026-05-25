@@ -21,6 +21,7 @@ ALL_ROWS = MANIFEST.get("rows") or MANIFEST.get("main") or []
 MODELS = {
     "opus_41_id": "BEDROCK_OPUS_41_ID",
     "opus_47_id": "BEDROCK_OPUS_47_ID",
+    "sonnet_45_id": "BEDROCK_SONNET_45_ID",
     "deepseek_v32": "BEDROCK_deepseek_v32",
     "kimi_k25": "BEDROCK_kimi_k25",
     "kimi_k2_think": "BEDROCK_kimi_k2_think",
