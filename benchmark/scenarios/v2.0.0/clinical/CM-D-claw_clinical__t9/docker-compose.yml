@@ -1,0 +1,133 @@
+# Auto-generated compose for claw_clinical_bipolar_discharge_CM-D-claw_clinical__t9.
+services:
+  gateway:
+    image: clawsocialarena/gateway:dev
+    build:
+      context: ../../../../..
+    environment:
+      - CLAWSOCIAL_GATEWAY_PORT=8080
+      - CLAWSOCIAL_SCENARIO_ID=claw_clinical_bipolar_discharge_CM-D-claw_clinical__t9
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scenario-id
+      - claw_clinical_bipolar_discharge_CM-D-claw_clinical__t9
+      - --condition
+      - passive
+      - --db-path
+      - /workspace/run/action_log.db
+      - --work-dir
+      - /workspace/run
+      - --resource-root
+      - /workspace/resources
+      - --scenario-path
+      - /workspace/scenario.json
+      - --family-id
+      - claw_clinical
+      - --family-pack-context-path
+      - /workspace/family_pack_context.json
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./run:/workspace/run:rw
+      - ./resources:/workspace/resources:rw
+      - ./scenario.json:/workspace/scenario.json:ro
+      - ./family_pack_context.json:/workspace/family_pack_context.json:ro
+    networks: [clawnet]
+
+  attending_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=attending_agent
+      - CLAWSOCIAL_USER_ID=attending_owner
+    volumes:
+      - ./personas/attending_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/attending_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  specialist_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=specialist_agent
+      - CLAWSOCIAL_USER_ID=specialist_owner
+    volumes:
+      - ./personas/specialist_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/specialist_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  pharmacist_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=pharmacist_agent
+      - CLAWSOCIAL_USER_ID=pharmacist_owner
+    volumes:
+      - ./personas/pharmacist_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/pharmacist_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  insurance_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=insurance_agent
+      - CLAWSOCIAL_USER_ID=insurance_owner
+    volumes:
+      - ./personas/insurance_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/insurance_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  nurse_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=nurse_agent
+      - CLAWSOCIAL_USER_ID=nurse_owner
+    volumes:
+      - ./personas/nurse_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/nurse_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+networks:
+  clawnet:
+    driver: bridge
+    internal: false

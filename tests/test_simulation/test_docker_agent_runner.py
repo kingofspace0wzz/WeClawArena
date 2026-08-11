@@ -395,6 +395,30 @@ def test_prepare_runtime_compose_rebinds_gateway_host_port(
     assert '"8080:8080"' not in text
 
 
+def test_rewrite_compose_build_contexts_uses_current_repo(tmp_path: Path) -> None:
+    compose_path = tmp_path / "docker-compose.yml"
+    compose_path.write_text(
+        "services:\n"
+        "  gateway:\n"
+        "    build:\n"
+        "      context: ../../../../..\n"
+        "  agent-alpha:\n"
+        "    build:\n"
+        "      context: .\n",
+        encoding="utf-8",
+    )
+    repo_root = tmp_path / "checkout with spaces"
+
+    docker_agent_runner._rewrite_compose_build_contexts(
+        compose_path,
+        repo_root,
+    )
+
+    text = compose_path.read_text(encoding="utf-8")
+    expected = f'      context: "{repo_root.resolve()}"\n'
+    assert text.count(expected) == 2
+
+
 def test_required_simulated_tool_calls_include_code_editor_read() -> None:
     scenario = Scenario(
         scenario_id="scenario-001",

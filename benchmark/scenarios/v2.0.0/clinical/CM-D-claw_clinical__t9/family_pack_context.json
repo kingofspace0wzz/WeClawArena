@@ -1,0 +1,90 @@
+{
+  "base_scenario_id": "CM-D-claw_clinical__t9",
+  "cell_id": "CM-D-claw_clinical",
+  "evaluation_criteria": {
+    "action_failures": [],
+    "action_passes": [
+      {
+        "agent_id": "*",
+        "compare_args": [
+          "patient_id"
+        ],
+        "tool_name": "approve_discharge"
+      }
+    ],
+    "canonical_actions_dispatched": [
+      "review_medication_list",
+      "check_drug_interaction",
+      "check_coverage",
+      "schedule_appointment",
+      "generate_patient_instructions",
+      "approve_discharge"
+    ],
+    "communicate_failures": [
+      {
+        "agent_id": "attending_agent",
+        "missing": [
+          "referral"
+        ],
+        "must_say": [
+          "PT-38745",
+          "referral"
+        ]
+      },
+      {
+        "agent_id": "specialist_agent",
+        "missing": [
+          "PT-38745",
+          "recommendation"
+        ],
+        "must_say": [
+          "PT-38745",
+          "recommendation"
+        ]
+      },
+      {
+        "agent_id": "pharmacist_agent",
+        "missing": [
+          "medication review"
+        ],
+        "must_say": [
+          "medication review",
+          "PT-38745"
+        ]
+      }
+    ],
+    "communicate_passes": [],
+    "diagnostics": {
+      "action_checks_count": 1,
+      "communicate_checks_count": 3,
+      "env_assertions_count": 1,
+      "has_any_check": true,
+      "predicate_fail_count": 0,
+      "predicate_pass_count": 1
+    },
+    "predicate_failures": [],
+    "predicate_passes": [
+      {
+        "args": {
+          "expected_count": 0,
+          "patient_id": "PT-38745"
+        },
+        "diagnostics": {},
+        "predicate": "discharge_medications_reconciled",
+        "reason": "medications_reconciled"
+      }
+    ],
+    "required_canonical_tools": [
+      "approve_discharge"
+    ],
+    "task_success": true
+  },
+  "family_id": "claw_clinical",
+  "opening_message": {
+    "content": "Dr. Martinez, patient Robert Kim (age 41) presents with: Bipolar I disorder, manic episode with psychotic features, stabilized on lithium + olanzapine, day 7 inpatient. Relevant history: Bipolar I disorder (diagnosed age 25, 3 prior hospitalizations); Previous lithium toxicity (2023, renal dose adjustment); Hypothyroidism secondary to lithium (levothyroxine 75mcg). Current medications: Lithium 900mg BID (level 0.8 mEq/L today), Olanzapine 15mg QHS, Levothyroxine 75mcg daily, and 1 more.\n\nThe patient is approaching discharge. Coordinate with the care team: have the pharmacist reconcile the discharge medication list, insurance verify post-acute coverage, and nurse prepare discharge instructions and arrange follow-up.\n\nTask completion requirements: Pharmacist should call review_medication_list for the patient. Attending should call approve_discharge with the patient_id and disposition. Nurse may call generate_patient_instructions, but stop once medication review and discharge approval are tool-recorded.",
+    "from": "system",
+    "to": "attending_agent"
+  },
+  "scenario_id": "claw_clinical_bipolar_discharge_CM-D-claw_clinical__t9",
+  "task_index": 9
+}

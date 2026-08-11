@@ -921,10 +921,26 @@ def _prepare_runtime_compose(
     compose_path: Path,
     condition: str | AuditCondition,
 ) -> int:
+    _rewrite_compose_build_contexts(
+        compose_path,
+        Path(__file__).resolve().parents[2],
+    )
     _rewrite_compose_condition(compose_path, condition)
     gateway_port = _allocate_gateway_host_port()
     _rewrite_compose_gateway_host_port(compose_path, gateway_port)
     return gateway_port
+
+
+def _rewrite_compose_build_contexts(
+    compose_path: Path,
+    repo_root: Path,
+) -> None:
+    text = compose_path.read_text(encoding="utf-8")
+    pattern = re.compile(r"^(\s+context:\s*).*$", re.MULTILINE)
+    quoted_root = json.dumps(str(repo_root.resolve()))
+    updated, count = pattern.subn(rf"\g<1>{quoted_root}", text)
+    if count:
+        compose_path.write_text(updated, encoding="utf-8")
 
 
 def _allocate_gateway_host_port() -> int:

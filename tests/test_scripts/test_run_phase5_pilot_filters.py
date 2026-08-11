@@ -49,6 +49,23 @@ def test_store_manifest_rows_are_exposed_as_main_rows() -> None:
     assert manifest["supplementary"] == []
 
 
+def test_manifest_argument_is_normalized_for_batch_selection(tmp_path: Path) -> None:
+    import json
+
+    from scripts.run_phase5_pilot import _load_manifest_for_batches
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(_fake_manifest()), encoding="utf-8")
+
+    manifest = _load_manifest_for_batches(
+        manifest_path=manifest_path,
+        store=None,
+    )
+
+    assert manifest["main"] == _fake_manifest()["rows"]
+    assert manifest["supplementary"] == []
+
+
 def test_filtered_manifest_relaxes_batch_expected_rows() -> None:
     from clawsocialarena.orchestrator.phase5_run_batches import run_batch_for
     from scripts.run_phase5_pilot import (

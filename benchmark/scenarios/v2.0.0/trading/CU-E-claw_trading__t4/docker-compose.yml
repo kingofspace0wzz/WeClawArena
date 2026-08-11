@@ -1,0 +1,97 @@
+# Auto-generated compose for claw_trading_earnings_debate_CU-E-claw_trading__t4.
+services:
+  gateway:
+    image: clawsocialarena/gateway:dev
+    build:
+      context: ../../../../..
+    environment:
+      - CLAWSOCIAL_GATEWAY_PORT=8080
+      - CLAWSOCIAL_SCENARIO_ID=claw_trading_earnings_debate_CU-E-claw_trading__t4
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scenario-id
+      - claw_trading_earnings_debate_CU-E-claw_trading__t4
+      - --condition
+      - passive
+      - --db-path
+      - /workspace/run/action_log.db
+      - --work-dir
+      - /workspace/run
+      - --resource-root
+      - /workspace/resources
+      - --scenario-path
+      - /workspace/scenario.json
+      - --family-id
+      - claw_trading
+      - --family-pack-context-path
+      - /workspace/family_pack_context.json
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./run:/workspace/run:rw
+      - ./resources:/workspace/resources:rw
+      - ./scenario.json:/workspace/scenario.json:ro
+      - ./family_pack_context.json:/workspace/family_pack_context.json:ro
+    networks: [clawnet]
+
+  alice_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=alice_agent
+      - CLAWSOCIAL_USER_ID=alice_owner
+    volumes:
+      - ./personas/alice_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/alice_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  bob_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=bob_agent
+      - CLAWSOCIAL_USER_ID=bob_owner
+    volumes:
+      - ./personas/bob_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/bob_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+  carol_agent:
+    image: clawsocialarena/openclaw-with-plugin:dev
+    build:
+      context: ../../../../..
+    depends_on:
+      - gateway
+    environment:
+      - CLAWSOCIAL_GATEWAY_URL=http://gateway:8080
+      - CLAWSOCIAL_AGENT_ID=carol_agent
+      - CLAWSOCIAL_USER_ID=carol_owner
+    volumes:
+      - ./personas/carol_agent.system.md:/workspace/persona.system.md:ro
+      - ./personas/carol_agent.tools.json:/workspace/persona.tools.json:ro
+      - ./mcp:/workspace/mcp:ro
+    networks: [clawnet]
+    entrypoint: ["/usr/local/bin/agent-entrypoint.sh"]
+    command: []
+
+networks:
+  clawnet:
+    driver: bridge
+    internal: false

@@ -1,4 +1,4 @@
-// ClawSocialArena audit gateway HTTP client, used by the channel plugin to
+// WeClawArena audit gateway HTTP client, used by the channel plugin to
 // forward every outbound message, tool call, memory write, and LLM event
 // into the audit layer.
 //

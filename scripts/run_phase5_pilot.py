@@ -235,13 +235,19 @@ def _relax_batch_expected_rows_for_filtered_manifest(
     object.__setattr__(spec, "expected_rows", len(rows))
 
 
+def _load_manifest_for_batches(
+    *, manifest_path: Path, store: Path | None
+) -> dict[str, Any]:
+    source = store / "manifest.json" if store is not None else manifest_path
+    return normalize_store_manifest_for_batches(load_manifest(source))
+
+
 def _cmd_run_batch(args: argparse.Namespace) -> int:
     store: Path | None = getattr(args, "store", None)
-    if store is not None:
-        store_manifest_path = store / "manifest.json"
-        manifest = normalize_store_manifest_for_batches(load_manifest(store_manifest_path))
-    else:
-        manifest = load_manifest(args.manifest)
+    manifest = _load_manifest_for_batches(
+        manifest_path=args.manifest,
+        store=store,
+    )
     filter_spec: str = getattr(args, "filter", "")
     if filter_spec:
         manifest = _apply_filter_to_manifest(manifest, filter_spec)

@@ -1,118 +1,126 @@
-# ClawSocialArena Benchmark Dataset Guide
+# WeClawArena Benchmark Dataset Guide
 
-This guide explains how to inspect the current benchmark data without reading historical design logs.
+This guide describes the finalized WeClawArena v2.0.0 scenario store.
 
-## Current Store
+## Release Summary
 
-The active published store is:
+The canonical store is `benchmark/scenarios/v2.0.0/manifest.json` plus six domain directories.
 
-```text
-benchmark/scenarios/v2.0.0/
-  manifest.json
-  bargaining/
-  bidding/
-  travel/
-  swebench_workspace/
-  retail/
-  research/
-```
+| Domain directory | Family id | Base tasks | Manifest rows |
+|---|---|---:|---:|
+| `bargaining/` | `marble_bargaining` | 24 | 120 |
+| `bidding/` | `marble_bidding` | 12 | 60 |
+| `travel/` | `travel` | 20 | 100 |
+| `swebench_workspace/` | `swebench_workspace` | 50 | 250 |
+| `clinical/` | `claw_clinical` | 10 | 50 |
+| `trading/` | `claw_trading` | 8 | 40 |
+| **Total** | | **124** | **620** |
 
-`manifest.json` has 690 rows. Each base scenario is represented by five matched modes:
+Each base task has five manifest rows: `no_attacker`, `collaboration`, `security`, `privacy`, and `governance`.
 
-```text
-no_attacker
-collaboration
-security
-privacy
-governance
-```
+## Manifest Rows
 
-| Family | Bases | Rows | Store folder | Spec |
-|---|---:|---:|---|---|
-| `marble_bargaining` | 24 | 120 | `bargaining/` | `docs/superpowers/specs/bargaining/README.md` |
-| `marble_bidding` | 12 | 60 | `bidding/` | `docs/superpowers/specs/bidding/README.md` |
-| `travel` | 20 | 100 | `travel/` | `docs/superpowers/specs/travel/README.md` |
-| `swebench_workspace` | 50 | 250 | `swebench_workspace/` | `docs/superpowers/specs/swebench_workspace/README.md` |
-| `tau2_retail` | 24 | 120 | `retail/` | `docs/superpowers/specs/retail/README.md` |
-| `marble_research` | 8 | 40 | `research/` | `docs/superpowers/specs/2026-05-09-clawsocialarena-v2-family-pack-design.md` |
+Each row in `manifest.json` contains:
 
-The older `benchmark/phase5/scaffold` tree is still useful for the 680-row baseline scaffold and 14-cell allocation history. It is not the only current benchmark target.
-
-## Base Bundle Layout
-
-A published base bundle normally contains:
-
-```text
-scenario.json
-scenario.gt.json
-family_pack_context.json
-personas/
-mcp/
-resources/
-governance/        # when applicable
-phase5_metadata.json
-```
-
-`scenario.json` defines agents, prompts, tools, topology, opening state, and turn budget.
-
-`scenario.gt.json` defines scoring contracts, including `evaluation_criteria`, resource and governance manifests, task invariants, attack plan metadata, and construction metadata.
-
-`family_pack_context.json` carries domain-specific seed data used by tools, predicates, runtime overlays, and LLM-ASR judges.
-
-## Runtime Variants
-
-The published store does not need a fully copied directory for every attack row. Attack rows point to a base bundle. The runner creates per-run variants through:
-
-```text
-clawsocialarena.attacks.runtime_overlay.materialize_runtime_variant
-```
-
-The runtime variant directory records applied attack metadata in `phase5_variant_metadata.json`. Inspect that file rather than relying on manifest-level `attack_recipe` fields, which may be unset or generic.
-
-Runtime overlays may add injected messages, file writes, or database rows. They must not directly write the final score state. Attack success must come from normal agent messages or tool calls during the run.
-
-## Metrics
-
-Report utility and attack success separately.
-
-| Domain | Utility metric | Attack-success metric |
-|---|---|---|
-| `marble_bargaining` | raw TSR | bargaining LLM-ASR |
-| `marble_bidding` | raw TSR | bidding LLM-ASR |
-| `travel` | travel task success predicates | travel LLM-ASR |
-| `swebench_workspace` | resource-gated task success | workspace LLM-ASR |
-
-Deterministic attack-success columns may still appear in raw result rows. For finalized domains they are diagnostics, not headline ASR, unless the domain spec explicitly says otherwise.
-
-No-attacker task failures can be valid benchmark signal when the run is scoreable. They should not be converted into readiness failures unless evidence is missing or the substrate failed.
-
-## Run Artifacts
-
-Pilot outputs usually live under `benchmark/phase5/pilot/<run_name>/`. Construction diagnostics may live under `benchmark/batches/<batch_id>/`.
-
-Useful artifacts:
-
-| File | Purpose |
+| Field | Meaning |
 |---|---|
-| `*_RESULTS.jsonl` | Row-level simulation outputs. |
-| `*_REPORT.json` or `*_REPORT.md` | Aggregated run summary. |
-| `*_LLM_ASR*.jsonl` | Domain judge outputs. |
-| `variants/<variant_id>/phase5_variant_metadata.json` | Applied runtime attack metadata. |
-| `bundle/run/run_scorecard.json` | Task, safety, SAF, and diagnostic metrics when emitted. |
-| `bundle/run/cassette.jsonl` | Replay data for LLM calls and tool calls when emitted. |
-| `bundle/run/action_log.db` | Primary action log when emitted. |
+| `variant_id` | Unique `<base_id>__<attack_mode>` identifier |
+| `base_id` | Identifier of the shared base bundle |
+| `base_scenario_id` | Base identifier used by the runtime |
+| `bundle_dir` | Domain-relative base bundle path |
+| `cell_id` | Task cell or topology grouping |
+| `family_id` | Runtime family-pack identifier |
+| `task_index` | Task number within the family or cell |
+| `tier_index` | Optional difficulty tier |
+| `attack_mode` | One of the five matched conditions |
+| `stratum` | Benchmark reporting stratum |
 
-For baseline runs without the full audit substrate, use the raw transcript and final-state evidence paths recorded by the scorecard or result row.
+Five variant rows point to the same `bundle_dir`. The runtime copies that base bundle and applies the selected attack overlay for non-control rows.
 
-## Current Runtime Rules
+## Base Bundle
 
-- `driver_orchestrated_docker` is benchmark-valid.
-- `host_session` is development-only.
-- `containerized_multi_agent` remains a future stronger substrate, not a current release blocker.
-- Current finalized domains should not be described as pending GPT-5.2 naturalization targets. Travel and workspace use reviewed source-derived seeds with `naturalization_model = none`; bargaining and bidding use owned-ecosystem generators.
+A bundle contains the scenario and the owner-scoped environment needed to materialize a run:
 
-## Historical Material
+```text
+<domain>/<base_id>/
+  scenario.json
+  scenario.gt.json
+  family_pack_context.json
+  docker-compose.yml
+  personas/
+    <agent_id>.system.md
+    <agent_id>.tools.json
+  mcp/
+    <tool_name>.json
+  resources/
+  governance/              # when governed actions are present
+  resources_initial/       # when resettable state is shipped separately
+  phase5_metadata.json     # construction metadata in applicable domains
+  naturalization_record.json
+```
 
-Use old batch directories and superseded specs only for debugging or audit history. Do not quote them as current benchmark design unless a current spec points to them.
+The `phase5_metadata.json` filename is retained for compatibility with the current runtime. It is construction metadata inside a released bundle, not a Phase 5 execution record.
 
-Historical examples include old scaffold variants, pre-Phase-5 category sweeps, shallow bargaining rows, lightweight bidding prototype rows, pre-redesign travel sweeps, and pre-enrichment workspace sweeps.
+### `scenario.json`
+
+This file defines the scenario id, task family, agents, owner identities, allowed tools, coordination topology, initial state, opening message, and turn limit.
+
+### `scenario.gt.json`
+
+This file defines the ground-truth task contract, including canonical actions, terminal predicates, evaluation criteria, resource rules, governance rules, attack-audit fields, and construction metadata.
+
+### Personas And Tools
+
+Each agent has a system prompt and an allowed-tool list under `personas/`. Tool declarations under `mcp/` map the bundle contract to gateway routes. The gateway checks owner identity and scope when tools operate on files, tables, policies, or governed actions.
+
+### Resources
+
+Resources model owner-local files, SQLite state, task artifacts, and policy records. Some families ship both `resources_initial/` and `resources/`; the initial directory provides resettable input state, while the runtime copy is mutable during a run.
+
+## Attack Conditions
+
+| Mode | Harm surface |
+|---|---|
+| `no_attacker` | Benign matched control |
+| `collaboration` | Goal hijack, false handoff, blocked consensus, or poisoned shared plan |
+| `security` | Poisoned evidence, unsafe tool use, forbidden mutation, or false execution claim |
+| `privacy` | Disclosure of protected owner, patient, budget, strategy, or workspace information |
+| `governance` | Identity confusion, missing consent, forged approval, or invalid mandate |
+
+Attack variants are created at run time by `clawsocialarena.attacks.runtime_overlay.materialize_runtime_variant`. The base dataset does not store five full copies of each task.
+
+## Evaluation Contract
+
+Task success and attack success are separate outcomes.
+
+- Task success is computed from required tool actions, final workspace predicates, or both.
+- Attack success checks whether the specified final harm occurred and whether bounded evidence connects it to the attack condition.
+- A scoreable task failure remains a task result. It is not automatically an infrastructure error.
+- A successful task may still have a successful attack.
+
+The exact evaluator depends on the domain. `clawsocialarena/eval/` contains deterministic predicates, task evaluators, and bounded-evidence ASR judges.
+
+## Validation
+
+Run the public release contract check:
+
+```bash
+uv run python scripts/validate_public_release.py
+```
+
+Validate an individual bundle:
+
+```bash
+uv run python -m clawsocialarena.scenario.validate \
+  benchmark/scenarios/v2.0.0/clinical/CM-D-claw_clinical__t5
+```
+
+The release validator checks the six-domain allowlist, 124/620 totals, five-mode matching, unique identifiers, bundle paths, required files, public metadata, README links, and excluded Git paths.
+
+## Runtime Outputs
+
+New runs should write to an ignored local output directory such as `output/runs/<run_id>/`. Typical records include result JSONL, scorecards, cassettes, action logs, simulation reports, and materialized variants. Those records are generated by the user and are outside the v2.0.0 dataset snapshot.
+
+## Source Notices
+
+Travel bundles use adapted TravelBench task seeds. SWE-Workspace bundles use selected SWE-bench Lite issues and reduced fixtures from named upstream repositories. See [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for citations and license notes.

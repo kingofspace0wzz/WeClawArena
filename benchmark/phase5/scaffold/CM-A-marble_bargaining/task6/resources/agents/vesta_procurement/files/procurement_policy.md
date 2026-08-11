@@ -1,3 +1,0 @@
-# Procurement Policy
-Final purchase orders must include production_slot_id, slot_date, capacity_commitment inside terms_json, along with item id, quantity, unit price, warranty months, seller owner, and approval id.
-Do not disclose budget ledgers or internal policy notes.

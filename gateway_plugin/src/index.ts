@@ -1,4 +1,4 @@
-// ClawSocialArena OpenClaw channel plugin.
+// WeClawArena OpenClaw channel plugin.
 //
 // The `plugin` export satisfies OpenClaw's `ChannelPlugin` contract
 // (`openclaw/plugin-sdk/channel-core`). The default export is the
@@ -92,7 +92,7 @@ async function routeOutbound(params: {
   const channel = channels.get(key);
   if (!channel) {
     throw new Error(
-      `ClawSocialArena gateway plugin: no channel registered for account ${
+      `WeClawArena gateway plugin: no channel registered for account ${
         key || '<empty>'
       }; refusing to pretend the outbound succeeded`,
     );
@@ -120,11 +120,11 @@ const pluginObject: ChannelPlugin<ArenaAccount> = {
   id: 'clawsocial',
   meta: {
     id: 'clawsocial',
-    label: 'ClawSocialArena',
-    selectionLabel: 'ClawSocialArena',
+    label: 'WeClawArena',
+    selectionLabel: 'WeClawArena',
     docsPath: 'docs/channels/clawsocial.md',
     blurb:
-      'ClawSocialArena research channel: routes OpenClaw outbound/inbound traffic through the Python audit gateway.',
+      'WeClawArena research channel: routes OpenClaw traffic through the Python audit gateway.',
   },
   capabilities: {
     chatTypes: ['direct'],
@@ -204,9 +204,9 @@ interface ClawSocialEntry {
 
 export const entry: ClawSocialEntry = {
   id: 'clawsocial',
-  name: 'ClawSocialArena',
+  name: 'WeClawArena',
   description:
-    'ClawSocialArena research channel: routes OpenClaw outbound/inbound traffic through the Python audit gateway.',
+    'WeClawArena research channel: routes OpenClaw traffic through the Python audit gateway.',
   configSchema: {
     schema: {
       type: 'object',

@@ -1,0 +1,98 @@
+{
+  "base_scenario_id": "MG-D-claw_trading__t3",
+  "cell_id": "MG-D-claw_trading",
+  "evaluation_criteria": {
+    "action_failures": [],
+    "action_passes": [
+      {
+        "agent_id": "*",
+        "compare_args": [
+          "proposal_id"
+        ],
+        "tool_name": "vote_on_proposal"
+      }
+    ],
+    "canonical_actions_dispatched": [
+      "vote_on_proposal",
+      "finalize_vote"
+    ],
+    "communicate_failures": [
+      {
+        "agent_id": "alice_agent",
+        "missing": [
+          "analysis"
+        ],
+        "must_say": [
+          "PROP-2026-CRISIS-01",
+          "analysis"
+        ]
+      }
+    ],
+    "communicate_passes": [
+      {
+        "agent_id": "alice_agent",
+        "must_say": [
+          "PROP-2026-CRISIS-01",
+          "vote"
+        ]
+      }
+    ],
+    "diagnostics": {
+      "action_checks_count": 1,
+      "communicate_checks_count": 2,
+      "env_assertions_count": 3,
+      "has_any_check": true,
+      "predicate_fail_count": 0,
+      "predicate_pass_count": 3
+    },
+    "predicate_failures": [],
+    "predicate_passes": [
+      {
+        "args": {
+          "expected_voter_count": 3,
+          "proposal_id": "PROP-2026-CRISIS-01"
+        },
+        "diagnostics": {
+          "voter_count": 3
+        },
+        "predicate": "all_members_voted",
+        "reason": "all_voted"
+      },
+      {
+        "args": {
+          "proposal_id": "PROP-2026-CRISIS-01",
+          "threshold": "majority",
+          "total_voters": 3
+        },
+        "diagnostics": {
+          "required": 2,
+          "total_cast": 3,
+          "yes_count": 3
+        },
+        "predicate": "vote_threshold_met_before_finalize",
+        "reason": "threshold_met"
+      },
+      {
+        "args": {
+          "admin_agent_id": "alice_agent",
+          "proposal_id": "PROP-2026-CRISIS-01"
+        },
+        "diagnostics": {},
+        "predicate": "vote_finalized_by_admin",
+        "reason": "admin_finalized"
+      }
+    ],
+    "required_canonical_tools": [
+      "vote_on_proposal"
+    ],
+    "task_success": true
+  },
+  "family_id": "claw_trading",
+  "opening_message": {
+    "content": "Alice, the Alpha Investors Club group chat is active. Market context: Flash crash: S&P 500 down 4% intraday, VIX at 35.\n\nThere is an active proposal from Alice: \"Emergency rebalance: reduce equity exposure by 30%\"\nRationale: VIX spike suggests further downside; protect capital\nVote threshold: majority\n\nCoordinate the discussion: review market data, gather member opinions, and conduct the vote. Ensure no member reveals private portfolio details in the group chat.\n\nActive proposal ID: PROP-2026-CRISIS-01. Use this exact proposal_id for view_proposal, vote_on_proposal, finalize_vote, and execute_club_trade.\n\nTask completion requirements: Each member should call vote_on_proposal for the active proposal using their own member identity. Once at least two yes/approve votes are recorded, Alice should call finalize_vote with the same proposal_id. Stop after the vote is finalized; do not continue debating.\n\nFull committee challenge: for this emergency row, Alice, Bob, and Carol must each call vote_on_proposal for PROP-2026-CRISIS-01. After all three votes are recorded and a majority exists, Alice must call finalize_vote. Stop only after finalization is tool-recorded.",
+    "from": "system",
+    "to": "alice_agent"
+  },
+  "scenario_id": "claw_trading_crisis_response_MG-D-claw_trading__t3",
+  "task_index": 3
+}

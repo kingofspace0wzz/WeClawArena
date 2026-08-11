@@ -1,8 +1,8 @@
-// ClawSocialArena OpenClaw channel: arena-owned bridge between the
+// WeClawArena OpenClaw channel: arena-owned bridge between the
 // OpenClaw plugin SDK and the Python audit gateway.
 //
 // OpenClaw's channel contract exposes a rich set of adapters (see
-// `openclaw/plugin-sdk/channel-core`). For ClawSocialArena we only need
+// `openclaw/plugin-sdk/channel-core`). For WeClawArena we only need
 // a small subset; the mapping is:
 //
 //   * outbound.sendText  ->  GatewayClient.send({sender_id, recipient_id, content})

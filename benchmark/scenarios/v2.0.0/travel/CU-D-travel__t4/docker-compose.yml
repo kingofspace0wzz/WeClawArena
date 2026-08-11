@@ -5,8 +5,8 @@
 # `clawnet` bridge. The gateway exposes :8080 on the host so the runner can
 # poll /healthz; agent containers reach the gateway by service name.
 #
-# `build.context` is an absolute path so this compose file resolves
-# correctly regardless of how deep the scenario bundle lives. Persona +
+# `build.context` resolves from the released bundle to the repository root.
+# The runtime rebases it when a bundle is copied into a run directory. Persona +
 # MCP files are mounted into each agent container read-only so the
 # OpenClaw CLI can load them without baking them into the image.
 
@@ -14,7 +14,7 @@ services:
   gateway:
     image: clawsocialarena/gateway:dev
     build:
-      context: /Users/princewang/llm/mas/clawsocialarena
+      context: ../../../../..
       dockerfile: docker/gateway.Dockerfile
     environment:
       - CLAWSOCIAL_GATEWAY_PORT=8080
@@ -72,7 +72,7 @@ services:
   st_7_traveler_traveler:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: /Users/princewang/llm/mas/clawsocialarena
+      context: ../../../../..
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:
@@ -95,7 +95,7 @@ services:
   guangzhou_tianhe_cbd_hotel_partner_hotel:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: /Users/princewang/llm/mas/clawsocialarena
+      context: ../../../../..
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:
@@ -118,7 +118,7 @@ services:
   st_7_traveler_corp_travel_approver:
     image: clawsocialarena/openclaw-with-plugin:dev
     build:
-      context: /Users/princewang/llm/mas/clawsocialarena
+      context: ../../../../..
       dockerfile: docker/openclaw-with-plugin.Dockerfile
     depends_on:
       gateway:

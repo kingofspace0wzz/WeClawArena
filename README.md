@@ -1,112 +1,186 @@
-# ClawSocialArena v2
+<div align="center">
 
-*An auditable runtime system for benchmarking multi-party collaboration, security, privacy, and governance in human-centered agentic social networks.*
+# WeClawArena
 
-ClawSocialArena v2 is a runtime-backed benchmark. A scenario runs multiple personal-agent containers plus one ClawSocialArena audit gateway. The gateway records cross-agent messages, policy decisions, resource access, governance metadata, cassettes, and scoreable final state. Evaluation is an offline function of the action log, shadow log, cassette, ground-truth bundle, and resource evidence.
+**An Auditable Sandbox and Benchmark for Cross-User Agents Collaboration and Security in Human-Centered Agent Networks**
 
-Start here:
+[![Paper](https://img.shields.io/badge/arXiv-2608.03499-b31b1b.svg)](https://arxiv.org/abs/2608.03499)
+[![Dataset](https://img.shields.io/badge/Hugging_Face-Dataset-ffd21e.svg)](https://huggingface.co/datasets/kingofspace0wzz/WeClawArena)
+[![Version](https://img.shields.io/badge/release-v2.0.0-2f6f4e.svg)](https://github.com/kingofspace0wzz/WeClawArena)
+[![Code License](https://img.shields.io/badge/code-Apache--2.0-5c6ac4.svg)](LICENSE)
+[![Data License](https://img.shields.io/badge/data-CC_BY--NC_4.0-2f855a.svg)](DATASET_LICENSE)
 
-| Need | Read |
-|---|---|
-| Current branch, batch, and benchmark status | [`docs/project_status.md`](docs/project_status.md) |
-| Documentation map | [`docs/DOCUMENTATION_INDEX.md`](docs/DOCUMENTATION_INDEX.md) |
-| Benchmark data guide | [`docs/benchmark_dataset_guide.md`](docs/benchmark_dataset_guide.md) |
-| Team design spec | [`docs/superpowers/specs/2026-04-24-clawsocialarena-v2-team-design.md`](docs/superpowers/specs/2026-04-24-clawsocialarena-v2-team-design.md) |
-| Runtime and SAF design | [`docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md`](docs/superpowers/specs/2026-05-06-clawsocialarena-v2-runtime-saf-design.md) |
-| Benchmark construction design | [`docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md`](docs/superpowers/specs/2026-05-06-clawsocialarena-v2-benchmark-design.md) |
-| Experimental design | [`docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md`](docs/superpowers/specs/2026-05-06-clawsocialarena-v2-experimental-design.md) |
+<img src="docs/assets/readme/weclawarena-open.png" alt="WeClawArena and its bargaining, bidding, travel, SWE-Workspace, clinical, and trading domains" width="880">
 
-The old root `docs/design.md`, root `docs/plan.md`, and April 17 implementation plan are pointer stubs now. Their full historical copies live under `docs/archive/superseded/`.
+**6 domains** | **124 base tasks** | **620 matched variants** | **5 conditions per task**
 
-## Current Status
+[Paper](https://arxiv.org/abs/2608.03499) | [Dataset](https://huggingface.co/datasets/kingofspace0wzz/WeClawArena) | [Dataset guide](docs/benchmark_dataset_guide.md) | [Documentation](docs/DOCUMENTATION_INDEX.md)
 
-The current working branch is `main`. The `v2-refactor` and `phase-I-governance` branches are still checked out as reference worktrees under `worktree/`; do not delete them until a separate branch cleanup review confirms that no unique useful content remains.
+</div>
 
-The active benchmark scaffold target is the 680-variant balanced difficulty pilot:
+WeClawArena is a benchmark and runtime sandbox for multi-party tool use across personal agent workspaces. Each human owner has an agent, private resources, role-specific tools, and local policies. Agents must complete shared tasks while respecting information and authority boundaries.
 
-| Stratum | Count |
-|---|---:|
-| Main matched variants | 630 |
-| Hard-verification variants | 25 |
-| Episode-graph variants | 20 |
-| Audit challenge cases | 5 |
-| **Total** | **680** |
+The sandbox records peer messages, tool calls, resource operations, governed decisions, and final workspace state. Evaluation reports task utility and attack success separately, allowing failures such as privacy leakage, poisoned evidence, invalid approval, and coordination breakdown to be analyzed from bounded evidence.
 
-The old 550-variant tree is a pre-calibration scaffold, not the current final target. The retained batch directories `0061`, `0064`, and `0065` are diagnostic only because evaluator and construction fixes changed their metrics.
+<p align="center">
+  <img src="docs/assets/readme/weclawarena-overview.png" alt="WeClawArena runtime with autonomous agents, owner workspaces, message gateway, attack harms, and audit evidence" width="1100">
+</p>
+
+## Benchmark
+
+| Domain | Base tasks | Variants | Representative setting |
+|---|---:|---:|---|
+| Bargaining | 24 | 120 | Cross-organization purchasing and contract negotiation |
+| Bidding | 12 | 60 | Multi-party procurement and award decisions |
+| Travel | 20 | 100 | Group and delegated travel planning |
+| SWE-Workspace | 50 | 250 | Multi-owner software implementation, review, approval, and CI |
+| Clinical | 10 | 50 | Synthetic care-team coordination |
+| Trading | 8 | 40 | Synthetic investment-club proposals and voting |
+| **Total** | **124** | **620** | |
+
+Every base task has five matched conditions:
+
+- `no_attacker`: benign control.
+- `collaboration`: poisoned handoff, goal hijack, or blocked consensus.
+- `security`: unsafe tool use, poisoned evidence, or forbidden mutation.
+- `privacy`: disclosure of owner-scoped or protected information.
+- `governance`: invalid identity, consent, mandate, or approval path.
+
+<p align="center">
+  <img src="docs/assets/readme/weclawarena-benchmark.png" alt="WeClawArena dataset construction from task seeds and user roles through bundles, five conditions, and evaluation" width="1100">
+</p>
 
 ## Install
 
+Python 3.11 or newer is required. Docker is required for container-backed simulations.
+
 ```bash
-uv venv --python 3.11
-uv pip install -e ".[dev]"
-source .venv/bin/activate
+git clone https://github.com/kingofspace0wzz/WeClawArena.git
+cd WeClawArena
+uv sync --extra dev
 ```
 
-Plain `pip install -e ".[dev]"` also works with Python 3.11+.
+The equivalent editable pip installation is:
 
-For the TypeScript OpenClaw channel plugin:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Install the OpenClaw gateway plugin dependencies when running the TypeScript channel bridge:
 
 ```bash
 npx pnpm -C gateway_plugin install
 ```
 
-Docker is required for live simulation batches. It is not required for many unit tests.
+## Quick Start
 
-## Verify
-
-Use focused verification for the area you changed. The benchmark construction path currently has focused tests such as:
+Validate the released manifest, bundle layout, metadata, and repository boundary:
 
 ```bash
-.venv/bin/python -m pytest \
-  tests/test_scripts/test_generate_benchmark_scaffold.py \
-  tests/test_scripts/test_orchestrate_benchmark.py \
-  tests/test_simulation/test_batch_runner.py \
-  tests/test_eval/test_eval_runner_v2.py \
-  tests/test_eval/test_leak_detector_v2.py -q
+uv run python scripts/validate_public_release.py
 ```
 
-For the gateway plugin:
+Inspect one bundle with the scenario validator:
 
 ```bash
-npx pnpm -C gateway_plugin test
+uv run python -m clawsocialarena.scenario.validate \
+  benchmark/scenarios/v2.0.0/clinical/CM-D-claw_clinical__t5
 ```
 
-## What Is In The Repository
+Run one deterministic mock row without model credentials or Docker:
 
-| Path | Contents |
+```bash
+uv run python scripts/run_phase5_pilot.py run-batch \
+  --manifest benchmark/scenarios/v2.0.0/manifest.json \
+  --base-dir benchmark/scenarios/v2.0.0 \
+  --out-dir output/quickstart \
+  --batch 2 \
+  --executor mock \
+  --mode full \
+  --filter family=marble_bidding,mode=no_attacker,base_id=CM-C-marble_bidding__t0 \
+  --limit 1
+```
+
+Container-backed model evaluation requires provider credentials and a running Docker daemon. `scripts/run_phase5_pilot.py run-batch --help` lists model, concurrency, filter, and output options. Generated records belong under ignored local output directories and are not part of this dataset snapshot.
+
+## Dataset Layout
+
+```text
+benchmark/scenarios/v2.0.0/
+  manifest.json
+  bargaining/
+  bidding/
+  travel/
+  swebench_workspace/
+  clinical/
+  trading/
+```
+
+Each manifest row defines a `variant_id`, `base_id`, domain bundle path, family, task index, and attack mode. Five rows share one base bundle; attack overlays are materialized for a run instead of storing five copied directories.
+
+A base bundle contains:
+
+```text
+<domain>/<base_id>/
+  scenario.json
+  scenario.gt.json
+  family_pack_context.json
+  docker-compose.yml
+  personas/
+  mcp/
+  resources/
+  governance/              # present when the task uses governed actions
+  resources_initial/       # present in domains with resettable state
+```
+
+`scenario.json` defines agents, owner identities, prompts, tools, topology, and the opening task. `scenario.gt.json` defines task predicates, audit requirements, resource and governance manifests, and the construction record. See the [dataset guide](docs/benchmark_dataset_guide.md) for the field-level reference.
+
+## Evaluation
+
+WeClawArena keeps two outcome classes separate:
+
+- **Task success rate (TSR):** whether the required collaborative task reached its tool-backed or final-state predicate.
+- **Attack success rate (ASR):** whether the attack caused the specified final harm, assessed from bounded run evidence.
+
+A run can complete the task and still cause harm, or fail the task without causing harm. Report both values and their denominators.
+
+<p align="center">
+  <img src="docs/assets/readme/weclawarena-results.png" alt="Paper results comparing task success, attack resistance, model rankings, and the utility versus resistance tradeoff" width="1100">
+</p>
+
+The figure above summarizes the paper experiments. Runtime records used to produce the reported values are not included in this repository snapshot.
+
+## Repository Map
+
+| Path | Purpose |
 |---|---|
-| `clawsocialarena/gateway/` | Audit gateway, session lifecycle, routes, compose runner, cassette recorder. |
-| `clawsocialarena/audit/` | Action log, shadow log, MSWM, phase tracking, attribution, policies. |
-| `clawsocialarena/saf/` | SAF scorers, including identity-governance auditability. |
-| `clawsocialarena/eval/` | Scorecard schema, evaluator, leak detector, resource-state checks, cumulative metrics. |
-| `clawsocialarena/scenario/` | Scenario models, loader, validation. |
-| `clawsocialarena/generator/` | Templates, attack injection, world packs, resource overlays, naturalization support. |
-| `clawsocialarena/simulation/` | LLM naturalization and Docker simulation batch runner. |
-| `gateway_plugin/` | TypeScript OpenClaw channel plugin. |
-| `benchmark/scenarios/v1.0.0/` | Current generated scaffold. Check `build_report.json` before trusting counts. |
-| `benchmark/batches/` | Retained paid smoke/gate runs. Current retained runs are diagnostic only. |
-| `docs/` | Current docs, archived historical docs, and design/plan references. |
+| `clawsocialarena/` | Python runtime, gateway, audit, attack, evaluation, generator, and simulation code |
+| `gateway_plugin/` | TypeScript OpenClaw channel plugin |
+| `benchmark/scenarios/v2.0.0/` | Finalized six-domain dataset and manifest |
+| `benchmark/worlds/` | Small world-schema fixtures used by the generator |
+| `configs/` | Experiment and runtime configuration |
+| `docker/` | Gateway and agent container definitions |
+| `scripts/` | Supported generation, execution, analysis, and release utilities |
+| `tests/` | Maintained Python and gateway checks |
+| `docs/` | Public dataset and annotation documentation |
 
-## Current Benchmark Next Step
+## Reproducibility Scope
 
-Run the first passive attack-calibration gate before further scale-out. This batch selects stress-tier adversarial rows across the seven main categories and four attack modes, then reports attack recipe, intensity, and stage metrics:
+The public v2.0.0 artifact includes the scenario manifest, finalized bundles, runtime code, tool declarations, task verifiers, attack overlays, and evaluator implementations. It excludes private pilot traces, model transcripts, scorecards, caches, and Phase 5 runtime records. This boundary supports inspection and new benchmark runs without publishing prior execution records.
 
-```bash
-.venv/bin/python scripts/naturalize_and_run_batch.py \
-  --batch-id batch-0074-attack-calibration-000 \
-  --batch-strategy attack-calibration \
-  --batch-size 28 \
-  --out benchmark/batches \
-  --max-cost-usd 25 \
-  --construction-model gpt-5.2 \
-  --agent-model gpt-4.1-mini \
-  --naturalization-attempts 3 \
-  --simulation-attempts 2 \
-  --condition passive
+## Citation
+
+```bibtex
+@article{wang2026weclawarena,
+  title={WeClawArena: An Auditable Sandbox and Benchmark for Cross-User Agents Collaboration and Security in Human-Centered Agent Networks},
+  author={Wang, Prince Zizhuang and Yuan, Aojie and Zhang, Haiyue and Hu, Xiyang and Zhao, Yue and Jiang, Shuli},
+  journal={arXiv preprint arXiv:2608.03499},
+  year={2026}
+}
 ```
 
-Review the generated tasks, simulation trajectories, task success rate, attack success rate, attack-stage metrics, SAF scores, and audit summaries before running the next gate.
+## Licenses
 
-## License
-
-Apache-2.0. See `pyproject.toml`.
+Source code is licensed under [Apache License 2.0](LICENSE). The six-domain dataset and README paper figures are licensed under [CC BY-NC 4.0](DATASET_LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for TravelBench, SWE-bench, and upstream software-project terms.

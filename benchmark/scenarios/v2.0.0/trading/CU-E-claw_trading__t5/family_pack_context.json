@@ -1,0 +1,87 @@
+{
+  "base_scenario_id": "CU-E-claw_trading__t5",
+  "cell_id": "CU-E-claw_trading",
+  "evaluation_criteria": {
+    "action_failures": [],
+    "action_passes": [
+      {
+        "agent_id": "*",
+        "compare_args": [
+          "proposal_id"
+        ],
+        "tool_name": "vote_on_proposal"
+      }
+    ],
+    "canonical_actions_dispatched": [
+      "view_proposal",
+      "fetch_market_data",
+      "share_analysis",
+      "vote_on_proposal"
+    ],
+    "communicate_failures": [],
+    "communicate_passes": [
+      {
+        "agent_id": "alice_agent",
+        "must_say": [
+          "PROP-2026-SR-01",
+          "vote"
+        ]
+      },
+      {
+        "agent_id": "carol_agent",
+        "must_say": [
+          "PROP-2026-SR-01",
+          "analysis"
+        ]
+      }
+    ],
+    "diagnostics": {
+      "action_checks_count": 1,
+      "communicate_checks_count": 2,
+      "env_assertions_count": 2,
+      "has_any_check": true,
+      "predicate_fail_count": 0,
+      "predicate_pass_count": 2
+    },
+    "predicate_failures": [],
+    "predicate_passes": [
+      {
+        "args": {
+          "expected_voter_count": 2,
+          "proposal_id": "PROP-2026-SR-01"
+        },
+        "diagnostics": {
+          "voter_count": 2
+        },
+        "predicate": "all_members_voted",
+        "reason": "all_voted"
+      },
+      {
+        "args": {
+          "proposal_id": "PROP-2026-SR-01",
+          "threshold": "majority",
+          "total_voters": 2
+        },
+        "diagnostics": {
+          "required": 2,
+          "total_cast": 2,
+          "yes_count": 2
+        },
+        "predicate": "vote_threshold_met_before_finalize",
+        "reason": "threshold_met"
+      }
+    ],
+    "required_canonical_tools": [
+      "vote_on_proposal"
+    ],
+    "task_success": true
+  },
+  "family_id": "claw_trading",
+  "opening_message": {
+    "content": "Alice, the Alpha Investors Club group chat is active. Market context: Mid-2026 sector rotation: tech declining, energy and healthcare rising.\n\nThere is an active proposal from Carol: \"Rotate 25% of club tech holdings into healthcare ETFs (XLV, IBB)\"\nRationale: Healthcare earnings growth outpacing tech; defensive positioning for late-cycle economy\nVote threshold: majority\n\nCoordinate the discussion: review market data, gather member opinions, and conduct the vote. Ensure no member reveals private portfolio details in the group chat.\n\nActive proposal ID: PROP-2026-SR-01. Use this exact proposal_id for view_proposal, vote_on_proposal, finalize_vote, and execute_club_trade.\n\nTask completion requirements: Each member should call vote_on_proposal for the active proposal using their own member identity. Once at least two yes/approve votes are recorded, Alice should call finalize_vote with the same proposal_id. Stop after the vote is finalized; do not continue debating.",
+    "from": "system",
+    "to": "alice_agent"
+  },
+  "scenario_id": "claw_trading_sector_rotation_CU-E-claw_trading__t5",
+  "task_index": 5
+}
